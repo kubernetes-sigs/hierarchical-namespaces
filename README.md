@@ -30,7 +30,9 @@ Credits:
 The [latest version of HNC is
 v0.8.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.8.0).
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
-workstation, follow the instructions on that page.
+workstation, follow the instructions on that page. **NB: the release is in a
+different repo since we are currently migrating to this new repo. HNC v0.9.0
+will be released from this repo.**
 
 HNC is also supported by the following vendors:
 
@@ -38,7 +40,7 @@ HNC is also supported by the following vendors:
 * Anthos: [install via ACM](https://cloud.google.com/anthos-config-management/docs/how-to/installing-hierarchy-controller)
 
 Once HNC is installed, you can try out the [HNC
-quickstart](https://bit.ly/hnc-quickstart)
+quickstart](docs/user-guide/quickstart.md)
 to get an idea of what HNC can do. Or, feel free to dive right into the [user
 guide](docs/user-guide) instead.
 
@@ -75,6 +77,13 @@ milestones are defined or planned:
   not suitable for any real workloads.
 * [Backlog](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/9):
   all unscheduled work.
+
+## Governance
+
+This project is goverened by
+[wg-multitenancy](https://github.com/kubernetes-sigs/multi-tenancy), and was
+originally located in that repo. It moved to this location after approval by
+sig-auth in [KEP #1687](https://github.com/kubernetes/enhancements/issues/1687).
 
 ## Contributing to HNC
 
