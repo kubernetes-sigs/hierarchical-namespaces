@@ -16,12 +16,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/foresttest"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
+	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
 )
 
 // TestEarlyExit tests requests that, without an early exit, would *definitely* be denied because

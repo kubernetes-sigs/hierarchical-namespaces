@@ -1,7 +1,7 @@
 package forest
 
 import (
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 // HasLocalCritCondition returns if the namespace itself has any local critical conditions, ignoring

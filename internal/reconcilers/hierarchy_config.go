@@ -36,11 +36,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
+	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
 )
 
 // reconcileID is used purely to set the "rid" field in the log, so we can tell which log messages
@@ -195,7 +195,7 @@ func (r *HierarchyConfigReconciler) removeExcludedNamespaceLabel(log logr.Logger
 // descendants have been deleted, we would lose the knowledge that cascading deletion is enabled.
 func (r *HierarchyConfigReconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
 	// No-one should put a finalizer on a hierarchy config except us. See
-	// https://github.com/kubernetes-sigs/multi-tenancy/issues/623 as we try to enforce that.
+	// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/623 as we try to enforce that.
 	switch {
 	case len(anms) == 0:
 		// There are no subnamespaces in this namespace. The HC instance can be safely deleted anytime.

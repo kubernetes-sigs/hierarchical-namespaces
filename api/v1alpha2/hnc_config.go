@@ -144,7 +144,7 @@ type HNCConfigurationSpec struct {
 	// Note that 'roles' and 'rolebindings' are pre-configured by HNC with
 	// 'Propagate' mode and are omitted in the spec. Any configuration of 'roles'
 	// or 'rolebindings' are not allowed. To learn more, see
-	// https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
+	// https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/how-to.md#admin-types
 	Resources []ResourceSpec `json:"resources,omitempty"`
 }
 
@@ -157,7 +157,7 @@ type HNCConfigurationStatus struct {
 	// "ActivitiesHalted" reason, this means that HNC cannot function in the
 	// affected namespaces. The HierarchyConfiguration object in each of the
 	// affected namespaces will have more information. To learn more about
-	// conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
+	// conditions, see https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#admin-conditions.
 	Conditions []Condition `json:"conditions,omitempty"`
 }
 

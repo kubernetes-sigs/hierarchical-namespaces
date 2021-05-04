@@ -22,7 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 var setResourceCmd = &cobra.Command{
@@ -53,7 +53,7 @@ var setResourceCmd = &cobra.Command{
 					fmt.Println("If you are sure you want to proceed with this operation, use the '--force' flag.")
 					fmt.Println("If you are not sure and would like to see what source objects would be overwritten," +
 						"please switch to 'Remove' first. To see how to enable propagation safely, refer to " +
-						"https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types")
+						"https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/how-to.md#admin-types")
 					os.Exit(1)
 				}
 				r.Mode = mode

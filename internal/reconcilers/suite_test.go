@@ -36,9 +36,9 @@ import (
 	// +kubebuilder:scaffold:imports
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to

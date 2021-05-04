@@ -1,6 +1,6 @@
 version: "2"
 domain: x-k8s.io
-repo: github.com/kubernetes-sigs/multi-tenancy
+repo: github.com/kubernetes-sigs/hierarchical-namespaces
 resources:
 - group: hnc
   version: v1alpha1

@@ -103,11 +103,11 @@ build: generate fmt vet manifests
 	go build -o bin/manager ./cmd/manager/main.go
 	GOOS=linux GOARCH=amd64 go build \
 	     -o bin/kubectl/kubectl-hns_linux_amd64 \
-	     -ldflags="-X sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version.Version=${HNC_IMG_TAG}" \
+	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
 	GOOS=darwin GOARCH=amd64 go build \
 	     -o bin/kubectl/kubectl-hns_darwin_amd64 \
-	     -ldflags="-X sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version.Version=${HNC_IMG_TAG}" \
+	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
 
 # Clean all binaries (manager and kubectl)
@@ -348,7 +348,7 @@ release: check-release-env
 	@echo "Releasing ${HNC_RELEASE_IMG}"
 	@echo "... override with HNC_RELEASE_REGISTRY, HNC_IMG_NAME and"
 	@echo "... HNC_IMG_TAG."
-	@echo "Pulling from Github multi-tenancy repo owned by ${HNC_RELEASE_REPO_OWNER}"
+	@echo "Pulling from Github hierarchical-namespaces repo owned by ${HNC_RELEASE_REPO_OWNER}"
 	@echo "... override with HNC_RELEASE_REPO_OWNER"
 	@echo "GCP project: ${PROJECT_ID} (obtained from gcloud)"
 	@echo "Temporary build image (must be in ${PROJECT_ID}): ${HNC_IMG}"

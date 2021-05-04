@@ -4,7 +4,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
+	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 
 var _ = Describe("Issues", func() {
@@ -215,7 +215,7 @@ var _ = Describe("Issues", func() {
 		MustRun("kubectl delete subns", nsChild, "-n", nsParent)
 	})
 
-	// Disabled due to https://github.com/kubernetes-sigs/multi-tenancy/issues/1492 - now that HNC
+	// Disabled due to https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/1492 - now that HNC
 	// *can* propagate cluster-admin rolebindings (see the test for #772), we need to find some new
 	// way to test what HNC does when it *can't* propagate something.
 	XIt("Should have CannotPropagateObject and CannotUpdateObject events - replacing obsolete issues #328, #605, #771", func() {

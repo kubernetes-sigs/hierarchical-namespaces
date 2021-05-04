@@ -7,7 +7,7 @@ Please feel free to suggest additional questions.
 
 You can contact us on:
 
-* [Github issues](https://github.com/kubernetes-sigs/multi-tenancy/issues)
+* [Github issues](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues)
 * [Google Groups mailing list](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
 * [#wg-multitenancy on Slack](https://kubernetes.slack.com/messages/wg-multitenancy)
 

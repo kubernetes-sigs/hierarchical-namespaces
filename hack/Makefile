@@ -17,7 +17,7 @@ PROW_TMP := $(shell mktemp -d)
 # and that's probably good enough for us.
 #
 # Please keep this in sync with
-# https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/wg-multi-tenancy/hnc-e2e.yaml.
+# https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/hierarchical-namespaces/hnc-e2e.yaml.
 # Also, when you do this, please also upgrade the version of Kind we download
 # in prow-run-e2e.sh in this directory.
 PROW_IMG ?= gcr.io/k8s-testimages/krte:v20210129-3799a64-master
@@ -33,10 +33,10 @@ prow-test:
 	@echo ~~~ Preparing to test prow-run-e2e.sh ~~~
 	@echo
 	@echo Cloning the repo
-	git clone https://github.com/kubernetes-sigs/multi-tenancy ${PROW_TMP}
+	git clone https://github.com/kubernetes-sigs/hierarchical-namespaces ${PROW_TMP}
 	@echo
 	@echo Copying run-e2e-tests in this directory to the synced directory
-	cp -p ./prow-run-e2e.sh ${PROW_TMP}/incubator/hnc/hack
+	cp -p ./prow-run-e2e.sh ${PROW_TMP}/hack
 	@echo
 	@echo ~~~ Testing prow-run-e2e.sh in KRTE ~~~
 	@echo
@@ -48,7 +48,7 @@ prow-test:
 		--network="host" \
 		-it \
 		${PROW_IMG} \
-		/local-test-start-dir/incubator/hnc/hack/prow-run-e2e.sh
+		/local-test-start-dir/hack/prow-run-e2e.sh
 
 # After calling 'make prow-test', the Kind cluster might still be present on the
 # *host* even though the Docker container has exited. Run this to find and

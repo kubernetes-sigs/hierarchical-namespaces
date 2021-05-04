@@ -7,9 +7,9 @@ steps:
   - '-c'
   - |
     set -e
-    echo Cloning from https://github.com/$_HNC_REPO_OWNER/multi-tenancy
-    git clone https://github.com/$_HNC_REPO_OWNER/multi-tenancy
-    cd multi-tenancy
+    echo Cloning from https://github.com/$_HNC_REPO_OWNER/hierarchical-namespaces
+    git clone https://github.com/$_HNC_REPO_OWNER/hierarchical-namespaces
+    cd hierarchical-namespaces
     echo Checking out hnc-$_HNC_IMG_TAG
     git checkout hnc-$_HNC_IMG_TAG
 # Build the manifests and the kubectl plugin
@@ -19,7 +19,7 @@ steps:
   - '-c'
   - |
     set -e
-    cd multi-tenancy/incubator/hnc
+    cd hierarchical-namespaces
     export HNC_REGISTRY=$_HNC_REGISTRY
     export HNC_IMG_NAME=$_HNC_IMG_NAME
     export HNC_IMG_TAG=$_HNC_IMG_TAG
@@ -35,10 +35,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/manifests/hnc-manager.yaml'
+  - '@hierarchical-namespaces/manifests/hnc-manager.yaml'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=hnc-manager.yaml'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=hnc-manager.yaml'
 # Upload plugin (Linux)
 - name: gcr.io/cloud-builders/curl
   args:
@@ -47,10 +47,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/bin/kubectl/kubectl-hns_linux_amd64'
+  - '@hierarchical-namespaces/bin/kubectl/kubectl-hns_linux_amd64'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_linux_amd64'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_linux_amd64'
 # Upload plugin (Darwin)
 - name: gcr.io/cloud-builders/curl
   args:
@@ -59,10 +59,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/bin/kubectl/kubectl-hns_darwin_amd64'
+  - '@hierarchical-namespaces/bin/kubectl/kubectl-hns_darwin_amd64'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_darwin_amd64'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_darwin_amd64'
 # Upload plugin (Krew tar file)
 - name: gcr.io/cloud-builders/curl
   args:
@@ -71,10 +71,10 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/bin/kubectl-hns.tar.gz'
+  - '@hierarchical-namespaces/bin/kubectl-hns.tar.gz'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns.tar.gz'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns.tar.gz'
 # Upload plugin (Krew manifest file - to add to the Krew index)
 - name: gcr.io/cloud-builders/curl
   args:
@@ -83,12 +83,12 @@ steps:
   - '-H'
   - 'Content-Type: application/x-application'
   - '--data-binary'
-  - '@multi-tenancy/incubator/hnc/manifests/krew-kubectl-hns.yaml'
+  - '@hierarchical-namespaces/manifests/krew-kubectl-hns.yaml'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/multi-tenancy/releases/$_HNC_RELEASE_ID/assets?name=krew-kubectl-hns.yaml'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=krew-kubectl-hns.yaml'
 # Build Docker image
 - name: gcr.io/cloud-builders/docker
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_HNC_IMG_NAME:$_HNC_IMG_TAG', 'multi-tenancy/incubator/hnc']
+  args: ['build', '-t', 'gcr.io/$PROJECT_ID/$_HNC_IMG_NAME:$_HNC_IMG_TAG', 'hierarchical-namespaces']
 
 images: ['gcr.io/$PROJECT_ID/$_HNC_IMG_NAME:$_HNC_IMG_TAG']
