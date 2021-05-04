@@ -1,4 +1,4 @@
-module sigs.k8s.io/multi-tenancy/incubator/hnc
+module sigs.k8s.io/hierarchical-namespaces
 
 go 1.14
 

@@ -10,10 +10,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/foresttest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
 )
 
 func TestStructure(t *testing.T) {

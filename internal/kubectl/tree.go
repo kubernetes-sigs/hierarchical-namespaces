@@ -27,7 +27,7 @@ import (
 	"github.com/spf13/cobra"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 var (

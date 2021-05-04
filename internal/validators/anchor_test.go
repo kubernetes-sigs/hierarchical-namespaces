@@ -6,9 +6,9 @@ import (
 	. "github.com/onsi/gomega"
 	k8sadm "k8s.io/api/admission/v1"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/foresttest"
 )
 
 func TestCreateSubnamespaces(t *testing.T) {

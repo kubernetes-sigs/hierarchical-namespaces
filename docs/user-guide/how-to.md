@@ -494,7 +494,7 @@ relationships and configuration settings:
 kubectl get crds | grep .hnc.x-k8s.io | awk '{print $1}' | xargs kubectl delete crd
 
 # Delete the rest of HNC.
-kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
+kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
 
 <a name="admin-excluded-namespaces"/>
@@ -722,7 +722,7 @@ edit the `config` object directly, which will bypass this protection.
 
 HNC makes the following metrics available, and can be monitored via Stackdriver
 (next section) or Prometheus (experimental - see
-[#433](https://github.com/kubernetes-sigs/multi-tenancy/issues/433)).
+[#433](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/433)).
 
 Our [best practices guide](best-practices.md#health) can help you use these
 metrics to ensure that HNC stays healthy.

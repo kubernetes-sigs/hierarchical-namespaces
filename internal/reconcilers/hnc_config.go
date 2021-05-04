@@ -24,9 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
 )
 
 // hnccrSingleton stores a pointer to the cluster-wide config reconciler so anyone can
@@ -360,7 +360,7 @@ func (r *ConfigReconciler) createObjectReconciler(gvk schema.GroupVersionKind, m
 		propagatedObjects: namespacedNameSet{},
 	}
 
-	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/multi-tenancy/issues/291
+	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
 		r.Log.Error(err, "Error while trying to create ObjectReconciler", "gvk", gvk)
 		msg := fmt.Sprintf("Cannot sync objects of type %s: %s", gvk, err)

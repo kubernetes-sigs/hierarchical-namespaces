@@ -9,10 +9,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 )
 
 // NamespaceServingPath is where the validator will run. Must be kept in sync with the
@@ -53,7 +53,7 @@ func (v *Namespace) Handle(ctx context.Context, req admission.Request) admission
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 	if decoded == nil {
-		// https://github.com/kubernetes-sigs/multi-tenancy/issues/688
+		// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688
 		return allow("")
 	}
 
@@ -116,7 +116,7 @@ func (v *Namespace) illegalExcludedNamespaceLabel(req *nsRequest) admission.Resp
 			// excluded namespace would pass but the label is immediately removed; when
 			// the VWHConfiguration is there but the reconcilers are down, any request
 			// gets denied anyway.
-			msg := fmt.Sprintf("You cannot exclude this namespace using the %q label. See https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#excluded-namespace-label for detail.", api.LabelExcludedNamespace)
+			msg := fmt.Sprintf("You cannot exclude this namespace using the %q label. See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#excluded-namespace-label for detail.", api.LabelExcludedNamespace)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
 	}
@@ -151,7 +151,7 @@ func (v *Namespace) cannotDeleteSubnamespace(req *nsRequest) admission.Response 
 	}
 
 	// If the anchor doesn't exist, we want to allow it to be deleted anyway.
-	// See issue https://github.com/kubernetes-sigs/multi-tenancy/issues/847.
+	// See issue https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/847.
 	anchorExists := v.Forest.Get(parent).HasAnchor(req.ns.Name)
 	if anchorExists {
 		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
@@ -183,7 +183,7 @@ func (v *Namespace) decodeRequest(log logr.Logger, in admission.Request) (*nsReq
 	// which will be empty for a DELETE request.
 	if in.Operation == k8sadm.Delete {
 		if in.OldObject.Raw == nil {
-			// See https://github.com/kubernetes-sigs/multi-tenancy/issues/688. OldObject can be nil in
+			// See https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688. OldObject can be nil in
 			// K8s 1.14 and earlier.
 			return nil, nil
 		}

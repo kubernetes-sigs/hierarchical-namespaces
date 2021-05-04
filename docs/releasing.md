@@ -72,7 +72,7 @@ this for you.
 Set the following environment variables:
 
 ```bash
-export MT_ENDPOINT=https://api.github.com/repos/kubernetes-sigs/multi-tenancy
+export MT_ENDPOINT=https://api.github.com/repos/kubernetes-sigs/hierarchical-namespaces
 export HNC_USER=<your github name>
 export HNC_PAT=<your personal access token>
 export HNC_IMG_TAG=<the semantic version, eg v0.1.0-rc1>
@@ -197,7 +197,7 @@ vars:
 
 * `HNC_RELEASE_REPO_OWNER`: this is the Github repo owner - default is
   `kubernetes-sigs`, replace with your name (e.g. `adrianludwin`). The
-  `multi-tenancy` repo name is hardcoded and can't be changed.
+  `hierarchical-namespaces` repo name is hardcoded and can't be changed.
 * `HNC_RELEASE_REGISTRY`: default is `gcr.io/k8s-staging-multitenancy`, replace
   with your own registry (eg `gcr.io/adrians-project`).
 

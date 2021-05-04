@@ -2,7 +2,7 @@ package e2e
 
 import (
 	. "github.com/onsi/ginkgo"
-	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
+	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 
 var _ = Describe("Subnamespaces", func() {

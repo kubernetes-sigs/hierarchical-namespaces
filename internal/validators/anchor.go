@@ -9,9 +9,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 )
 
 // AnchorServingPath is where the validator will run. Must be kept in sync with the
@@ -52,7 +52,7 @@ func (v *Anchor) Handle(ctx context.Context, req admission.Request) admission.Re
 		return deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 	if decoded == nil {
-		// https://github.com/kubernetes-sigs/multi-tenancy/issues/688
+		// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688
 		return allow("")
 	}
 
@@ -124,7 +124,7 @@ func (v *Anchor) decodeRequest(log logr.Logger, in admission.Request) (*anchorRe
 	if in.Operation == k8sadm.Delete {
 		log.V(1).Info("Decoding a delete request.")
 		if in.OldObject.Raw == nil {
-			// https://github.com/kubernetes-sigs/multi-tenancy/issues/688
+			// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688
 			return nil, nil
 		}
 		err = v.decoder.DecodeRaw(in.OldObject, anchor)

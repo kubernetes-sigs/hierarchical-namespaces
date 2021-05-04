@@ -12,11 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/pkg/selectors"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/pkg/selectors"
+	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 // ConfigServingPath is where the validator will run. Must be kept in sync with the

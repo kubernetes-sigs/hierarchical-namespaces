@@ -19,9 +19,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 )
 
 const (
@@ -114,7 +114,7 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 	// Early exit: the HNC SA can do whatever it wants. This is because if an illegal HC already
 	// exists on the K8s server, we need to be able to update its status even though the rest of the
 	// object wouldn't pass legality. We should probably only give the HNC SA the ability to modify
-	// the _status_, though. TODO: https://github.com/kubernetes-sigs/multi-tenancy/issues/80.
+	// the _status_, though. TODO: https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/80.
 	if isHNCServiceAccount(req.ui) {
 		return allow("HNC SA")
 	}

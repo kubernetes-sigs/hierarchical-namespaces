@@ -38,13 +38,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/object"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/pkg/selectors"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
+	"sigs.k8s.io/hierarchical-namespaces/internal/object"
+	"sigs.k8s.io/hierarchical-namespaces/internal/pkg/selectors"
+	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
 )
 
 // syncAction is the action to take after Reconcile syncs with the in-memory forest.
@@ -581,7 +581,7 @@ func (r *ObjectReconciler) writeObject(ctx context.Context, log logr.Logger, ins
 		log.Info("Updating propagated object")
 		err = r.Update(ctx, inst)
 		// RoleBindings can't have their Roles changed after they're created
-		// (see  https://github.com/kubernetes-sigs/multi-tenancy/issues/798).
+		// (see  https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/798).
 		// If an RB was quickly delete and re-created in an ancestor namespace
 		// - fast enough that by the time that HNC notices, the new RB exists; or
 		// if there's a change to the RBs when HNC isn't running - HNC could see
@@ -761,7 +761,7 @@ func (r *ObjectReconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int)
 
 		// Unlike the other HNC reconcilers, the object reconciler can easily be affected by objects
 		// that do not directly cause reconciliations when they're modified - see, e.g.,
-		// https://github.com/kubernetes-sigs/multi-tenancy/issues/1154. To address this, replace the
+		// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/1154. To address this, replace the
 		// default exponential backoff with one with a 10s cap.
 		//
 		// I wanted to pick five seconds since I feel like that's about how much time it would take you to check

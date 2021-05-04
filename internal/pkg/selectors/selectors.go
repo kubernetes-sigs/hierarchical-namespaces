@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 func ShouldPropagate(inst *unstructured.Unstructured, nsLabels labels.Set) (bool, error) {

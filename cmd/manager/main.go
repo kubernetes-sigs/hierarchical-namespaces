@@ -38,12 +38,12 @@ import (
 
 	// +kubebuilder:scaffold:imports
 
-	v1a2 "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/reconcilers"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/stats"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/validators"
+	v1a2 "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
+	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
+	"sigs.k8s.io/hierarchical-namespaces/internal/validators"
 )
 
 var (

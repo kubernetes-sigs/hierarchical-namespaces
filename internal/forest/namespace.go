@@ -7,7 +7,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 // While storing the V in GVK is not strictly necessary to match what's in the HNC type configuration,

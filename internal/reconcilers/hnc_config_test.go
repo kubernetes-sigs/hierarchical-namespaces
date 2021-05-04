@@ -12,7 +12,7 @@ import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 const (
@@ -30,7 +30,7 @@ const (
 	// experiments on workstations, tests are flaky when setting the countUpdateTime to 3 seconds and
 	// tests can always pass when setting the time to 4 seconds. We may need to increase the time in
 	// future if the config reconciler takes longer to update the status.  This issue is logged at
-	// https://github.com/kubernetes-sigs/multi-tenancy/issues/871
+	// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/871
 	//
 	// Update: since Prow machines appear to be overloaded, and since we've seen some random failures
 	// in counting tests, I'm increasing this to 6s - aludwin, Oct 2020

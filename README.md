@@ -54,7 +54,7 @@ All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
 * v1.0 - Likely late Q2 or early Q3 2021: HNC recommended for production use
-* [v0.9](https://github.com/kubernetes-sigs/multi-tenancy/milestone/21): move
+* [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/21): move
   HNC to its own repo; continued stability improvements.
 * [v0.8 - COMPLETE APR 2021](https://github.com/kubernetes-sigs/multi-tenancy/milestone/20):
   incremental stability improvements
@@ -73,7 +73,7 @@ milestones are defined or planned:
 * [v0.1 - COMPLETE NOV 2019](https://github.com/kubernetes-sigs/multi-tenancy/milestone/7):
   an initial release with all basic functionality so you can play with it, but
   not suitable for any real workloads.
-* [Backlog](https://github.com/kubernetes-sigs/multi-tenancy/milestone/9):
+* [Backlog](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/9):
   all unscheduled work.
 
 ## Contributing to HNC
@@ -158,8 +158,6 @@ cycle looks like the following:
       stored on Github) or the _full_ path to the local manifests. If these are
       not set, we'll skip any tests that include modifying the HNC deployement,
       e.g. to bypass webhooks.
-    - If you deploy to Kind, the tests that use Network Policies may fail. See
-      https://github.com/kubernetes-sigs/multi-tenancy/issues/1098.
   - Once you're ready to make a pull request, please follow the following
     instructions:
     - Each PR should contain _one commit_. If you have multiple commits (either
@@ -168,7 +166,7 @@ cycle looks like the following:
       any changes to your fork of this repo.
     - Ensure your commit message includes a "Tested:" section explaining in
       reasonable detail what you did to test your change.
-      [Here](https://github.com/kubernetes-sigs/multi-tenancy/commit/ce983662e87264c76f92dbfbab7cef7bd6128837)
+      [Here](https://github.com/kubernetes-sigs/hierarchical-namespaces/commit/ce983662e87264c76f92dbfbab7cef7bd6128837)
       is a good example. A minimal message might be something like "Added new
       test; verified that the test failed before my change and passed after it;
       ran e2e tests."

@@ -8,7 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	cert "github.com/open-policy-agent/cert-controller/pkg/rotator"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 )
 
 const (

@@ -20,7 +20,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/version"
+	"sigs.k8s.io/hierarchical-namespaces/internal/version"
 )
 
 var versionCmd = &cobra.Command{

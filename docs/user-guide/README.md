@@ -25,7 +25,7 @@ see below.
 
 ## Older user guides
 
-* [HNC v0.6](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.6/incubator/hnc/docs/user-guide)
-* [HNC v0.5](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.5/incubator/hnc/docs/user-guide)
-* [HNC v0.4](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.4/incubator/hnc/docs/user-guide)
+* [HNC v0.6](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.6/docs/user-guide)
+* [HNC v0.5](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.5/docs/user-guide)
+* [HNC v0.4](https://github.com/kubernetes-sigs/multi-tenancy/tree/hnc-v0.4/docs/user-guide)
 * [HNC v0.3](https://docs.google.com/document/d/1XVVv1ha4j1WUaszu3mmlACeWPUJXbJhA6zntxswrsco)

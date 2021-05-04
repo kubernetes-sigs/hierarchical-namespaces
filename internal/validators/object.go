@@ -17,12 +17,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/forest"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/metadata"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/object"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/pkg/selectors"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
+	"sigs.k8s.io/hierarchical-namespaces/internal/object"
+	"sigs.k8s.io/hierarchical-namespaces/internal/pkg/selectors"
 )
 
 // ObjectsServingPath is where the validator will run. Must be kept in sync with the

@@ -5,7 +5,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
+	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 
 var _ = Describe("Namespace", func() {

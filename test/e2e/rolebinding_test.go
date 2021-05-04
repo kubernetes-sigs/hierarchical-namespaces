@@ -4,7 +4,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "sigs.k8s.io/multi-tenancy/incubator/hnc/pkg/testutils"
+	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 
 var _ = Describe("HNC should delete and create a new Rolebinding instead of updating it", func() {

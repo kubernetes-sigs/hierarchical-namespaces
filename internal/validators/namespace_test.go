@@ -6,10 +6,10 @@ import (
 	. "github.com/onsi/gomega"
 	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/config"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 
-	api "sigs.k8s.io/multi-tenancy/incubator/hnc/api/v1alpha2"
-	"sigs.k8s.io/multi-tenancy/incubator/hnc/internal/foresttest"
+	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/foresttest"
 )
 
 func TestDeleteSubNamespace(t *testing.T) {

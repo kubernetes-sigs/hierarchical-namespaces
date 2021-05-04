@@ -320,7 +320,7 @@ func TearDownHNC(hncVersion string) {
 	TryRunQuietly("k delete crd hncconfigurations.hnc.x-k8s.io")
 	TryRunQuietly("kubectl delete -f ../../manifests/hnc-manager.yaml")
 	if hncVersion != "" {
-		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/multi-tenancy/releases/download/hnc-" + hncVersion + "/hnc-manager.yaml")
+		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-" + hncVersion + "/hnc-manager.yaml")
 	}
 	// Wait for HNC to be fully torn down (the namespace and the CRDs are gone).
 	runShouldNotContain(1, "hnc-system", 10, "kubectl get ns")
