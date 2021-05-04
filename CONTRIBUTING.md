@@ -8,10 +8,13 @@ _As contributors and maintainers of this project, and in the interest of fosteri
 
 We have full documentation on how to get started contributing here:
 
-- [PoC Development Guide](poc/README.md) Development Guide for contributing PoC code in this repository
+<!---
+If your repo has certain guidelines for contribution, put them here ahead of the general k8s resources
+-->
+
 - [Contributor License Agreement](https://git.k8s.io/community/CLA.md) Kubernetes projects require that you sign a Contributor License Agreement (CLA) before we can accept your pull requests
 - [Kubernetes Contributor Guide](https://git.k8s.io/community/contributors/guide) - Main contributor documentation, or you can just jump directly to the [contributing section](https://git.k8s.io/community/contributors/guide#contributing)
-- [Contributor Cheat Sheet](https://git.k8s.io/community/contributors/guide/contributor-cheatsheet.md) - Common resources for existing developers
+- [Contributor Cheat Sheet](https://git.k8s.io/community/contributors/guide/contributor-cheatsheet) - Common resources for existing developers
 
 ## Mentorship
 
@@ -19,5 +22,5 @@ We have full documentation on how to get started contributing here:
 
 ## Contact Information
 
-- [Slack channel](https://kubernetes.slack.com/messages/wg-multitenancy)
-- [Mailing list](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
+- [Slack](https://kubernetes.slack.com/messages/sig-auth)
+- [Mailing List](https://groups.google.com/forum/#!forum/kubernetes-sig-auth)

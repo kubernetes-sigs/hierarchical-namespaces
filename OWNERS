@@ -1,23 +1,7 @@
-# See the OWNERS docs: https://git.k8s.io/community/contributors/guide/owners.md
+# See the OWNERS docs at https://go.k8s.io/owners
 
 approvers:
-- Fei-Guo
-- rjbez17
-- srampal
-- tashimi
-- adrianludwin
-- JimBugwadia
-- dtoledo67
-- yiqigao217
-reviewers:
-- Fei-Guo
-- rjbez17
-- srampal
-- tashimi
-- adrianludwin
-- JimBugwadia
-- dtoledo67
-- yiqigao217
-emeritus_approvers:
-- davidopp
-- easeway
+  - adrianludwin
+  - rjbez17
+  - srampal
+  - tashimi
