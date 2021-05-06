@@ -21,7 +21,6 @@
 # in this file too! Look down a few lines to see/update the Kind version.
 
 set -euf -o pipefail
-cd incubator/hnc
 
 start_time="$(date -u +%s)"
 echo
