@@ -10,25 +10,21 @@ spec:
 
     HNC allows you to arrange your namespaces into hierarchies, which enables
     two key benefits:
-    * Users without cluster-level permissions to create namespaces can create
-      restricted "subnamespaces" instead.
     * Owners of parent namespaces can create policies that are enforced on
       all descendant namespaces.
+    * Users without cluster-level permissions to create namespaces can create
+      restricted "subnamespaces" instead.
 
     HNC is controlled via regular Kubernetes objects, but this plugin makes it
     easy to create subnamespaces, arrange regular (full) namespaces into
     hierarchies, and configure HNC to propagate different kinds of objects.
   version: HNC_IMG_TAG
   caveats: |
-    This plugin requires the most recent minor version of HNC on your cluster. Get it at:
-      https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/tag/hnc-HNC_IMG_TAG
-    or via:
-      kubectl apply -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-HNC_IMG_TAG/hnc-manager.yaml
+    This plugin works best if you have the most recent minor version of HNC on
+    your cluster. Get the latest version of HNC, as well as prior versions of
+    this plugin, at:
 
-    This version of the plugin should work with HNC v0.6 and later - but for
-    best results, use the version that matches the version of HNC on your
-    cluster. If you need the plugin for HNC v0.5.x, please follow the
-    installation directions from the release page for your version.
+      https://github.com/kubernetes-sigs/hierarchical-namespaces
 
     Watch out for the following common misconceptions when using HNC:
 
