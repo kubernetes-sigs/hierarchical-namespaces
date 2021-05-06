@@ -40,7 +40,9 @@ greatly simplifies several tasks. This guide illustrates both methods, but we
 recommend installing the `kubectl-hns` plugin.
 
 You can install the plugin by following the instructions for the [latest
-release](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.7.0).
+release](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases).
+For plugins older than HNC v0.9, see the instructions for the releases in our
+[old repo](https://github.com/kubernetes-sigs/multi-tenancy/releases).
 
 <a name="use-subns-create">
 
@@ -413,9 +415,9 @@ and webhooks) that were only introduced in v1.16.
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
-#### Prerequisite
+#### Prerequisites
 
-***These prerequisites apply to HNC v0.8 and higher***
+***These prerequisites apply to HNC v0.8, and are not needed in HNC v0.9.***
 
 Prior to installing HNC, add the `hnc.x-k8s.io/excluded-namespaces` label to
 your critical system namespaces:
@@ -435,9 +437,13 @@ listed above can be excluded _by default_.
 
 #### Install an official release and the kubectl plugin
 
-[The most recent official release is
-v0.8.0](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.8.0).
-Please see that page for release notes and installation instructions.
+HNC v0.9.0 and later are available from [this
+repo](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases).
+Older versions, as well as their documentation, are available in the
+[wg-multi-tenancy repo](https://github.com/kubernetes-sigs/multi-tenancy/releases),
+our prior home.
+
+Please see those pages for release notes and installation instructions.
 
 #### Install from source
 
