@@ -88,19 +88,44 @@ func (r *HierarchyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	ns := req.NamespacedName.Namespace
 	log := loggerWithRID(r.Log).WithValues("ns", ns)
 
-	// Always delete hierarchyconfiguration (and any other HNC CRs) in the
-	// excluded namespaces and early exit.
+	// Early exit if it's an excluded namespace.
 	if config.ExcludedNamespaces[ns] {
-		// Since singletons in the excluded namespaces are never synced by HNC, there
-		// are no finalizers on the singletons that we can delete them without
-		// removing the finalizers first.
-		return ctrl.Result{}, r.deleteSingletonIfExists(ctx, log, ns)
+		return ctrl.Result{}, r.handleExcludedNamespace(ctx, log, ns)
 	}
 
 	stats.StartHierConfigReconcile()
 	defer stats.StopHierConfigReconcile()
 
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
+}
+
+func (r *HierarchyConfigReconciler) handleExcludedNamespace(ctx context.Context, log logr.Logger, nm string) error {
+	// Get the namespace. Early exist if the namespace doesn't exist or is purged.
+	// If so, there must be no namespace label or HC instance to delete.
+	nsInst, err := r.getNamespace(ctx, nm)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	// Remove the "included-namespace" label on excluded namespace if it exists.
+	origNS := nsInst.DeepCopy()
+	r.removeIncludedNamespaceLabel(log, nsInst)
+	if _, err := r.writeNamespace(ctx, log, origNS, nsInst); err != nil {
+		return err
+	}
+
+	// Always delete hierarchyconfiguration (and any other HNC CRs) in the
+	// excluded namespaces. Note: since singletons in the excluded namespaces are
+	// never synced by HNC, there are no finalizers on the singletons that we can
+	// delete them without removing the finalizers first.
+	if err := r.deleteSingletonIfExists(ctx, log, nm); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
@@ -117,9 +142,9 @@ func (r *HierarchyConfigReconciler) reconcile(ctx context.Context, log logr.Logg
 	}
 	origNS := nsInst.DeepCopy()
 
-	// Remove excluded namespace label if there's one on the namespace since
-	// the excluded namespaces should be already skipped earlier.
-	r.removeExcludedNamespaceLabel(log, nsInst)
+	// Add the "included-namespace" label to the namespace if it doesn't exist. The
+	// excluded namespaces should be already skipped earlier.
+	r.addIncludedNamespaceLabel(log, nsInst)
 
 	// Get singleton from apiserver. If it doesn't exist, initialize one.
 	inst, deletingCRD, err := r.getSingleton(ctx, nm)
@@ -178,14 +203,29 @@ func (r *HierarchyConfigReconciler) onMissingNamespace(log logr.Logger, nm strin
 	}
 }
 
-// removeExcludedNamespaceLabel removes the `hnc.x-k8s.io/excluded-namespace`
+// removeIncludedNamespaceLabel removes the `hnc.x-k8s.io/included-namespace`
 // label from the namespace.
-func (r *HierarchyConfigReconciler) removeExcludedNamespaceLabel(log logr.Logger, nsInst *corev1.Namespace) {
+func (r *HierarchyConfigReconciler) removeIncludedNamespaceLabel(log logr.Logger, nsInst *corev1.Namespace) {
 	lbs := nsInst.Labels
-	if _, found := lbs[api.LabelExcludedNamespace]; found {
-		log.Info("Illegal excluded-namespace label found; removing")
-		delete(lbs, api.LabelExcludedNamespace)
+	if _, found := lbs[api.LabelIncludedNamespace]; found {
+		log.Info("Illegal included-namespace label found; removing")
+		delete(lbs, api.LabelIncludedNamespace)
+		nsInst.SetLabels(lbs)
 	}
+}
+
+// addIncludedNamespaceLabel adds the `hnc.x-k8s.io/included-namespace` label to the
+// namespace.
+func (r *HierarchyConfigReconciler) addIncludedNamespaceLabel(log logr.Logger, nsInst *corev1.Namespace) {
+	lbs := nsInst.Labels
+	if lbs == nil {
+		lbs = make(map[string]string)
+	}
+	if v, found := lbs[api.LabelIncludedNamespace]; found && v == "true" {
+		return
+	}
+	log.Info("Adding included-namespace label")
+	lbs[api.LabelIncludedNamespace] = "true"
 	nsInst.SetLabels(lbs)
 }
 

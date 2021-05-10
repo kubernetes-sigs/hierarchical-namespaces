@@ -7,19 +7,19 @@ webhooks:
 - name: objects.hnc.x-k8s.io
   timeoutSeconds: 2
   sideEffects: None
-  # We only filter out excluded namespaces from this object validator so that
-  # when HNC (webhook service specifically) is down, operations in the excluded
+  # We only apply this object validator on non-excluded namespaces, which have
+  # the "included-namespace" label set by the HC reconciler, so that when HNC
+  # (webhook service specifically) is down, operations in the excluded
   # namespaces won't be affected. Validators on HNC CRs are not filtered because
   # they are supposed to prevent abuse of HNC CRs in excluded namespaces.
-  # Namespace validator is not filtered to prevent abuse of excluded namespace.
-  # Unfortunately, this means that when HNC is down, we will block updates on all
-  # namespaces, even "excluded" ones, but anyone who can update namespaces like
-  # `kube-system` should likely be able to delete the VWHConfiguration to make
-  # the updates.
+  # Namespace validator is not filtered to prevent abuse of the included-namespace
+  # label on excluded namespaces. Unfortunately, this means that when HNC is
+  # down, we will block updates on all namespaces, even "excluded" ones, but
+  # anyone who can update namespaces like `kube-system` should likely be able to
+  # delete the VWHConfiguration to make the updates.
   namespaceSelector:
-    matchExpressions:
-    - key: hnc.x-k8s.io/excluded-namespace
-      operator: DoesNotExist
+    matchLabels:
+      hnc.x-k8s.io/included-namespace: "true"
   rules:
   # This overwrites the rules specified in the object validator to patch object
   # scope of `namespaced` since there's no kubebuilder marker for `scope`.

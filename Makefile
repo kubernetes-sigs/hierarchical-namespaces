@@ -180,23 +180,11 @@ controller-gen:
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config.
 #
-# We only delete the deployment and the validatingwebhookconfiguration if they
-# exist before applying the manifest, because
+# We only delete the deployment if it exists before applying the manifest, because
 # a) deleting the CRDs will cause all the existing CRs to be wiped away;
-# b) if not deleting the deployment, a new image won't be pulled unless the tag changes;
-# c) if not deleting the validatingwebhookconfiguration, we cannot label
-#    namespaces to exclude them if the HNC pod is already in a bad state.
-#
-# Then we ensure the system namespaces are excluded before we deploy HNC. This
-# step is critical because if the HNC pod is ever in a bad state, the object
-# webhook service would not respond and would stop everything in the system
-# namespaces, such as "kube-system", thus breaking the whole cluster.
+# b) if not deleting the deployment, a new image won't be pulled unless the tag changes.
 deploy: docker-push kubectl manifests
 	-kubectl -n hnc-system delete deployment hnc-controller-manager
-	-kubectl delete validatingwebhookconfiguration hnc-validating-webhook-configuration
-	-kubectl label ns kube-node-lease hnc.x-k8s.io/excluded-namespace=true --overwrite
-	-kubectl label ns kube-public hnc.x-k8s.io/excluded-namespace=true --overwrite
-	-kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true --overwrite
 	kubectl apply -f manifests/${HNC_IMG_NAME}.yaml
 
 deploy-watch:
@@ -263,7 +251,7 @@ kind-deploy:
 # HNC_FOCUS=772 make test-e2e # only runs the test for issue 772
 # HNC_FOCUS=Quickstart make test-e2e # Runs all tests in the "Quickstart" Describe block
 .PHONY: test-e2e
-test-e2e: warn-hnc-repair exclude-system-namespaces
+test-e2e: warn-hnc-repair
 	go clean -testcache
 ifndef HNC_FOCUS
 	go test -v -timeout 0 ./test/e2e/...
@@ -274,7 +262,7 @@ endif
 # This batch test will run e2e tests N times on the current cluster the user
 # deployed (either kind or a kubernetes cluster), e.g. "make test-e2e-batch N=10"
 .PHONY: test-e2e-batch
-test-e2e-batch: warn-hnc-repair exclude-system-namespaces
+test-e2e-batch: warn-hnc-repair
 	number=1 ; while [[ $$number -le $N ]] ; do \
 		echo $$number ; \
     ((number = number + 1)) ; \
@@ -285,26 +273,9 @@ test-e2e-batch: warn-hnc-repair exclude-system-namespaces
 # This will *only* run a small number of tests (specifically, the quickstarts). You can run this when you're fairly confident that
 # everything will work, but be sure to watch for the postsubmits and periodic tests to ensure they pass too.
 .PHONY: test-smoke
-test-smoke: exclude-system-namespaces
+test-smoke:
 	go clean --testcache
 	go test -v -timeout 0 ./test/e2e/... -args --ginkgo.focus "Quickstart"
-
-# exclude-system-namespaces is called before we run any e2e tests. We do ensure
-# the system namespaces are excluded in the "deploy" target. However, we need to
-# do it here too in case users install HNC by applying manifests. Ensuring the
-# system namespaces excluded is critical, because otherwise when HNC pod is in a
-# bad state, the whole cluster will break.
-exclude-system-namespaces:
-	@echo
-	@echo "Ensuring all system namespaces are excluded from HNC..."
-	@kubectl label ns hnc-system hnc.x-k8s.io/excluded-namespace=true --overwrite
-	@kubectl label ns kube-node-lease hnc.x-k8s.io/excluded-namespace=true --overwrite
-	@kubectl label ns kube-public hnc.x-k8s.io/excluded-namespace=true --overwrite
-	@kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true --overwrite
-	@echo
-	@echo "If these tests fail due to the webhook not being ready, wait 30s and try again. Note that webhooks can take up to 30s to become ready"
-	@echo "after HNC is first deployed in a cluster."
-	@echo
 
 warn-hnc-repair:
 	@echo "************************************************************"

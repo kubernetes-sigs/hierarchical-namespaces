@@ -44,9 +44,9 @@ const (
 	// about this standard label when we invented our own).
 	LabelManagedByApps = "app.kubernetes.io/managed-by"
 
-	// LabelExcludedNamespace is the label added by users on the namespaces that
-	// should be excluded from our validators, e.g. "kube-system".
-	LabelExcludedNamespace = MetaGroup + "/excluded-namespace"
+	// LabelIncludedNamespace is the label added by HNC on the namespaces that
+	// should be enforced by our validators.
+	LabelIncludedNamespace = MetaGroup + "/included-namespace"
 )
 
 const (
