@@ -24,7 +24,7 @@ const (
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are forbidden.
 //
-// +kubebuilder:webhook:admissionReviewVersions=v1;v1beta1,path=/validate-v1-namespace,mutating=false,failurePolicy=fail,groups="",resources=namespaces,sideEffects=None,verbs=delete;create;update,versions=v1,name=namespaces.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-v1-namespace,mutating=false,failurePolicy=fail,groups="",resources=namespaces,sideEffects=None,verbs=delete;create;update,versions=v1,name=namespaces.hnc.x-k8s.io
 
 type Namespace struct {
 	Log     logr.Logger
@@ -34,8 +34,9 @@ type Namespace struct {
 
 // nsRequest defines the aspects of the admission.Request that we care about.
 type nsRequest struct {
-	ns *corev1.Namespace
-	op k8sadm.Operation
+	ns    *corev1.Namespace
+	oldns *corev1.Namespace
+	op    k8sadm.Operation
 }
 
 // Handle implements the validation webhook.
@@ -107,22 +108,20 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 }
 
 // illegalIncludedNamespaceLabel checks if there's any illegal use of the
-// included-namespace label on namespaces.
-// TODO these validating rules will be removed and converted into a mutating
-//  webhook. See https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/37
+// included-namespace label on namespaces. It only checks a Create or an Update
+// request.
 func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Response {
+	// Early exit if there's no change on the label.
 	labelValue, hasLabel := req.ns.Labels[api.LabelIncludedNamespace]
+	if req.oldns != nil {
+		oldLabelValue, oldHasLabel := req.oldns.Labels[api.LabelIncludedNamespace]
+		if oldHasLabel == hasLabel && oldLabelValue == labelValue {
+			return allow("")
+		}
+	}
 	isExcluded := config.ExcludedNamespaces[req.ns.Name]
 
-	// An excluded namespace should not have the included-namespace label.
-	//
-	// Note: this only blocks the request if the excluded namespace is newly
-	// created or is updated with a newly added included-namespace label because
-	// existing illegal included-namespace label should have already been removed
-	// by our reconciler. For example, even when the VWHConfiguration is removed,
-	// adding the label to an excluded namespace would pass but the label is
-	// immediately removed; when the VWHConfiguration is there but the reconcilers
-	// are down, any request gets denied anyway.
+	// An excluded namespaces should not have included-namespace label.
 	if isExcluded && hasLabel {
 		// Todo add label concept and add `See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label for detail`
 		//  to the message below. Github issue - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/9
@@ -130,25 +129,22 @@ func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
-	// An included-namespace should not have the included-namespace label with a
-	// value other than "true" at any time. We will allow updating an included
-	// namespace by removing its included-namespace label, since people or system
-	// may apply namespace manifests (without the label) automatically and it
-	// doesn't make sense to block their attempts after the first time.
-	//
-	// Note: this only blocks the request if the included namespace is just
-	// created or updated with a wrong value for the included-namespace label,
-	// because our reconciler should already set it correctly before the request.
-	if !isExcluded && hasLabel && labelValue != "true" {
+	// An included-namespace should have the included-namespace label with the
+	// right value.
+	// Note: since we have a mutating webhook to set the correct label if it's
+	// missing before this, we only need to check if the label value is correct.
+	if !isExcluded && labelValue != "true" {
 		// Todo add label concept and add `See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label for detail`
 		//  to the message below. Github issue - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/9
-		msg := fmt.Sprintf("You cannot unset the value of the %q label. Only HNC can edit this label on namespaces.", api.LabelIncludedNamespace)
+		msg := fmt.Sprintf("You cannot change the value of the %q label. It has to be set as true on a non-excluded namespace.", api.LabelIncludedNamespace)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
 	return allow("")
 }
 
+// nameExistsInExternalHierarchy only applies to the Create operation since
+// namespace name cannot be updated.
 func (v *Namespace) nameExistsInExternalHierarchy(req *nsRequest) admission.Response {
 	for _, nm := range v.Forest.GetNamespaceNames() {
 		if _, ok := v.Forest.Get(nm).ExternalTreeLabels[req.ns.Name]; ok {
@@ -159,6 +155,10 @@ func (v *Namespace) nameExistsInExternalHierarchy(req *nsRequest) admission.Resp
 	return allow("")
 }
 
+// conflictBetweenParentAndExternalManager only applies to the Update operation.
+// Creating a namespace with external manager is allowed and we will prevent
+// this conflict by not allowing setting a parent when validating the
+// HierarchyConfiguration.
 func (v *Namespace) conflictBetweenParentAndExternalManager(req *nsRequest, ns *forest.Namespace) admission.Response {
 	mgr := req.ns.Annotations[api.AnnotationManagedBy]
 	if mgr != "" && mgr != api.MetaGroup && ns.Parent() != nil {
@@ -169,6 +169,7 @@ func (v *Namespace) conflictBetweenParentAndExternalManager(req *nsRequest, ns *
 	return allow("")
 }
 
+// cannotDeleteSubnamespace only applies to the Delete operation.
 func (v *Namespace) cannotDeleteSubnamespace(req *nsRequest) admission.Response {
 	parent := req.ns.Annotations[api.SubnamespaceOf]
 	// Early exit if the namespace is not a subnamespace.
@@ -200,19 +201,18 @@ func (v *Namespace) illegalCascadingDeletion(ns *forest.Namespace) admission.Res
 	return allow("no subnamespaces found")
 }
 
-// decodeRequest gets the information we care about into a simple struct that's easy to both a) use
-// and b) factor out in unit tests.
+// decodeRequest gets the information we care about into a simple struct that's
+// easy to both a) use and b) factor out in unit tests. For Create and Delete,
+// the non-empty namespace instance will be put in the `ns` field. Only Update
+// request would have a non-empty `oldns` field.
 func (v *Namespace) decodeRequest(log logr.Logger, in admission.Request) (*nsRequest, error) {
 	ns := &corev1.Namespace{}
+	oldns := &corev1.Namespace{}
 	var err error
-	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only uses req.Object,
-	// which will be empty for a DELETE request.
+
+	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only
+	// uses req.Object, which will be empty for a DELETE request.
 	if in.Operation == k8sadm.Delete {
-		if in.OldObject.Raw == nil {
-			// See https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688. OldObject can be nil in
-			// K8s 1.14 and earlier.
-			return nil, nil
-		}
 		log.V(1).Info("Decoding a delete request.")
 		err = v.decoder.DecodeRaw(in.OldObject, ns)
 	} else {
@@ -222,9 +222,20 @@ func (v *Namespace) decodeRequest(log logr.Logger, in admission.Request) (*nsReq
 		return nil, err
 	}
 
+	// Get the old namespace instance from an Update request.
+	if in.Operation == k8sadm.Update {
+		log.V(1).Info("Decoding an update request.")
+		if err = v.decoder.DecodeRaw(in.OldObject, oldns); err != nil {
+			return nil, err
+		}
+	} else {
+		oldns = nil
+	}
+
 	return &nsRequest{
-		ns: ns,
-		op: in.Operation,
+		ns:    ns,
+		oldns: oldns,
+		op:    in.Operation,
 	}, nil
 }
 

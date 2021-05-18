@@ -14,6 +14,7 @@ import (
 const (
 	serviceName     = "hnc-webhook-service"
 	vwhName         = "hnc-validating-webhook-configuration"
+	mwhName         = "hnc-mutating-webhook-configuration"
 	caName          = "hnc-ca"
 	caOrganization  = "hnc"
 	secretNamespace = "hnc-system"
@@ -45,6 +46,9 @@ func CreateCertsIfNeeded(mgr ctrl.Manager, novalidation, internalCert, restartOn
 		Webhooks: []cert.WebhookInfo{{
 			Type: cert.Validating,
 			Name: vwhName,
+		}, {
+			Type: cert.Mutating,
+			Name: mwhName,
 		}},
 		RestartOnSecretRefresh: restartOnSecretRefresh,
 	})

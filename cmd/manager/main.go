@@ -41,6 +41,7 @@ import (
 	v1a2 "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/mutators"
 	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
 	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
 	"sigs.k8s.io/hierarchical-namespaces/internal/validators"
@@ -212,6 +213,10 @@ func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
 		validators.Create(mgr, f)
 	}
+
+	// Create mutating admission controllers.
+	setupLog.Info("Registering mutating webhook")
+	mutators.Create(mgr)
 
 	// Create all reconciling controllers
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
