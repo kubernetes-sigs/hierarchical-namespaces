@@ -381,26 +381,31 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(getLabel(ctx, nms[5], nms[0]+api.LabelTreeDepthSuffix)).Should(Equal("3"))
 	})
 
-	It("should remove excluded namespace labels from non-excluded namespaces", func() {
+	It("should remove included-namespace namespace labels from excluded namespaces", func() {
 		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
-		l := map[string]string{api.LabelExcludedNamespace: "true"}
-
-		// Set excluded namespace labels on foo and bar. We are not verifying the
-		// labels are added here because our reconciler will remove it and the
-		// verification would be flaky.
-		fooName := createNSWithLabel(ctx, "foo", l)
-		barName := createNSWithLabel(ctx, "bar", l)
-
 		kubeSystem := getNamespace(ctx, "kube-system")
+
+		// Add additional label "other:other" to verify the labels are updated.
+		l := map[string]string{api.LabelIncludedNamespace: "true", "other": "other"}
 		kubeSystem.SetLabels(l)
 		updateNamespace(ctx, kubeSystem)
-		Eventually(getLabel(ctx, "kube-system", api.LabelExcludedNamespace)).Should(Equal("true"))
+		// Verify the labels are updated on the namespace.
+		Eventually(getLabel(ctx, "kube-system", "other")).Should(Equal("other"))
+		// Verify the included-namespace label is removed by the HC reconciler.
+		Eventually(getLabel(ctx, "kube-system", api.LabelIncludedNamespace)).Should(Equal(""))
+	})
 
-		// Verify the excluded namespace label is removed from both foo and bar, but
-		// is not removed from kube-system.
-		Eventually(getLabel(ctx, fooName, api.LabelExcludedNamespace)).Should(Equal(""))
-		Eventually(getLabel(ctx, barName, api.LabelExcludedNamespace)).Should(Equal(""))
-		Eventually(getLabel(ctx, "kube-system", api.LabelExcludedNamespace)).Should(Equal("true"))
+	It("should set included-namespace namespace labels properly on non-excluded namespaces", func() {
+		// Create a namespace without any labels.
+		fooName := createNS(ctx, "foo")
+		// Verify the label is eventually added by the HC reconciler.
+		Eventually(getLabel(ctx, fooName, api.LabelIncludedNamespace)).Should(Equal("true"))
+
+		l := map[string]string{api.LabelIncludedNamespace: "false"}
+		// Create a namespace with the label with a wrong value.
+		barName := createNSWithLabel(ctx, "bar", l)
+		// Verify the label is eventually updated to have the right value.
+		Eventually(getLabel(ctx, barName, api.LabelIncludedNamespace)).Should(Equal("true"))
 	})
 })
 

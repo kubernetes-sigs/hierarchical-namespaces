@@ -155,18 +155,24 @@ func TestUpdateNamespaceManagedBy(t *testing.T) {
 
 	aInst := &corev1.Namespace{}
 	aInst.Name = "a"
+	// Note: HC reconciler adds included-namespace label to all non-excluded
+	// namespaces, so here and below we manually add the labels for this test.
+	aInst.SetLabels(map[string]string{api.LabelIncludedNamespace: "true"})
 	bInst := &corev1.Namespace{}
 	bInst.Name = "b"
+	bInst.SetLabels(map[string]string{api.LabelIncludedNamespace: "true"})
 
 	// Add 'hnc.x-k8s.io/managed-by: other' annotation on c.
 	cInst := &corev1.Namespace{}
 	cInst.Name = "c"
+	cInst.SetLabels(map[string]string{api.LabelIncludedNamespace: "true"})
 	cInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: "other"})
 
 	// ** Please note this will make d in an *illegal* state. **
 	// Add 'hnc.x-k8s.io/managed-by: other' annotation on d.
 	dInst := &corev1.Namespace{}
 	dInst.Name = "d"
+	dInst.SetLabels(map[string]string{api.LabelIncludedNamespace: "true"})
 	dInst.SetAnnotations(map[string]string{api.AnnotationManagedBy: "other"})
 
 	// These cases test converting namespaces between internal and external, described
@@ -222,38 +228,49 @@ func setSubAnnotation(ns *corev1.Namespace, pnm string) {
 	ns.SetAnnotations(a)
 }
 
-func TestIllegalExcludedNamespace(t *testing.T) {
+func TestIllegalIncludedNamespaceNamespace(t *testing.T) {
 	f := foresttest.Create("-a-c") // a <- b; c <- d
 	vns := &Namespace{Forest: f}
-
-	// Non-excluded namespaces with excluded-namespace label are illegal.
-	illegalInst := &corev1.Namespace{}
-	illegalInst.Name = "illegal"
-	illegalInst.SetLabels(map[string]string{api.LabelExcludedNamespace: "true"})
-	legalInst := &corev1.Namespace{}
-	legalInst.Name = "legal"
-	legalInst.SetLabels(map[string]string{api.LabelExcludedNamespace: "true"})
-	config.ExcludedNamespaces["legal"] = true
+	config.ExcludedNamespaces["excluded"] = true
 
 	tests := []struct {
-		name   string
-		nsInst *corev1.Namespace
-		op     k8sadm.Operation
-		fail   bool
+		name       string
+		excludedNS bool
+		lval       string
+		op         k8sadm.Operation
+		fail       bool
 	}{
-		{name: "allow updating legal", nsInst: legalInst, op: k8sadm.Update},
-		{name: "allow creating legal", nsInst: legalInst, op: k8sadm.Create},
-		{name: "allow deleting legal", nsInst: legalInst, op: k8sadm.Delete},
-		{name: "deny updating illegal", nsInst: illegalInst, op: k8sadm.Update, fail: true},
-		{name: "deny creating illegal", nsInst: illegalInst, op: k8sadm.Create, fail: true},
-		{name: "allow deleting illegal", nsInst: illegalInst, op: k8sadm.Delete},
+		{name: "allow creating non-excluded namespace without label", op: k8sadm.Create},
+		{name: "allow creating non-excluded namespace with label (e.g. from a yaml file)", lval: "true", op: k8sadm.Create},
+		{name: "deny creating non-excluded namespace with label with wrong value(e.g. from a yaml file)", lval: "else", op: k8sadm.Create, fail: true},
+		{name: "allow creating excluded namespace without label", excludedNS: true, op: k8sadm.Create},
+		{name: "deny creating excluded namespace with label", excludedNS: true, lval: "true", op: k8sadm.Create, fail: true},
+
+		{name: "allow updating non-excluded namespace with correct label (which is actually set by HC reconciler)", lval: "true", op: k8sadm.Update},
+		{name: "allow updating non-excluded namespace without label", op: k8sadm.Update},
+		{name: "deny updating non-excluded namespace with incorrect label", lval: "else", op: k8sadm.Update, fail: true},
+		{name: "allow updating excluded namespace without label", excludedNS: true, op: k8sadm.Update},
+		{name: "deny updating excluded namespace with label", excludedNS: true, lval: "true", op: k8sadm.Update, fail: true},
+
+		{name: "allow deleting non-excluded namespace without label", op: k8sadm.Delete},
+		{name: "allow deleting non-excluded namespace with label", lval: "true", op: k8sadm.Delete},
+		{name: "allow creating excluded namespace without label", excludedNS: true, op: k8sadm.Delete},
+		{name: "allow creating excluded namespace with label", excludedNS: true, lval: "true", op: k8sadm.Delete},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 
+			nsInst := &corev1.Namespace{}
+			nsInst.Name = "a"
+			if tc.excludedNS {
+				nsInst.Name = "excluded"
+			}
+			if tc.lval != "" {
+				nsInst.SetLabels(map[string]string{api.LabelIncludedNamespace: tc.lval})
+			}
 			req := &nsRequest{
-				ns: tc.nsInst,
+				ns: nsInst,
 				op: tc.op,
 			}
 

@@ -76,7 +76,7 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 
 	switch req.op {
 	case k8sadm.Create:
-		if rsp := v.illegalExcludedNamespaceLabel(req); !rsp.Allowed {
+		if rsp := v.illegalIncludedNamespaceLabel(req); !rsp.Allowed {
 			return rsp
 		}
 		// This check only applies to the Create operation since namespace name
@@ -85,7 +85,7 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 			return rsp
 		}
 	case k8sadm.Update:
-		if rsp := v.illegalExcludedNamespaceLabel(req); !rsp.Allowed {
+		if rsp := v.illegalIncludedNamespaceLabel(req); !rsp.Allowed {
 			return rsp
 		}
 		// This check only applies to the Update operation. Creating a namespace
@@ -106,20 +106,46 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 	return allow("")
 }
 
-func (v *Namespace) illegalExcludedNamespaceLabel(req *nsRequest) admission.Response {
-	for l := range req.ns.Labels {
-		if l == api.LabelExcludedNamespace && !config.ExcludedNamespaces[req.ns.Name] {
-			// Note: this only blocks the request if it has a newly added illegal
-			// excluded-namespace label because existing illegal excluded-namespace
-			// label should have already been removed by our reconciler. For example,
-			// even when the VWHConfiguration is removed, adding the label to a non-
-			// excluded namespace would pass but the label is immediately removed; when
-			// the VWHConfiguration is there but the reconcilers are down, any request
-			// gets denied anyway.
-			msg := fmt.Sprintf("You cannot exclude this namespace using the %q label. See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#excluded-namespace-label for detail.", api.LabelExcludedNamespace)
-			return deny(metav1.StatusReasonForbidden, msg)
-		}
+// illegalIncludedNamespaceLabel checks if there's any illegal use of the
+// included-namespace label on namespaces.
+// TODO these validating rules will be removed and converted into a mutating
+//  webhook. See https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/37
+func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Response {
+	labelValue, hasLabel := req.ns.Labels[api.LabelIncludedNamespace]
+	isExcluded := config.ExcludedNamespaces[req.ns.Name]
+
+	// An excluded namespace should not have the included-namespace label.
+	//
+	// Note: this only blocks the request if the excluded namespace is newly
+	// created or is updated with a newly added included-namespace label because
+	// existing illegal included-namespace label should have already been removed
+	// by our reconciler. For example, even when the VWHConfiguration is removed,
+	// adding the label to an excluded namespace would pass but the label is
+	// immediately removed; when the VWHConfiguration is there but the reconcilers
+	// are down, any request gets denied anyway.
+	if isExcluded && hasLabel {
+		// Todo add label concept and add `See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label for detail`
+		//  to the message below. Github issue - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/9
+		msg := fmt.Sprintf("You cannot enforce webhook rules on this excluded namespace using the %q label.", api.LabelIncludedNamespace)
+		return deny(metav1.StatusReasonForbidden, msg)
 	}
+
+	// An included-namespace should not have the included-namespace label with a
+	// value other than "true" at any time. We will allow updating an included
+	// namespace by removing its included-namespace label, since people or system
+	// may apply namespace manifests (without the label) automatically and it
+	// doesn't make sense to block their attempts after the first time.
+	//
+	// Note: this only blocks the request if the included namespace is just
+	// created or updated with a wrong value for the included-namespace label,
+	// because our reconciler should already set it correctly before the request.
+	if !isExcluded && hasLabel && labelValue != "true" {
+		// Todo add label concept and add `See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label for detail`
+		//  to the message below. Github issue - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/9
+		msg := fmt.Sprintf("You cannot unset the value of the %q label. Only HNC can edit this label on namespaces.", api.LabelIncludedNamespace)
+		return deny(metav1.StatusReasonForbidden, msg)
+	}
+
 	return allow("")
 }
 
