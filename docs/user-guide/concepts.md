@@ -613,8 +613,9 @@ anyone other than HNC.
 
 ***This label is only available in HNC v0.9 and later***
 
-HNC's mutating webhook sets this label on non-excluded namespaces and removes
-this label from excluded namespaces by default. This protects your cluster's
-critical namespaces from problems with HNC, because some webhooks only operate
-in namespaces with this label. See [Excluding namespaces from HNC](how-to.md#admin-excluded-namespaces)
+HNC's mutating webhook sets this label on non-excluded namespaces by default.
+HNC also rejects any illegal changes on this label, e.g. adding the label to an
+excluded namespace or removing the label from a non-excluded namespace. This
+protects your cluster's critical namespaces from problems with HNC, because some
+webhooks only operate in namespaces with this label. See [Excluding namespaces from HNC](how-to.md#admin-excluded-namespaces)
 for more information.
