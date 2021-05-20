@@ -341,8 +341,8 @@ var _ = Describe("Issues that require repairing HNC", func() {
 		nsParent = "parent"
 		nsChild  = "child"
 		nsNonExcluded = "regular"
-		// Use `hnc-system` for this test because HNC adds excluded namespace label
-		// to `hnc-system` namespace by default.
+		// Use `hnc-system` for this test because HNC excludes `hnc-system`
+		//namespace by default.
 		nsExcluded = "hnc-system"
 	)
 

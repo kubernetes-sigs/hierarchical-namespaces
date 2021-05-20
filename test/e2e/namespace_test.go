@@ -13,6 +13,7 @@ var _ = Describe("Namespace", func() {
 		prefix = namspacePrefix + "namespace-"
 		nsA    = prefix + "a"
 		nsB    = prefix + "b"
+		wrong_included_file = "wrong_included_namespace.yaml"
 	)
 
 	BeforeEach(func() {
@@ -29,10 +30,32 @@ var _ = Describe("Namespace", func() {
 		MustRun("kubectl get ns", nsA)
 
 		// test
-		MustRun("kubectl", "delete", "ns", nsA)
+		MustRun("kubectl delete ns", nsA)
 
 		// verify
-		MustNotRun("kubectl", "get", "ns", nsA)
+		MustNotRun("kubectl get ns", nsA)
+	})
+
+	It("should properly add included-namespace label and reject illegal changes", func() {
+		// Reject creating a non-excluded namespace with illegal included-namespace
+		// label value.
+		MustNotRun("kubectl apply -f ", wrong_included_file)
+
+		// Create a namespace.
+		CreateNamespace(nsA)
+		MustRun("kubectl get ns", nsA)
+
+		// Verify the included-namespace label is added.
+		RunShouldContain("hnc.x-k8s.io/included-namespace=true", 2, "kubectl describe ns", nsA)
+
+		// Reject updating a non-excluded namespace with illegal included-namespace
+		// label value.
+		MustNotRun("kubectl apply -f ", wrong_included_file)
+		MustNotRun("kubectl label ns kube-system hnc.x-k8s.io/included-namespace=false --overwrite")
+
+		// Reject adding included-namespace label on an excluded-namespace.
+		MustNotRun("kubectl label ns kube-system hnc.x-k8s.io/included-namespace=true --overwrite")
+		MustNotRun("kubectl label ns kube-system hnc.x-k8s.io/included-namespace=false --overwrite")
 	})
 
 	It("should have 'ParentMissing' condition on orphaned namespace", func() {
