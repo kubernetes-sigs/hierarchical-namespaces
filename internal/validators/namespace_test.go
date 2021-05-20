@@ -6,9 +6,9 @@ import (
 	. "github.com/onsi/gomega"
 	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/foresttest"
 )
 
@@ -236,42 +236,94 @@ func TestIllegalIncludedNamespaceNamespace(t *testing.T) {
 	tests := []struct {
 		name       string
 		excludedNS bool
+		oldlval    string
 		lval       string
 		op         k8sadm.Operation
 		fail       bool
 	}{
-		{name: "allow creating non-excluded namespace without label", op: k8sadm.Create},
-		{name: "allow creating non-excluded namespace with label (e.g. from a yaml file)", lval: "true", op: k8sadm.Create},
-		{name: "deny creating non-excluded namespace with label with wrong value(e.g. from a yaml file)", lval: "else", op: k8sadm.Create, fail: true},
+		// Note: for all the test cases below, you can consider without label as 0,
+		// with correct label as 1 and with wrong label as 2, so the test cases are
+		// generated as 0->0, 0->1, 0->2; 1->0, 1->1, 1->2; 2->0, 2->1, 2->2. The
+		// test cases are divided into 3 blocks - Create, Update and Delete. There's
+		// no old namespace instance for Create and there's no new namespace instance
+		// for Delete.
+
+		// Create operations on included namespaces.
+		{name: "deny creating included namespace without label (this case should never happen in reality since mutator adds the correct label)", op: k8sadm.Create, fail: true},
+		{name: "allow creating included namespace with correct label (e.g. from a yaml file or added by mutator)", lval: "true", op: k8sadm.Create},
+		{name: "deny creating included namespace with wrong label(e.g. from a yaml file)", lval: "wrong", op: k8sadm.Create, fail: true},
+
+		// Create operations on excluded namespaces.
 		{name: "allow creating excluded namespace without label", excludedNS: true, op: k8sadm.Create},
-		{name: "deny creating excluded namespace with label", excludedNS: true, lval: "true", op: k8sadm.Create, fail: true},
+		{name: "deny creating excluded namespace with correct label", excludedNS: true, lval: "true", op: k8sadm.Create, fail: true},
+		{name: "deny creating excluded namespace with wrong label", excludedNS: true, lval: "wrong", op: k8sadm.Create, fail: true},
 
-		{name: "allow updating non-excluded namespace with correct label (which is actually set by HC reconciler)", lval: "true", op: k8sadm.Update},
-		{name: "allow updating non-excluded namespace without label", op: k8sadm.Update},
-		{name: "deny updating non-excluded namespace with incorrect label", lval: "else", op: k8sadm.Update, fail: true},
-		{name: "allow updating excluded namespace without label", excludedNS: true, op: k8sadm.Update},
-		{name: "deny updating excluded namespace with label", excludedNS: true, lval: "true", op: k8sadm.Update, fail: true},
+		// Update operations on included namespaces.
+		{name: "allow other updates on included namespace without label (this case should never happen with mutator adding the correct label)", op: k8sadm.Update},
+		{name: "allow adding correct label to included namespace", lval: "true", op: k8sadm.Update},
+		{name: "deny adding wrong label to included namespace", lval: "wrong", op: k8sadm.Update, fail: true},
 
-		{name: "allow deleting non-excluded namespace without label", op: k8sadm.Delete},
-		{name: "allow deleting non-excluded namespace with label", lval: "true", op: k8sadm.Delete},
-		{name: "allow creating excluded namespace without label", excludedNS: true, op: k8sadm.Delete},
-		{name: "allow creating excluded namespace with label", excludedNS: true, lval: "true", op: k8sadm.Delete},
+		{name: "deny removing the correct label from included namespace (this case should never happen in reality since mutator adds the correct label)", oldlval: "true", op: k8sadm.Update, fail: true},
+		{name: "allow other updates on included namespace with correct label or removing the correct label (mutator adds it back)", oldlval: "true", lval: "true", op: k8sadm.Update},
+		{name: "deny updating included namespace to have wrong label", oldlval: "true", lval: "wrong", op: k8sadm.Update, fail: true},
+
+		{name: "deny removing wrong label from included namespace (this case should never happen in reality since mutator adds the correct label)", oldlval: "wrong", op: k8sadm.Update, fail: true},
+		{name: "allow updating included namespace to have correct label or just removing wrong label (mutator adds correct label)", oldlval: "wrong", lval: "true", op: k8sadm.Update},
+		{name: "allow other updates on included namespace even with wrong label", oldlval: "wrong", lval: "wrong", op: k8sadm.Update},
+		{name: "deny updating included namespace wrong label to another wrong label", oldlval: "wrong1", lval: "wrong2", op: k8sadm.Update, fail: true},
+
+		// Update operations on excluded namespaces.
+		{name: "allow other updates on excluded namespace without label", excludedNS: true, op: k8sadm.Update},
+		{name: "deny adding illegal label (with correct value) to excluded namespace", excludedNS: true, lval: "true", op: k8sadm.Update, fail: true},
+		{name: "deny adding illegal label (with wrong value) to excluded namespace", excludedNS: true, lval: "wrong", op: k8sadm.Update, fail: true},
+
+		{name: "allow removing illegal label (with correct value) from excluded namespace", excludedNS: true, oldlval: "true", op: k8sadm.Update},
+		{name: "allow other updates on excluded namespace with illegal label (with correct value)", excludedNS: true, oldlval: "true", lval: "true", op: k8sadm.Update},
+		{name: "deny updating illegal label value (correct to wrong value) on excluded namespace", excludedNS: true, oldlval: "true", lval: "wrong", op: k8sadm.Update, fail: true},
+
+		{name: "allow removing illegal label (with wrong value) from excluded namespace", excludedNS: true, oldlval: "wrong", op: k8sadm.Update},
+		{name: "deny updating illegal label value (wrong to correct value) on excluded namespace", excludedNS: true, oldlval: "wrong", lval: "true", op: k8sadm.Update, fail: true},
+		{name: "allow other updates on excluded namespace with illegal label (with wrong value)", excludedNS: true, oldlval: "wrong", lval: "wrong", op: k8sadm.Update},
+		{name: "deny updating illegal label value (wrong to another wrong value) on excluded namespace", excludedNS: true, oldlval: "wrong1", lval: "wrong2", op: k8sadm.Update, fail: true},
+
+		// Delete operations on included namespaces.
+		{name: "allow deleting included namespace without label", op: k8sadm.Delete},
+		{name: "allow deleting included namespace with label", oldlval: "true", op: k8sadm.Delete},
+		{name: "allow deleting included namespace with wrong label", oldlval: "wrong", op: k8sadm.Delete},
+
+		// Delete operations on excluded namespaces.
+		{name: "allow deleting excluded namespace without label", excludedNS: true, op: k8sadm.Delete},
+		{name: "allow deleting excluded namespace with label", excludedNS: true, oldlval: "true", op: k8sadm.Delete},
+		{name: "allow deleting excluded namespace with wrong label", excludedNS: true, oldlval: "wrong", op: k8sadm.Delete},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			g := NewWithT(t)
 
-			nsInst := &corev1.Namespace{}
-			nsInst.Name = "a"
+			nnm := "a"
 			if tc.excludedNS {
-				nsInst.Name = "excluded"
+				nnm = "excluded"
 			}
+
+			ns := &corev1.Namespace{}
+			ns.Name = nnm
 			if tc.lval != "" {
-				nsInst.SetLabels(map[string]string{api.LabelIncludedNamespace: tc.lval})
+				ns.SetLabels(map[string]string{api.LabelIncludedNamespace: tc.lval})
 			}
+			oldns := &corev1.Namespace{}
+			if tc.op == k8sadm.Update {
+				oldns.Name = nnm
+				if tc.oldlval != "" {
+					oldns.SetLabels(map[string]string{api.LabelIncludedNamespace: tc.oldlval})
+				}
+			} else {
+				oldns = nil
+			}
+
 			req := &nsRequest{
-				ns: nsInst,
-				op: tc.op,
+				oldns: oldns,
+				ns:    ns,
+				op:    tc.op,
 			}
 
 			// Test

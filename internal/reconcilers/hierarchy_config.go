@@ -298,7 +298,7 @@ func (r *HierarchyConfigReconciler) syncWithForest(log logr.Logger, nsInst *core
 	r.syncConditions(log, inst, ns, deletingCRD, hadCrit)
 
 	// Sync the tree labels. This should go last since it can depend on the conditions.
-	nsCustomerLabelUpdated := r.syncLabel(log, nsInst, ns)
+	nsCustomerLabelUpdated := r.syncTreeLabels(log, nsInst, ns)
 
 	return initial || nsCustomerLabelUpdated
 }
@@ -461,8 +461,8 @@ func (r *HierarchyConfigReconciler) syncAnchors(log logr.Logger, ns *forest.Name
 	}
 }
 
-// Sync namespace tree labels and other labels. Return true if the labels are updated.
-func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
+// Sync namespace tree labels. Return true if the labels are updated.
+func (r *HierarchyConfigReconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
 	if ns.IsExternal() {
 		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
 		return false
@@ -504,7 +504,7 @@ func (r *HierarchyConfigReconciler) syncLabel(log logr.Logger, nsInst *corev1.Na
 	// Update the labels in the forest so that we can quickly access the labels and
 	// compare if they match the given selector
 	if ns.SetLabels(nsInst.Labels) {
-		log.Info("Namespace labels have been updated.")
+		log.Info("Namespace tree labels have been updated.")
 		return true
 	}
 	return false
