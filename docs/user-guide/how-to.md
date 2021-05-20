@@ -417,10 +417,14 @@ release notes for that version.
 
 #### Prerequisites
 
-***These prerequisites apply to HNC v0.8, and are not needed in HNC v0.9.***
+***These prerequisites apply to HNC v0.8 and later.***
 
-Prior to installing HNC, add the `hnc.x-k8s.io/excluded-namespaces` label to
-your critical system namespaces:
+Ensure `kube-system`, `kube-public` and `kube-node-lease` namespaces are listed
+in the [argument list](#admin-cli-args) with the option `--excluded-namespace`.
+
+**In HNC v0.8 (not applicable in HNC v0.9 and later)**, prior to installing HNC,
+add the `hnc.x-k8s.io/excluded-namespaces` label to your critical system
+namespaces:
 
 ```
 kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true
@@ -522,31 +526,25 @@ an excluded namespace, or create a subnamespace within it, will be rejected by
 HNC. However, the critical webhooks will not operate in the excluded namespace,
 protecting your cluster's stability.
 
-In order to exclude namespaces from HNC _before_ installing it:
-
-1. Add the `hnc.x-k8s.io/excluded-namespace` label with the value of `true` to
-   all critical namespaces. At a minimum, this label should be applied to
+In order to exclude namespaces from HNC:
+1. Determine the namespaces you want to exclude. At a minimum, you should exclude
    `kube-system`, `kube-public`, and `kube-node-lease` as described in the
-   [installation instructions](#admin-install), but you may add additional
-   namespaces if you wish.
-2. Ensure that all the namespaces you have excluded are also listed in the
-   [argument list](#admin-cli-args) with the option `--excluded-namespace`. By
-   default, the HNC manifests include all the critical system namespaces listed
-   above, but you can exclude any namespace you like.
-3. Apply the HNC manifest.
+   [installation instructions](#admin-install). By default, the HNC manifests
+   exclude all these critical system namespaces listed above, but you can exclude
+   any namespace you like.
+1. **This is required in HNC v0.8 only, but not applicable in HNC v0.9 and later** - Add the
+ `hnc.x-k8s.io/excluded-namespace` label with the value of `true` to all the
+  excluded namespaces. 
+1. Ensure that all the namespaces you want to exclude are listed in the
+   [argument list](#admin-cli-args) with the option `--excluded-namespace`.
+1. Apply the HNC manifest.
 
-To exclude an additional namespace from HNC _after_ it has been installed,
-follow these steps:
-
-1. Add the namespace to the list of `--excluded-namespace` [command line
-   args](#admin-cli-args).
-2. Apply the `hnc.x-k8s.io/excluded-namespace=true` label to the namespace.
-
-If you attempt to apply the `hnc.x-k8s.io/excluded-namespace` label to any
-namespace that is not _also_ listed in the command line args, HNC will not allow
-the change, or will remove the label when it is started. This prevents users
-with edit access to a single namespace from removing themselves from HNC without
-permission of the HNC administrator.
+**In HNC v0.8 only (not applicable in HNC v0.9 and later)** - If you attempt to
+apply the `hnc.x-k8s.io/excluded-namespace` label to any namespace that is
+not _also_ listed in the command line args, HNC will not allow the change, or
+will remove the label when it is started. This prevents users with edit access
+to a single namespace from removing themselves from HNC without permission of
+the HNC administrator.
 
 
 <a name="admin-backup-restore"/>

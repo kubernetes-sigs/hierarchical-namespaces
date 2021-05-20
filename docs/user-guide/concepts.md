@@ -531,7 +531,7 @@ We are considering replacing this with the standard
 
 #### hnc.x-k8s.io/excluded-namespace (label on namespaces)
 
-***Excluded namespaces configuration is only available in HNC v0.8 and later***
+***This label is only used in HNC v0.8 (not applicable in HNC v0.9 and later)***
 
 This label should be added to namespaces such as `kube-system` and `kube-public`
 so that HNC's validating webhook cannot accidentally prevent operations in these
@@ -606,3 +606,15 @@ namespace and turn it back into a subnamespace.
 This is the [tree label](#basic-labels) which is documented above. It is set by
 HNC on namespaces and (unless `managed-by` was set first) cannot be modified by
 anyone other than HNC.
+
+<a name="included-namespace-label">
+
+#### hnc.x-k8s.io/included-namespace (label on namespaces)
+
+***This label is only available in HNC v0.9 and later***
+
+HNC's mutating webhook sets this label on non-excluded namespaces and removes
+this label from excluded namespaces by default. This protects your cluster's
+critical namespaces from problems with HNC, because some webhooks only operate
+in namespaces with this label. See [Excluding namespaces from HNC](how-to.md#admin-excluded-namespaces)
+for more information.
