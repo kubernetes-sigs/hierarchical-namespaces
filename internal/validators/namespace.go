@@ -123,9 +123,9 @@ func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 
 	// An excluded namespaces should not have included-namespace label.
 	if isExcluded && hasLabel {
-		// Todo add label concept and add `See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label for detail`
-		//  to the message below. Github issue - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/9
-		msg := fmt.Sprintf("You cannot enforce webhook rules on this excluded namespace using the %q label.", api.LabelIncludedNamespace)
+		msg := fmt.Sprintf("You cannot enforce webhook rules on this excluded namespace using the %q label. "+
+			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
+			"for detail.", api.LabelIncludedNamespace)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
@@ -134,9 +134,9 @@ func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 	// Note: since we have a mutating webhook to set the correct label if it's
 	// missing before this, we only need to check if the label value is correct.
 	if !isExcluded && labelValue != "true" {
-		// Todo add label concept and add `See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label for detail`
-		//  to the message below. Github issue - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/9
-		msg := fmt.Sprintf("You cannot change the value of the %q label. It has to be set as true on a non-excluded namespace.", api.LabelIncludedNamespace)
+		msg := fmt.Sprintf("You cannot change the value of the %q label. It has to be set as true on a non-excluded namespace. "+
+			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
+			"for detail.", api.LabelIncludedNamespace)
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
