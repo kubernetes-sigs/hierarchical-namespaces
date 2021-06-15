@@ -24,10 +24,8 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	corev1apply "k8s.io/client-go/applyconfigurations/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -37,6 +35,7 @@ import (
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
 )
 
 // AnchorReconciler reconciles SubnamespaceAnchor CRs to make sure all the subnamespaces are
@@ -372,27 +371,23 @@ func (r *AnchorReconciler) updateNamespace(ctx context.Context, log logr.Logger,
 		return err
 	}
 
-	labels := map[string]string{}
+	inst := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Namespace",
+			APIVersion: corev1.SchemeGroupVersion.String(),
+		},
+	}
+	inst.ObjectMeta.Name = nm
+	metadata.SetAnnotation(inst, api.SubnamespaceOf, pnm)
 	for k, v := range pnmInst.Labels {
 		if strings.Contains(k, api.MetaGroup) {
 			continue
 		}
-		labels[k] = v
-	}
-	inst := corev1apply.Namespace(nm).WithAnnotations(map[string]string{
-		api.SubnamespaceOf: pnmInst.Name,
-	}).WithLabels(labels)
-
-	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(inst)
-	if err != nil {
-		return err
-	}
-	patch := &unstructured.Unstructured{
-		Object: obj,
+		metadata.SetLabel(inst, k, v)
 	}
 
 	log.Info("Updating subnamespace")
-	if err := r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
+	if err := r.Patch(ctx, inst, client.Apply, &client.PatchOptions{
 		FieldManager: api.MetaGroup,
 	}); err != nil {
 		log.Error(err, "While updating subnamespace")
