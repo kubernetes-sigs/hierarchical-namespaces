@@ -19,22 +19,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	corev1apply "k8s.io/client-go/applyconfigurations/core/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
-	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
 )
 
 // AnchorReconciler reconciles SubnamespaceAnchor CRs to make sure all the subnamespaces are
@@ -106,17 +108,11 @@ func (r *AnchorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// If the subnamespace doesn't exist, create it.
-	if inst.Status.State == api.Missing {
-		if err := r.writeNamespace(ctx, log, nm, pnm); err != nil {
-			// Write the "Missing" state to the anchor status if the subnamespace
-			// cannot be created for some reason. Without it, the anchor status will
-			// remain empty by default.
-			if anchorErr := r.writeInstance(ctx, log, inst); anchorErr != nil {
-				log.Error(anchorErr, "while setting anchor state", "state", api.Missing, "reason", err)
-			}
-			return ctrl.Result{}, err
+	if err := r.updateNamespace(ctx, log, nm, pnm); err != nil {
+		if anchorErr := r.writeInstance(ctx, log, inst); anchorErr != nil {
+			log.Error(anchorErr, "while setting anchor state", "state", api.Missing, "reason", err)
 		}
+		return ctrl.Result{}, err
 	}
 
 	// Add finalizers on all non-forbidden anchors to ensure it's not deleted until
@@ -369,18 +365,37 @@ func (r *AnchorReconciler) getNamespace(ctx context.Context, nm string) (*corev1
 	return ns, nil
 }
 
-func (r *AnchorReconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
-	inst := &corev1.Namespace{}
-	inst.ObjectMeta.Name = nm
-	metadata.SetAnnotation(inst, api.SubnamespaceOf, pnm)
+func (r *AnchorReconciler) updateNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
+	pnmInst := &corev1.Namespace{}
+	pnnm := types.NamespacedName{Name: pnm}
+	if err := r.Get(ctx, pnnm, pnmInst); err != nil {
+		return err
+	}
 
-	// It's safe to use create here since if the namespace is created by someone
-	// else while this reconciler is running, returning an error will trigger a
-	// retry. The reconciler will set the 'Conflict' state instead of recreating
-	// this namespace. All other transient problems should trigger a retry too.
-	log.Info("Creating subnamespace")
-	if err := r.Create(ctx, inst); err != nil {
-		log.Error(err, "While creating subnamespace")
+	labels := map[string]string{}
+	for k, v := range pnmInst.Labels {
+		if strings.Contains(k, api.MetaGroup) {
+			continue
+		}
+		labels[k] = v
+	}
+	inst := corev1apply.Namespace(nm).WithAnnotations(map[string]string{
+		api.SubnamespaceOf: pnmInst.Name,
+	}).WithLabels(labels)
+
+	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(inst)
+	if err != nil {
+		return err
+	}
+	patch := &unstructured.Unstructured{
+		Object: obj,
+	}
+
+	log.Info("Updating subnamespace")
+	if err := r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
+		FieldManager: api.MetaGroup,
+	}); err != nil {
+		log.Error(err, "While updating subnamespace")
 		return err
 	}
 	return nil
@@ -397,15 +412,31 @@ func (r *AnchorReconciler) deleteNamespace(ctx context.Context, log logr.Logger,
 func (r *AnchorReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Maps an subnamespace to its anchor in the parent namespace.
 	nsMapFn := func(obj client.Object) []reconcile.Request {
-		if obj.GetAnnotations()[api.SubnamespaceOf] == "" {
-			return nil
+		result := make([]reconcile.Request, 0)
+		nss := &corev1.NamespaceList{}
+		err := r.List(context.Background(), nss)
+		if err != nil {
+			return result
 		}
-		return []reconcile.Request{
-			{NamespacedName: types.NamespacedName{
+		// Fetch subnamespaces
+		for _, ns := range nss.Items {
+			if obj.GetName() == ns.Name {
+				continue
+			}
+			if _, ok := ns.Labels[obj.GetName()+api.LabelTreeDepthSuffix]; ok {
+				result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
+					Name:      ns.Name,
+					Namespace: ns.GetAnnotations()[api.SubnamespaceOf],
+				}})
+			}
+		}
+		if obj.GetAnnotations()[api.SubnamespaceOf] != "" {
+			result = append(result, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      obj.GetName(),
 				Namespace: obj.GetAnnotations()[api.SubnamespaceOf],
-			}},
+			}})
 		}
+		return result
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.SubnamespaceAnchor{}).
