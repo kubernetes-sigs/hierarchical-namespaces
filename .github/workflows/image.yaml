@@ -1,0 +1,81 @@
+name: release
+
+on: 
+  create:
+  push:
+    branches:
+      - master
+      - 'v*'
+    tags:
+      - 'v*'
+
+# TODO: Migrate building binaries from Cloud Build
+jobs:
+  hnc-manager:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Set Release Tag
+        run: |
+          TAG="${GITHUB_REF#refs/*/v}"
+          echo "RELEASE_TAG=${TAG}" >> $GITHUB_ENV
+
+      - name: Set Build Date
+        id: date
+        run: |
+          echo "::set-output name=HNC_BUILD_TIMESTAMP::$(date -u +'%Y-%m-%dT%H:%M:%S%Z')"
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@master
+        with:
+        # GCR_KEY is the service account key in json which is base64 encoded and stored in the secrets section of the repo.
+          service_account_key: ${{ secrets.GCR_KEY }}
+          export_default_credentials: true
+        
+      # Configure docker to use the gcloud command-line tool as a credential helper
+      - run: |
+          # Set up docker to authenticate
+          # via gcloud command-line tool.
+          gcloud auth configure-docker
+
+      - name: Docker meta
+        id: docker_meta
+        uses: docker/metadata-action@v3
+        with:
+          images: gcr.io/k8s-staging-multitenancy/hnc-manager
+          tags: |
+            type=raw,value=multiarch-{{branch}}
+  
+      - name: Print Tags
+        run: |
+          echo "${{ steps.docker_meta.outputs.tags }}"
+          echo "RELEASE TAG: ${RELEASE_TAG}"
+
+    ## QEMU is an emulator which makes it possible to transalte instruction sets to different platforms.
+    ## In this step, we setup the driver which Docker can use to build images on different platforms
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+        with:
+          platforms: all
+
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v1
+        with:
+          version: v0.5.1
+
+
+      - name: Build & Push Image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          platforms: linux/amd64, linux/arm64, linux/arm/v7
+          tags: |
+            ${{ steps.docker_meta.outputs.tags }}
+          build-args: |
+            DBUILD_DATE=${{ steps.date.outputs.HNC_BUILD_TIMESTAMP }}
+            DBUILD_REPO_URL=https://github.com/kubernetes-sigs/hierarchical-namespaces

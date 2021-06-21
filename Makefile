@@ -109,6 +109,14 @@ build: generate fmt vet manifests
 	     -o bin/kubectl/kubectl-hns_darwin_amd64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
+	GOOS=linux GOARCH=arm64 go build \
+	     -o bin/kubectl/kubectl-hns_linux_arm64 \
+	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
+	     ./cmd/kubectl/main.go
+	GOOS=linux GOARCH=arm go build \
+	     -o bin/kubectl/kubectl-hns_linux_arm \
+	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
+	     ./cmd/kubectl/main.go
 
 # Clean all binaries (manager and kubectl)
 clean: krew-uninstall
@@ -231,6 +239,22 @@ endif
 docker-build: generate fmt vet
 	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
 	docker build . -t ${HNC_IMG}
+
+
+buildx-setup:
+	## This script needs to be run to start the emulator for multiarch builds
+	# This driver translates the instruction set to different platforms 
+	docker run --rm --privileged linuxkit/binfmt:v0.8
+	docker buildx create --use --name=qemu
+	docker buildx inspect --bootstrap
+
+
+# Build and push multi-arch image
+docker-push-multi: buildx-setup generate fmt vet
+	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
+	docker buildx build \
+	--push \
+	--platform linux/arm64,linux/amd64,linux/arm/v7  --tag ${HNC_IMG} .
 
 ###################### KIND ACTIONS #########################
 
