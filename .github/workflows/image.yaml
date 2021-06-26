@@ -9,7 +9,7 @@ on:
     tags:
       - 'v*'
 
-# TODO: Migrate building binaries from Cloud Build
+# TODO: Migrate building manifests and kubectl plugins from Cloud Build
 jobs:
   hnc-manager:
     runs-on: ubuntu-latest
@@ -25,12 +25,13 @@ jobs:
       - name: Set Build Date
         id: date
         run: |
-          echo "::set-output name=HNC_BUILD_TIMESTAMP::$(date -u +'%Y-%m-%dT%H:%M:%S%Z')"
+          echo "::set-output name=HNC_BUILD_TIMESTAMP::$(date -u +'%Y-%m-%dT%H-%M-%S')"
 
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@master
         with:
         # GCR_KEY is the service account key in json which is base64 encoded and stored in the secrets section of the repo.
+        # We think that the Service account only requires the permission to push to the required registry but we're not certain
           service_account_key: ${{ secrets.GCR_KEY }}
           export_default_credentials: true
         
@@ -46,7 +47,7 @@ jobs:
         with:
           images: gcr.io/k8s-staging-multitenancy/hnc-manager
           tags: |
-            type=raw,value=multiarch-{{branch}}
+            type=raw,value=multiarch-{{branch}}-${{ steps.date.outputs.HNC_BUILD_TIMESTAMP }}
   
       - name: Print Tags
         run: |
