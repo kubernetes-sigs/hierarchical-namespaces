@@ -9,6 +9,7 @@ require (
 	github.com/go-logr/logr v0.3.0
 	github.com/go-logr/zapr v0.2.0
 	github.com/go-openapi/spec v0.19.5 // indirect
+	github.com/google/go-cmp v0.5.2
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79 // indirect
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
@@ -21,6 +22,7 @@ require (
 	k8s.io/apimachinery v0.20.4
 	k8s.io/cli-runtime v0.20.4
 	k8s.io/client-go v0.20.4
+	k8s.io/klog/v2 v2.4.0
 	sigs.k8s.io/controller-runtime v0.8.3
 	sigs.k8s.io/controller-tools v0.5.0
 )
