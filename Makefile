@@ -171,6 +171,9 @@ vet:
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
 
+check-generate: generate
+	@test -z $(shell git status --untracked-files=no --porcelain)
+
 # Use the version of controller-gen that's checked into vendor/ (see
 # hack/tools.go to see how it got there).
 controller-gen:
