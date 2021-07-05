@@ -13,7 +13,7 @@ COPY cmd/ cmd/
 COPY internal/ internal/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager ./cmd/manager/main.go
+RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o manager ./cmd/manager/main.go
 
 # Copied from kubebuilder scaffold to run as nonroot at
 # https://github.com/kubernetes-sigs/kubebuilder/blob/7af89cb00c224c57ece37dc14ea37caf1eb769db/pkg/scaffold/v2/dockerfile.go#L60

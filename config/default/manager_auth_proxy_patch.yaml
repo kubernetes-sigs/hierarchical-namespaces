@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
       - name: kube-rbac-proxy
-        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.0
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.8.0
         args:
         # The value of --upstream must match the value of --metrics-addr passed
         # to the manager binary in the base config in
