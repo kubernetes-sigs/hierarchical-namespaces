@@ -169,7 +169,9 @@ fmt:
 
 # check-fmt: Checks gofmt/go fmt has been ran. gofmt -l lists files whose formatting differs from gofmt's, so it fails if there are unformatted go code.
 check-fmt:
-	@test -z $(shell gofmt -l ${GOFMT_DIRS})
+	@if [ $(shell gofmt -l ${GOFMT_DIRS} | wc -l ) != 0 ]; then \
+		echo "Error: there are unformatted go code, please run 'gofmt' before committing" ; \
+	fi
 
 # Run go vet against code
 vet:
@@ -180,7 +182,9 @@ generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
 
 check-generate: generate
-	@test -z $(shell git status --untracked-files=no --porcelain)
+	@if [ $(shell git status --untracked-files=no --porcelain | wc -l ) != 0 ]; then \
+  		echo "Error: generated files are out of sync, please run 'make generate' before committing" ; \
+  	fi
 
 # Use the version of controller-gen that's checked into vendor/ (see
 # hack/tools.go to see how it got there).
