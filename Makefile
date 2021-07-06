@@ -170,7 +170,7 @@ fmt:
 # check-fmt: Checks gofmt/go fmt has been ran. gofmt -l lists files whose formatting differs from gofmt's, so it fails if there are unformatted go code.
 check-fmt:
 	@if [ $(shell gofmt -l ${GOFMT_DIRS} | wc -l ) != 0 ]; then \
-		echo "Error: there are unformatted go code, please run 'gofmt' before committing" ; \
+		echo "Error: there are unformatted go code, please run 'gofmt' before committing" && exit 1; \
 	fi
 
 # Run go vet against code
@@ -183,7 +183,7 @@ generate: controller-gen
 
 check-generate: generate
 	@if [ $(shell git status --untracked-files=no --porcelain | wc -l ) != 0 ]; then \
-  		echo "Error: generated files are out of sync, please run 'make generate' before committing" ; \
+  		echo "Error: generated files are out of sync, please run 'make generate' before committing" && exit 1; \
   	fi
 
 # Use the version of controller-gen that's checked into vendor/ (see
