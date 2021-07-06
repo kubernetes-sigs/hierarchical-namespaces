@@ -210,7 +210,7 @@ func MustApplyYAML(s string) {
 	MustRun("kubectl apply -f", filename)
 }
 
-func MustNotApplyYAML(s string){
+func MustNotApplyYAML(s string) {
 	filename := writeTempFile(s)
 	defer removeFile(filename)
 	MustNotRun("kubectl apply -f", filename)
@@ -306,25 +306,6 @@ func cleanupNamespaces(nses ...string) {
 	for _, ns := range toDelete {
 		MustRunWithTimeout(cleanupTimeout, "kubectl delete ns", ns)
 	}
-}
-
-// TearDownHNC removes CRDs first and then the entire manifest from the current
-// change. If a specific HNC version is provided, its manifest will also be
-// deleted. It will ensure HNC is cleared at the end.
-func TearDownHNC(hncVersion string) {
-	// Delete all CRDs first to ensure all finalizers are removed. Since we don't
-	// know the version of the current HNC in the cluster so we will try tearing
-	// it down twice with the specified version and what's in the HEAD.
-	TryRunQuietly("k delete crd subnamespaceanchors.hnc.x-k8s.io")
-	TryRunQuietly("k delete crd hierarchyconfigurations.hnc.x-k8s.io")
-	TryRunQuietly("k delete crd hncconfigurations.hnc.x-k8s.io")
-	TryRunQuietly("kubectl delete -f ../../manifests/hnc-manager.yaml")
-	if hncVersion != "" {
-		TryRunQuietly("kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-" + hncVersion + "/hnc-manager.yaml")
-	}
-	// Wait for HNC to be fully torn down (the namespace and the CRDs are gone).
-	runShouldNotContain(1, "hnc-system", 10, "kubectl get ns")
-	runShouldNotContain(1, ".hnc.x-k8s.io", 10, "kubectl get crd")
 }
 
 // CheckHNCPath skips the test if we are not able to successfully call RecoverHNC
