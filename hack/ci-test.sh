@@ -38,3 +38,6 @@ hack_dir=$(dirname ${BASH_SOURCE})
 echo "Running 'make check-fmt test'"
 cd "$hack_dir/.."
 make check-fmt test
+
+echo "Running 'make check-generate test'"
+make check-generate
