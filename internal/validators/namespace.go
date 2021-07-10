@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/google/go-cmp/cmp"
 	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -124,23 +123,19 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 // allowed to do so
 func (v *Namespace) illegalTreeLabel(req *nsRequest) admission.Response {
 	msg := "Only HNC Service account can modify tree labels"
-	treeLabelID := "tree.hnc.x-k8s.io"
 
-	switch req.op {
-	case k8sadm.Update:
-		if !cmp.Equal(req.ns.Labels, req.oldns.Labels) {
-			for key := range req.ns.Labels {
-				if _, ok := req.oldns.Labels[key]; !ok {
-					if strings.Contains(key, treeLabelID) {
-						return deny(metav1.StatusReasonForbidden, msg)
-					}
-				}
-			}
-		}
+	if req.op == k8sadm.Delete {
+		return allow("")
+	}
 
-	case k8sadm.Create:
-		for label := range req.ns.Labels {
-			if strings.Contains(label, treeLabelID) {
+	oldLabels := map[string]string{}
+	if req.oldns != nil {
+		oldLabels = req.oldns.Labels
+	}
+
+	for key := range req.ns.Labels {
+		if _, ok := oldLabels[key]; !ok {
+			if strings.Contains(key, api.LabelTreeDepthSuffix) {
 				return deny(metav1.StatusReasonForbidden, msg)
 			}
 		}
