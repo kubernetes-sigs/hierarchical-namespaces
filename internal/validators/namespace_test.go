@@ -335,3 +335,65 @@ func TestIllegalIncludedNamespaceNamespace(t *testing.T) {
 		})
 	}
 }
+
+func TestNsTreeLabelAddition(t *testing.T) {
+
+	f := foresttest.Create("-")
+	vns := &Namespace{Forest: f}
+
+	ns := &corev1.Namespace{}
+	ns.Name = "a"
+
+	ns.SetLabels(map[string]string{api.LabelTreeDepthSuffix: "1"})
+
+	tests := []struct {
+		name string
+		op   k8sadm.Operation
+		fail bool
+	}{
+		{name: "Creation of namespace with tree label in it", op: k8sadm.Create, fail: false},
+		{name: "Update namespace with tree label in it", op: k8sadm.Update, fail: false},
+	}
+	for _, tc := range tests {
+		g := NewWithT(t)
+		req := &nsRequest{
+			ns: ns,
+			op: tc.op,
+		}
+		got := vns.illegalTreeLabel(req)
+
+		logResult(t, got.AdmissionResponse.Result)
+		g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.fail))
+	}
+
+}
+
+func TestNsUpdateValueTreeLabel(t *testing.T) {
+
+	g := NewWithT(t)
+
+	f := foresttest.Create("-")
+	vns := &Namespace{Forest: f}
+
+	oldNs := &corev1.Namespace{}
+	oldNs.Name = "a"
+
+	oldNs.SetLabels(map[string]string{api.LabelTreeDepthSuffix: "1"})
+
+	ns := &corev1.Namespace{}
+	ns.Name = "a"
+
+	// Change tree label value
+	oldNs.SetLabels(map[string]string{api.LabelTreeDepthSuffix: "2"})
+
+	req := &nsRequest{
+		ns:    ns,
+		oldns: oldNs,
+		op:    k8sadm.Update,
+	}
+
+	got := vns.illegalTreeLabel(req)
+
+	g.Expect(got.AdmissionResponse.Allowed).Should(Equal(false))
+
+}
