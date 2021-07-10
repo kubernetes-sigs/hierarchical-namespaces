@@ -133,9 +133,23 @@ func (v *Namespace) illegalTreeLabel(req *nsRequest) admission.Response {
 		oldLabels = req.oldns.Labels
 	}
 
-	for key := range req.ns.Labels {
-		if _, ok := oldLabels[key]; !ok {
+	for key, val := range req.ns.Labels {
+		if oldVal, ok := oldLabels[key]; !ok {
 			if strings.Contains(key, api.LabelTreeDepthSuffix) {
+				return deny(metav1.StatusReasonForbidden, msg)
+			}
+		} else {
+			if strings.Contains(key, api.LabelTreeDepthSuffix) {
+				if val != oldVal {
+					return deny(metav1.StatusReasonForbidden, msg)
+				}
+			}
+		}
+	}
+
+	for key := range oldLabels {
+		if strings.Contains(key, api.LabelTreeDepthSuffix) {
+			if _, ok := req.ns.Labels[key]; !ok {
 				return deny(metav1.StatusReasonForbidden, msg)
 			}
 		}
