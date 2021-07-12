@@ -33,3 +33,4 @@ manifests
 *.swp
 *.swo
 *~
+.vscode
