@@ -207,7 +207,7 @@ Subnamespaces have two significant differences relative to full namespaces:
   is deleted, this does not delete the child. By contrast, subnamespaces have
   their lifetimes tied to that of their parent: if the parent is deleted, so is
   the subnamespace. HNC includes features to prevent you from accidentally
-  delete subnamespaces, or trees of subnamespaces.
+  deleting subnamespaces, or trees of subnamespaces.
 
 In all other respects, subnamespaces and full namespaces are identical. For
 example, subnamespaces must have unique names within the cluster. Subnamespaces
