@@ -3,6 +3,7 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    hnc.x-k8s.io/excluded-namespace: "true"
   name: hnc-system
 ---
 apiVersion: apiextensions.k8s.io/v1
@@ -174,7 +175,7 @@ spec:
             description: HNCConfigurationSpec defines the desired state of HNC configuration.
             properties:
               resources:
-                description: Resources defines the cluster-wide settings for resource synchronization. Note that 'roles' and 'rolebindings' are pre-configured by HNC with 'Propagate' mode and are omitted in the spec. Any configuration of 'roles' or 'rolebindings' are not allowed. To learn more, see https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/how-to.md#admin-types
+                description: Resources defines the cluster-wide settings for resource synchronization. Note that 'roles' and 'rolebindings' are pre-configured by HNC with 'Propagate' mode and are omitted in the spec. Any configuration of 'roles' or 'rolebindings' are not allowed. To learn more, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/how-to.md#admin-types
                 items:
                   description: ResourceSpec defines the desired synchronization state of a specific resource.
                   properties:
@@ -200,7 +201,7 @@ spec:
             description: HNCConfigurationStatus defines the observed state of HNC configuration.
             properties:
               conditions:
-                description: Conditions describes the errors, if any. If there are any conditions with "ActivitiesHalted" reason, this means that HNC cannot function in the affected namespaces. The HierarchyConfiguration object in each of the affected namespaces will have more information. To learn more about conditions, see https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#admin-conditions.
+                description: Conditions describes the errors, if any. If there are any conditions with "ActivitiesHalted" reason, this means that HNC cannot function in the affected namespaces. The HierarchyConfiguration object in each of the affected namespaces will have more information. To learn more about conditions, see https://github.com/kubernetes-sigs/multi-tenancy/blob/master/incubator/hnc/docs/user-guide/concepts.md#admin-conditions.
                 items:
                   description: "Condition contains details for one aspect of the current state of this API Resource. --- This struct is intended for direct use as an array at the field path .status.conditions.  For example, type FooStatus struct{     // Represents the observations of a foo's current state.     // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type     // +patchStrategy=merge     // +listType=map     // +listMapKey=type     Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"` \n     // other fields }"
                   properties:
@@ -544,8 +545,6 @@ spec:
       control-plane: controller-manager
   template:
     metadata:
-      annotations:
-        prometheus.io/scrape: "true"
       labels:
         control-plane: controller-manager
     spec:
@@ -563,14 +562,11 @@ spec:
         - --excluded-namespace=kube-node-lease
         command:
         - /manager
-        image: hnc-manager:latest
+        image: gcr.io/k8s-staging-multitenancy/hnc-manager:v0.8.0
         name: manager
         ports:
         - containerPort: 9443
           name: webhook-server
-          protocol: TCP
-        - containerPort: 8080
-          name: metrics
           protocol: TCP
         resources:
           limits:
@@ -583,6 +579,16 @@ spec:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
           readOnly: true
+      - args:
+        - --upstream=http://127.0.0.1:8080/
+        - --secure-listen-address=0.0.0.0:8443
+        - --logtostderr=true
+        - --v=10
+        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.4.0
+        name: kube-rbac-proxy
+        ports:
+        - containerPort: 8443
+          name: https
       securityContext:
         fsGroup: 2000
         runAsNonRoot: true
@@ -595,39 +601,13 @@ spec:
           secretName: hnc-webhook-server-cert
 ---
 apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
-metadata:
-  creationTimestamp: null
-  name: hnc-mutating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: hnc-webhook-service
-      namespace: hnc-system
-      path: /mutate-namespace
-  failurePolicy: Ignore
-  name: namespacelabel.hnc.x-k8s.io
-  rules:
-  - apiGroups:
-    - ""
-    apiVersions:
-    - v1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - namespaces
-  sideEffects: None
----
-apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: hnc-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
   - v1
+  - v1beta1
   clientConfig:
     service:
       name: hnc-webhook-service
@@ -648,6 +628,7 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1
+  - v1beta1
   clientConfig:
     service:
       name: hnc-webhook-service
@@ -668,6 +649,7 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1
+  - v1beta1
   clientConfig:
     service:
       name: hnc-webhook-service
@@ -689,6 +671,7 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1
+  - v1beta1
   clientConfig:
     service:
       name: hnc-webhook-service
@@ -710,6 +693,7 @@ webhooks:
   sideEffects: None
 - admissionReviewVersions:
   - v1
+  - v1beta1
   clientConfig:
     service:
       name: hnc-webhook-service
@@ -718,8 +702,9 @@ webhooks:
   failurePolicy: Fail
   name: objects.hnc.x-k8s.io
   namespaceSelector:
-    matchLabels:
-      hnc.x-k8s.io/included-namespace: "true"
+    matchExpressions:
+    - key: hnc.x-k8s.io/excluded-namespace
+      operator: DoesNotExist
   rules:
   - apiGroups:
     - '*'
