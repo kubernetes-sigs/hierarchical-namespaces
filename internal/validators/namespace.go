@@ -3,6 +3,7 @@ package validators
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
@@ -85,6 +86,11 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 		if rsp := v.nameExistsInExternalHierarchy(req); !rsp.Allowed {
 			return rsp
 		}
+
+		if rsp := v.illegalTreeLabel(req); !rsp.Allowed {
+			return rsp
+		}
+
 	case k8sadm.Update:
 		if rsp := v.illegalIncludedNamespaceLabel(req); !rsp.Allowed {
 			return rsp
@@ -95,12 +101,57 @@ func (v *Namespace) handle(req *nsRequest) admission.Response {
 		if rsp := v.conflictBetweenParentAndExternalManager(req, ns); !rsp.Allowed {
 			return rsp
 		}
+
+		if rsp := v.illegalTreeLabel(req); !rsp.Allowed {
+			return rsp
+		}
+
 	case k8sadm.Delete:
 		if rsp := v.cannotDeleteSubnamespace(req); !rsp.Allowed {
 			return rsp
 		}
 		if rsp := v.illegalCascadingDeletion(ns); !rsp.Allowed {
 			return rsp
+		}
+	}
+
+	return allow("")
+}
+
+// illegalTreeLabel checks if tree labels are being created or modified
+// by any user or service account since only HNC service account is
+// allowed to do so
+func (v *Namespace) illegalTreeLabel(req *nsRequest) admission.Response {
+	msg := "Only HNC Service account can modify tree labels"
+
+	if req.op == k8sadm.Delete {
+		return allow("")
+	}
+
+	oldLabels := map[string]string{}
+	if req.oldns != nil {
+		oldLabels = req.oldns.Labels
+	}
+
+	for key, val := range req.ns.Labels {
+		if oldVal, ok := oldLabels[key]; !ok {
+			if strings.Contains(key, api.LabelTreeDepthSuffix) {
+				return deny(metav1.StatusReasonForbidden, msg)
+			}
+		} else {
+			if strings.Contains(key, api.LabelTreeDepthSuffix) {
+				if val != oldVal {
+					return deny(metav1.StatusReasonForbidden, msg)
+				}
+			}
+		}
+	}
+
+	for key := range oldLabels {
+		if strings.Contains(key, api.LabelTreeDepthSuffix) {
+			if _, ok := req.ns.Labels[key]; !ok {
+				return deny(metav1.StatusReasonForbidden, msg)
+			}
 		}
 	}
 
