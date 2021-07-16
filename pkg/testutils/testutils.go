@@ -274,6 +274,20 @@ func CleanupTestNamespaces() {
 	cleanupNamespaces(nses...)
 }
 
+// CleanupCRDIfExists checks whether the eetests.e2e.hnc.x-k8s.io CRD is present, if so, delete it.
+func CleanupTestCRDIfExists() {
+	crd := "eetests.e2e.hnc.x-k8s.io"
+	if err := TryRunQuietly("kubectl get crd", crd); err != nil {
+		// crd does not exist, return directly.
+		return
+	}
+	// undo this before deleting the crd, otherwise webhook will deny the request.
+	MustRun("kubectl hns config delete-type --group e2e.hnc.x-k8s.io --resource eetests")
+	MustRun("kubectl delete crd", crd)
+	// make sure the crd has been deleted.
+	RunShouldNotContain(crd, 10, "kubectl get crd")
+}
+
 // cleanupNamespaces does everything it can to delete the passed-in namespaces. It also uses very
 // high timeouts (30s) since this function is often called after HNC has just been reinstalled, and
 // it can take a while of HNC to start allowing changes to namespaces again.
