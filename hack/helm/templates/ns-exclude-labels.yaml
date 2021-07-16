@@ -3,7 +3,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: hnc
-  namespace: {{ .release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "..labels" . | nindent 4 }}
   annotations:
@@ -32,7 +32,7 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: hnc
-  namespace: {{ .release.Namespace }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "..labels" . | nindent 4 }}
   annotations:
