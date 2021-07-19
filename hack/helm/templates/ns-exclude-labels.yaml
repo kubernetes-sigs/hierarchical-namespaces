@@ -14,7 +14,7 @@ spec:
   template:
     spec:
       containers:
-      {{- range .Values.hncIgnoreNamespaces }}
+      {{- range .Values.hncExcludeNamespaces }}
       - name: labeler-{{ . }}
         image: gcr.io/google_containers/hyperkube:v1.9.7
         command:

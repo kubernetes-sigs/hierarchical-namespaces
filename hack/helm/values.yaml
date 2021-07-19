@@ -10,7 +10,7 @@ serviceAccount:
   # If not set and create is true, a name is generated using the fullname template
   name: ""
 
-hncIgnoreNamespaces:
+hncExcludeNamespaces:
  - kube-system
  - kube-public
  - kube-node-lease

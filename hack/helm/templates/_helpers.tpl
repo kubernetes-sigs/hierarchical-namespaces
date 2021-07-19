@@ -1,4 +1,8 @@
 {{/*
+File gernated by the `helm create` command
+*/}}
+
+{{/*
 Expand the name of the chart.
 */}}
 {{- define "..name" -}}
