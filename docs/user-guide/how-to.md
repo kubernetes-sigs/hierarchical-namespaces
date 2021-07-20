@@ -41,7 +41,7 @@ recommend installing the `kubectl-hns` plugin.
 
 You can install the plugin by following the instructions for the [latest
 release](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases).
-For plugins older than HNC v0.9, see the instructions for the releases in our
+For plugins older than HNC v0.8, see the instructions for the releases in our
 [old repo](https://github.com/kubernetes-sigs/multi-tenancy/releases).
 
 <a name="use-subns-create">
@@ -441,7 +441,7 @@ listed above can be excluded _by default_.
 
 #### Install an official release and the kubectl plugin
 
-HNC v0.9.0 and later are available from [this
+HNC v0.8.0 and later are available from [this
 repo](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases).
 Older versions, as well as their documentation, are available in the
 [wg-multi-tenancy repo](https://github.com/kubernetes-sigs/multi-tenancy/releases),
