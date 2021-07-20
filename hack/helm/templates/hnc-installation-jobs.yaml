@@ -2,14 +2,13 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: hnc
+  name: {{ include "hnc.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "..labels" . | nindent 4 }}
+    {{- include "hnc.labels" . | nindent 4 }}
   annotations:
     helm.sh/hook-weight: "1"
-    helm.sh/hook: pre-install,pre-upgrade
-    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+    helm.sh/hook: pre-install
 spec:
   template:
     spec:
@@ -26,7 +25,7 @@ spec:
         - --overwrite
       {{- end }}
       restartPolicy: Never
-      serviceAccountName: hnc
+      serviceAccountName: {{ include "hnc.fullname" . }}
 ---
 apiVersion: batch/v1
 kind: Job
@@ -34,16 +33,15 @@ metadata:
   name: hnc
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "..labels" . | nindent 4 }}
+    {{- include "hnc.labels" . | nindent 4 }}
   annotations:
     helm.sh/hook-weight: "1"
     helm.sh/hook: post-delete
-    helm.sh/hook-delete-policy: hook-succeeded
 spec:
   template:
     spec:
       containers:
-      {{- range .Values.hncIgnoreNamespaces }}
+      {{- range .Values.hncExcludeNamespaces }}
       - name: labeler-{{ . }}
         image: gcr.io/google_containers/hyperkube:v1.9.7
         command:
@@ -54,4 +52,4 @@ spec:
         - hnc.x-k8s.io/excluded-namespace-
       {{- end }}
       restartPolicy: Never
-      serviceAccountName: hnc
+      serviceAccountName: {{ include "hnc.fullname" . }}
