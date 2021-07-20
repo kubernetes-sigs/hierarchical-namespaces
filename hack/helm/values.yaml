@@ -1,0 +1,10 @@
+# Replaces the Chart.yaml name but will still generate names based on this value
+nameOverride: ""
+# Entirely replaces the generated object name with this value
+fullnameOverride: ""
+
+# A list of namespaces to add the HNC exclude label to
+hncExcludeNamespaces:
+ - kube-system
+ - kube-public
+ - kube-node-lease
