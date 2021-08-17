@@ -78,6 +78,15 @@ type gr2gvkMode map[schema.GroupResource]gvkMode
 // gvk2gr keeps track of a group of unique GVKs with the mapping GRs.
 type gvk2gr map[schema.GroupVersionKind]schema.GroupResource
 
+type GVKErr struct {
+	Reason string
+	Msg    string
+}
+
+func (e *GVKErr) Error() string {
+	return e.Msg
+}
+
 // checkPeriod is the period that the config reconciler checks if it needs to reconcile the
 // `config` singleton.
 const checkPeriod = 3 * time.Second
@@ -188,10 +197,12 @@ func (r *ConfigReconciler) reconcileConfigTypes(inst *api.HNCConfiguration, allR
 		// Look if the resource exists in the API server.
 		gvk, err := GVKFor(gr, allRes)
 		if err != nil {
-			// If the type is not found, log error and write conditions but don't
+			// If the type is not found or namespaced, log error and write conditions but don't
 			// early exit since the other types can still be reconciled.
 			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
-			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound, err.Error())
+			if gvkerr, ok := err.(*GVKErr); ok {
+				r.writeCondition(inst, api.ConditionBadTypeConfiguration, gvkerr.Reason, gvkerr.Msg)
+			}
 			continue
 		}
 		r.activeGVKMode[gr] = gvkMode{gvk, rsc.Mode}
@@ -599,6 +610,9 @@ func GVKFor(gr schema.GroupResource, allRes []*restmapper.APIGroupResources) (sc
 		for _, version := range group.Versions {
 			for _, resource := range groupedResources.VersionedResources[version.Version] {
 				if resource.Name == gr.Resource {
+					if !resource.Namespaced {
+						return schema.GroupVersionKind{}, &GVKErr{api.ReasonResourceNotNamespaced, fmt.Sprintf("Resource %q is not namespaced", gr)}
+					}
 					// Please note that we cannot use resource.group or resource.version
 					// here because they are preferred group/version and they are default
 					// to empty to imply this current containing group/version. Therefore,
@@ -613,5 +627,5 @@ func GVKFor(gr schema.GroupResource, allRes []*restmapper.APIGroupResources) (sc
 			}
 		}
 	}
-	return schema.GroupVersionKind{}, fmt.Errorf("Resource %q not found", gr)
+	return schema.GroupVersionKind{}, &GVKErr{api.ReasonResourceNotFound, fmt.Sprintf("Resource %q not found", gr)}
 }

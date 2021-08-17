@@ -60,6 +60,7 @@ const (
 	// Condition reasons for BadConfiguration
 	ReasonMultipleConfigsForType = "MultipleConfigurationsForType"
 	ReasonResourceNotFound       = "ResourceNotFound"
+	ReasonResourceNotNamespaced  = "ResourceNotNamespaced"
 
 	// Condition reason for OutOfSync, e.g. errors when creating a reconciler.
 	ReasonUnknown = "Unknown"
