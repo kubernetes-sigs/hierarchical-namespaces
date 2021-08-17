@@ -280,7 +280,7 @@ to delete it, HNC will simply overwrite the object anyway.
 
 ### Tree labels and non-propagated policies
 
-While the hierarchy is _defined_ in the [`HierarchicalConfiguration`](#admin-hc)
+While the hierarchy is _defined_ in the [`HierarchyConfiguration`](#admin-hc)
 object, it is _reflected_ on the namespaces themselves via HNC-managed labels.
 
 For example, let’s say that namespace `service-1` has a parent `team-a` and a
@@ -360,7 +360,7 @@ These concepts are useful for anyone who needs to administer hierarchical namesp
 
 Until now, we’ve avoided mentioning how the hierarchy is actually represented in
 the cluster. The answer is that every namespace may contain a single object with
-the Kind `HierarchicalConfiguration` and the name `hierarchy`. This object is
+the Kind `HierarchyConfiguration` and the name `hierarchy`. This object is
 used to configure the subtree rooted at the namespace, and also to report any
 problems with the hierarchy. It is also the RBAC attachment point (see
 “Namespace administrators,” below).
@@ -439,7 +439,7 @@ Conditions generally require human intervention to resolve, except as described
 below.
 
 Namespace conditions are reported as part of the status of the
-`HierarchicalConfiguration` object in each namespace and are exposed via the
+`HierarchyConfiguration` object in each namespace and are exposed via the
 `hnc/namespace_conditions` metric. Cluster conditions are reported as part of
 the status of the `HNCConfiguration` cluster-wide object; cluster conditions can
 either be caused by problems with the cluster-wide configuration, and are also
