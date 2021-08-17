@@ -373,11 +373,11 @@ namespaces, and the parent namespace has a secret called `my-secret`. To set
 ```bash
 kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/treeSelect=child1
 # OR
-kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/treeSelect="!child2, !child3"
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/treeSelect='!child2, !child3'
 # OR
 kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select=child1.tree.hnc.x-k8s.io/depth
 # OR
-kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select="!child2.tree.hnc.x-k8s.io/depth, !child3.tree.hnc.x-k8s.io/depth"
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select='!child2.tree.hnc.x-k8s.io/depth, !child3.tree.hnc.x-k8s.io/depth'
 ```
 
 To set `my-secret` not to propagate to any namespace, you can use:
