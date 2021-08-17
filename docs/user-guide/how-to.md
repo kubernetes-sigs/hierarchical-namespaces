@@ -569,7 +569,7 @@ kubectl get hncconfiguration config -oyaml > hncconfig.yaml
 kubectl get hierarchyconfigurations -A -oyaml > structure.yaml
 ```
 
-After HNC is reinstalled, it will recreate the `HierarchicalConfiguration`
+After HNC is reinstalled, it will recreate the `HierarchyConfiguration`
 objects in every namespace, and may automatically create these objects even in
 some full namespaces as well (for example, in the parents of subnamespaces). In
 order for your backed-up objects to be restored properly, edit `structure.yaml`
