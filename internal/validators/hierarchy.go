@@ -13,11 +13,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/hierarchical-namespaces/internal/pkg/selectors"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
@@ -244,6 +247,26 @@ func (v *Hierarchy) getConflictingObjects(newParent, ns *forest.Namespace) []str
 	return conflicts
 }
 
+// shouldPropagateSource returns true if the object should be propagated by the HNC. The following
+// objects are not propagated:
+// - Objects of a type whose mode is set to "remove" in the HNCConfiguration singleton
+// - Objects with nonempty finalizer list
+// - Objects have a selector that doesn't match the destination namespace
+// - Service Account token secrets
+func (v *Hierarchy) shouldPropagateSource(inst *unstructured.Unstructured, nsLabels labels.Set) bool {
+	//func (v *Hierarchy) shouldPropagateSource() bool {
+	//log2 := v.Log.WithValues("ns", inst.GetNamespace(), "nsLabels", nsLabels.String())
+	if ok, err := selectors.ShouldPropagate(inst, nsLabels); err != nil {
+		// 	log2.Info("Checking shouldPropagateSource false", "nsLabel", nsLabels.String())
+		return false
+	} else if !ok {
+		// 	log2.Info("Checking shouldPropagateSource false", "nsLabel", nsLabels.String())
+		return false
+	}
+	//log2.Info("Checking shouldPropagateSource true", "nsLabel", nsLabels.String())
+	return true
+}
+
 // getConflictingObjectsOfType returns a list of namespaced objects if there's
 // any conflict between the new ancestors and the descendants.
 func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, newParent, ns *forest.Namespace) []string {
@@ -254,7 +277,7 @@ func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	//  'shouldPropagateSource()' rules from the reconcilers/object.go. Only
 	//  propagatable ancestor source would cause overwriting conflict.
 	for _, o := range newParent.GetAncestorSourceObjects(gvk, "") {
-		newAnsSrcObjs[o.GetName()] = true
+		newAnsSrcObjs[o.GetName()] = v.shouldPropagateSource(o, newParent.GetLabels())
 	}
 
 	// Look in the descendants to find if there's any conflict.
