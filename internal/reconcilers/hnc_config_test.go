@@ -287,6 +287,14 @@ var _ = Describe("HNCConfiguration", func() {
 		Expect(objectInheritedFrom(ctx, "crontabs", barName, "foo-crontab")).Should(Equal(fooName))
 	})
 
+	It("manager should not panic and ignore wrong Clusterscoped type setting in HNCConfiguration", func() {
+		// Add a config for a type that hasn't been defined yet.
+		addToHNCConfig(ctx, api.RBACGroup, "clusterroles", api.Propagate)
+
+		Eventually(getHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonResourceNotNamespaced)).
+			Should(ContainSubstring("Resource \"clusterroles.rbac.authorization.k8s.io\" is not namespaced"))
+	})
+
 	It("should set NumPropagatedObjects back to 0 after deleting the source object in propagate mode", func() {
 		addToHNCConfig(ctx, "", "limitranges", api.Propagate)
 		setParent(ctx, barName, fooName)
