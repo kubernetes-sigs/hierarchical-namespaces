@@ -54,6 +54,7 @@ var (
 
 var (
 	metricsAddr             string
+	enableStackdriver       bool
 	maxReconciles           int
 	enableLeaderElection    bool
 	leaderElectionId        string
@@ -82,6 +83,7 @@ func init() {
 func main() {
 	setupLog.Info("Parsing flags")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.BoolVar(&enableStackdriver, "enable-stackdriver", true, "If true, export metrics to stackdriver")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "controller-leader-election-helper",
@@ -110,22 +112,24 @@ func main() {
 	// Exporters use Application Default Credentials to authenticate.
 	// See https://developers.google.com/identity/protocols/application-default-credentials
 	// for more details.
-	setupLog.Info("Creating OpenCensus->Stackdriver exporter")
-	sd, err := stackdriver.NewExporter(stackdriver.Options{
-		// Stackdriver’s minimum stats reporting period must be >= 60 seconds.
-		// https://opencensus.io/exporters/supported-exporters/go/stackdriver/
-		ReportingInterval: stats.ReportingInterval,
-	})
-	if err == nil {
-		// Flush must be called before main() exits to ensure metrics are recorded.
-		defer sd.Flush()
-		err = sd.StartMetricsExporter()
+	if enableStackdriver {
+		setupLog.Info("Creating OpenCensus->Stackdriver exporter")
+		sd, err := stackdriver.NewExporter(stackdriver.Options{
+			// Stackdriver’s minimum stats reporting period must be >= 60 seconds.
+			// https://opencensus.io/exporters/supported-exporters/go/stackdriver/
+			ReportingInterval: stats.ReportingInterval,
+		})
 		if err == nil {
-			defer sd.StopMetricsExporter()
+			// Flush must be called before main() exits to ensure metrics are recorded.
+			defer sd.Flush()
+			err = sd.StartMetricsExporter()
+			if err == nil {
+				defer sd.StopMetricsExporter()
+			}
 		}
-	}
-	if err != nil {
-		setupLog.Error(err, "Could not create Stackdriver exporter")
+		if err != nil {
+			setupLog.Error(err, "Could not create Stackdriver exporter")
+		}
 	}
 
 	// Hook up OpenCensus to Prometheus.
@@ -134,7 +138,7 @@ func main() {
 	// the returned value since it doesn't do anything anyway. See:
 	// (https://github.com/census-ecosystem/opencensus-go-exporter-prometheus/blob/2b9ada237b532c09fcb0a1242469827bdb89df41/prometheus.go#L103)
 	setupLog.Info("Creating Prometheus exporter")
-	_, err = prometheus.NewExporter(prometheus.Options{
+	_, err := prometheus.NewExporter(prometheus.Options{
 		Registerer: metrics.Registry, // use the controller-runtime registry to merge with all other metrics
 	})
 	if err != nil {
