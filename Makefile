@@ -117,6 +117,10 @@ build: generate fmt vet manifests
 	     -o bin/kubectl/kubectl-hns_linux_arm \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
+	GOOS=windows GOARCH=amd64 go build \
+	     -o bin/kubectl/kubectl-hns_windows_amd64.exe \
+	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
+	    ./cmd/kubectl/main.go
 
 # Clean all binaries (manager and kubectl)
 clean: krew-uninstall
