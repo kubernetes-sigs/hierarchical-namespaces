@@ -22,6 +22,7 @@ import (
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/pkg/selectors"
 )
 
 const (
@@ -250,11 +251,12 @@ func (v *Hierarchy) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	// Get all the source objects in the new ancestors that would be propagated
 	// into the descendants.
 	newAnsSrcObjs := make(map[string]bool)
-	// TODO additionally check if the ancestor source objects obey the
-	//  'shouldPropagateSource()' rules from the reconcilers/object.go. Only
-	//  propagatable ancestor source would cause overwriting conflict.
 	for _, o := range newParent.GetAncestorSourceObjects(gvk, "") {
-		newAnsSrcObjs[o.GetName()] = true
+		// If the user has chosen not to propagate the object to this descendant,
+		// then it should not be included in conflict checks
+		if ok, _ := selectors.ShouldPropagate(o, o.GetLabels()); ok {
+			newAnsSrcObjs[o.GetName()] = true
+		}
 	}
 
 	// Look in the descendants to find if there's any conflict.

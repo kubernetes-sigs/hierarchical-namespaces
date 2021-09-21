@@ -7,6 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 	authn "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -156,6 +157,58 @@ func TestChangeParentWithConflict(t *testing.T) {
 			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
 		})
 	}
+}
+
+func TestConflictItemWithPropagateNoneLabel(t *testing.T) {
+	f := foresttest.Create("-a-c") // a <- b; c <- d
+	gvk := schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"}
+	or := &reconcilers.ObjectReconciler{
+		GVK:  gvk,
+		Mode: api.Propagate,
+	}
+	f.AddTypeSyncer(or)
+
+	// Create conflict secret annotated with propagate none as true
+	inst := &unstructured.Unstructured{}
+	inst.SetName("conflict")
+	inst.SetNamespace("a")
+	inst.SetGroupVersionKind(gvk)
+	inst.SetAnnotations(map[string]string{api.AnnotationNoneSelector: "true"})
+	f.Get("a").SetSourceObject(inst)
+	// Create secret with the same name in namespace 'b' and 'd'
+	createSecret("conflict", "c", f)
+	createSecret("conflict", "d", f)
+
+	h := &Hierarchy{Forest: f}
+	l := zap.New()
+	tests := []struct {
+		name string
+		nnm  string
+		pnm  string
+		fail bool
+	}{
+		{name: "ok: no conflict as parent secret is propagate none", nnm: "c", pnm: "a"},
+		{name: "conflict secret in parent (child secret is propagate none)", nnm: "a", pnm: "d", fail: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewWithT(t)
+			hc := &api.HierarchyConfiguration{Spec: api.HierarchyConfigurationSpec{Parent: tc.pnm}}
+			hc.ObjectMeta.Name = api.Singleton
+			hc.ObjectMeta.Namespace = tc.nnm
+			req := &request{hc: hc}
+
+			// Test
+			got := h.handle(context.Background(), l, req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
+
 }
 
 func TestAuthz(t *testing.T) {
