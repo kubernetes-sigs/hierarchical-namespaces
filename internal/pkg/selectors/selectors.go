@@ -29,6 +29,9 @@ func ShouldPropagate(inst *unstructured.Unstructured, nsLabels labels.Set) (bool
 	if none, err := GetNoneSelector(inst); err != nil || none {
 		return false, err
 	}
+	if excluded, err := isExcluded(inst); excluded {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -153,4 +156,21 @@ func GetNoneSelector(inst *unstructured.Unstructured) (bool, error) {
 
 	}
 	return noneSelector, nil
+}
+
+// cmExclusions are known (istio and kube-root) CA configmap which are excluded from propagation
+var cmExclusions = []string{"istio-ca-root-cert", "kube-root-ca.crt"}
+
+// isExcluded returns true to indicate that this object is excluded from being propagated
+func isExcluded(inst *unstructured.Unstructured) (bool, error) {
+	name := inst.GetName()
+	kind := inst.GetKind()
+	group := inst.GroupVersionKind().Group
+
+	for _, excludedResourceName := range cmExclusions {
+		if group == "" && kind == "ConfigMap" && name == excludedResourceName {
+			return true, nil
+		}
+	}
+	return false, nil
 }

@@ -390,6 +390,19 @@ var _ = Describe("Basic propagation", func() {
 		Expect(objectInheritedFrom(ctx, "configmaps", barName, "foo-config")).Should(Equal(fooName))
 	})
 
+	It("should not propagate builtin exclusions", func() {
+		setParent(ctx, barName, fooName)
+		makeObject(ctx, "configmaps", fooName, "istio-ca-root-cert")
+		makeObject(ctx, "configmaps", fooName, "kube-root-ca.crt")
+		makeObject(ctx, "configmaps", fooName, "gets-propagated")
+		addToHNCConfig(ctx, "", "configmaps", api.Propagate)
+
+		// We expect normal configmaps to be propagated, but builtin exclusions not to be.
+		Eventually(hasObject(ctx, "configmaps", barName, "gets-propagated")).Should(BeTrue())
+		Eventually(hasObject(ctx, "configmaps", barName, "istio-ca-root-cert")).Should(BeFalse())
+		Eventually(hasObject(ctx, "configmaps", barName, "kube-root-ca.crt")).Should(BeFalse())
+	})
+
 	It("should be removed if the hierarchy changes", func() {
 		setParent(ctx, barName, fooName)
 		setParent(ctx, bazName, barName)
