@@ -348,6 +348,19 @@ overwritten by your actions. You can then rewrite the exception to safely
 exclude those objects, or else delete the conflicting objects to allow them to
 be replaced.
 
+#### Built-in exceptions
+
+There are some built-in exceptions to prevent certain known (auto-generated)
+objects from being propagated by HNC.
+
+If ConfigMaps propagation is enabled, any ConfigMaps named `istio-ca-root-cert`
+or `kube-root-ca.crt` will not be propagated. These are auto-created in new
+namespaces by Istio and Kubernetes respectively. As they are auto-generated,
+adding annotations is not possible and HNC will by default exclude them.
+
+Similarly, Kubernetes ServiceAccount Secrets will also by default be excluded
+from propagation.
+
 <a name="admin"/>
 
 ## Administration
