@@ -28,9 +28,9 @@ export PATH=$(go env GOPATH)/bin:$PATH
 mkdir -p $(go env GOPATH)/bin
 
 echo "Installing 'kubebuilder' to include the Ginkgo test suite requirements"
-kb=2.3.1
-wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${kb}/kubebuilder_${kb}_linux_amd64.tar.gz
-tar -zxvf kubebuilder_${kb}_linux_amd64.tar.gz
+kb=3.1.0
+wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${kb}/kubebuilder_${kb}_linux_amd64
+tar -zxvf kubebuilder_${kb}_linux_amd64
 mv kubebuilder_${kb}_linux_amd64 /usr/local/kubebuilder
 
 hack_dir=$(dirname ${BASH_SOURCE})

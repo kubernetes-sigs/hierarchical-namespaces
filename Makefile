@@ -68,13 +68,6 @@ endif
 
 CONTROLLER_GEN ?= ${CURDIR}/bin/controller-gen
 
-# Enable CRD per-version validation. As of Kubernetes 1.13, we can have multiple
-# versions of the Kind defined in the CRD, and use a webhook to convert between
-# them. By default, KubeBuilder disables generating different validation for
-# different versions of the Kind in the CRD, to be compatible with older
-# Kubernetes versions.
-CRD_OPTIONS ?= "crd:trivialVersions=false"
-
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
@@ -150,7 +143,7 @@ run: build
 manifests: controller-gen
 	@echo "Building manifests with image ${HNC_IMG}"
 	@# See the comment above about the 'paths' arguments
-	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." output:crd:artifacts:config=config/crd/bases
+	$(CONTROLLER_GEN) crd rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." output:crd:artifacts:config=config/crd/bases
 	./hack/crd_patches/singleton-enum-patch.sh
 	-rm -rf manifests/
 	mkdir manifests
