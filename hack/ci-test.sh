@@ -14,6 +14,8 @@
 
 set -e
 
+go version
+
 # This file is run by Prow during all presubmits
 
 # Not included or existing by default in Prow
@@ -27,17 +29,17 @@ set -e
 export PATH=$(go env GOPATH)/bin:$PATH
 mkdir -p $(go env GOPATH)/bin
 
-echo "Installing 'kubebuilder' to include the Ginkgo test suite requirements"
-kb=2.3.1
-wget https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${kb}/kubebuilder_${kb}_linux_amd64.tar.gz
-tar -zxvf kubebuilder_${kb}_linux_amd64.tar.gz
-mv kubebuilder_${kb}_linux_amd64 /usr/local/kubebuilder
+echo "Installing kubebuilder tools"
+K8S_VERSION=1.19.2
+curl -sSLo envtest-bins.tar.gz "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-${K8S_VERSION}-$(go env GOOS)-$(go env GOARCH).tar.gz"
+mkdir /usr/local/kubebuilder
+tar -C /usr/local/kubebuilder --strip-components=1 -zvxf envtest-bins.tar.gz
 
 hack_dir=$(dirname ${BASH_SOURCE})
-
-echo "Running 'make check-fmt test'"
 cd "$hack_dir/.."
-make check-fmt test
 
-echo "Running 'make check-generate test'"
-make check-generate
+echo "Running 'make check-fmt check-generate"
+make check-fmt check-generate
+
+echo "Running 'make test'"
+make test
