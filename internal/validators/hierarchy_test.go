@@ -22,7 +22,7 @@ func TestStructure(t *testing.T) {
 	h := &Hierarchy{Forest: f}
 	l := zap.New()
 	// For this unit test, we only set `kube-system` as an excluded namespace.
-	config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+	config.SetNamespaces("", "kube-system")
 
 	tests := []struct {
 		name        string

@@ -2,6 +2,7 @@ package validators
 
 import (
 	"context"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ func TestType(t *testing.T) {
 	f.AddTypeSyncer(or)
 	l := zap.New()
 	o := &Object{Forest: f, Log: l}
+	config.SetNamespaces("", "kube-system")
 
 	tests := []struct {
 		name    string

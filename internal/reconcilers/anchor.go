@@ -75,7 +75,7 @@ func (r *AnchorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// Always delete anchor (and any other HNC CRs) in the excluded namespaces and
 	// early exit.
-	if config.ExcludedNamespaces[pnm] {
+	if !config.IsNamespaceIncluded(pnm) {
 		// Since the anchors in the excluded namespaces are never synced by HNC,
 		// there are no finalizers on the anchors that we can delete them without
 		// removing the finalizers first.
@@ -87,7 +87,7 @@ func (r *AnchorReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// namespace that should not be created as a subnamespace, but the webhook has
 	// been bypassed and the anchor has been successfully created. Forbidden
 	// anchors won't have finalizers.
-	if config.ExcludedNamespaces[nm] {
+	if !config.IsNamespaceIncluded(nm) {
 		inst.Status.State = api.Forbidden
 		return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 	}

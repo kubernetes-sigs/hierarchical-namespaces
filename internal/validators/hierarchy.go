@@ -120,11 +120,11 @@ func (v *Hierarchy) handle(ctx context.Context, log logr.Logger, req *request) a
 		return allow("HNC SA")
 	}
 
-	if config.ExcludedNamespaces[req.hc.Namespace] {
+	if !config.IsNamespaceIncluded(req.hc.Namespace) {
 		reason := fmt.Sprintf("Cannot set the excluded namespace %q as a child of another namespace", req.hc.Namespace)
 		return deny(metav1.StatusReasonForbidden, reason)
 	}
-	if config.ExcludedNamespaces[req.hc.Spec.Parent] {
+	if !config.IsNamespaceIncluded(req.hc.Spec.Parent) {
 		reason := fmt.Sprintf("Cannot set the parent to the excluded namespace %q", req.hc.Spec.Parent)
 		return deny(metav1.StatusReasonForbidden, reason)
 	}

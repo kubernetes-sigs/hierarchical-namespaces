@@ -14,7 +14,7 @@ import (
 func TestMutateNamespaceIncludedLabel(t *testing.T) {
 	m := &Namespace{}
 	l := zap.New()
-	config.ExcludedNamespaces = map[string]bool{"excluded": true}
+	config.SetNamespaces("", "excluded")
 
 	tests := []struct {
 		name       string
