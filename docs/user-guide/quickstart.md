@@ -298,7 +298,7 @@ Partial output:
 acme-org
 ├── team-a
 │   ├── service-1
-│   └── service-2
+│   └── [s] service-2
 └── [s] team-b
 ```
 
@@ -308,7 +308,7 @@ shell in the client container, confirm that we can access the `s2` service runni
 in namespace `service-2`.
 
 ```bash
-kubectl run s2 -n service-2 --image=nginx --restart=Never --expose --port 8080
+kubectl run s2 -n service-2 --image=nginxinc/nginx-unprivileged --restart=Never --expose --port 8080
 
 # Verify that it's running:
 kubectl get service,pod -o wide -n service-2
