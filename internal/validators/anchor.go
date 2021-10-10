@@ -79,12 +79,12 @@ func (v *Anchor) handle(req *anchorRequest) admission.Response {
 	switch req.op {
 	case k8sadm.Create:
 		// Can't create subnamespaces in excluded namespaces
-		if config.ExcludedNamespaces[pnm] {
+		if !config.IsNamespaceIncluded(pnm) {
 			msg := fmt.Sprintf("Cannot create a subnamespace in the excluded namespace %q", pnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}
 		// Can't create subnamespaces using excluded namespace names
-		if config.ExcludedNamespaces[cnm] {
+		if !config.IsNamespaceIncluded(cnm) {
 			msg := fmt.Sprintf("Cannot create a subnamespace using the excluded namespace name %q", cnm)
 			return deny(metav1.StatusReasonForbidden, msg)
 		}

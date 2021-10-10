@@ -52,8 +52,8 @@ func (m *Namespace) Handle(ctx context.Context, req admission.Request) admission
 // Currently, we only add `included-namespace` label to non-excluded namespaces
 // if the label is missing.
 func (m *Namespace) handle(log logr.Logger, ns *corev1.Namespace) {
-	// Early exit if the namespace is excluded.
-	if config.ExcludedNamespaces[ns.Name] {
+
+	if !config.IsNamespaceIncluded(ns.Name) {
 		return
 	}
 

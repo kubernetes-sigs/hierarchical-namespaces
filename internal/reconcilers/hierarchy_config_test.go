@@ -22,7 +22,7 @@ var _ = Describe("Hierarchy", func() {
 	BeforeEach(func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNS(ctx, "bar")
-		config.ExcludedNamespaces = nil
+		config.SetNamespaces("")
 	})
 
 	It("should set a child on the parent", func() {
@@ -34,7 +34,7 @@ var _ = Describe("Hierarchy", func() {
 
 	It("should remove the hierarchyconfiguration singleton in an excluded namespacee", func() {
 		// Set the excluded-namespace "kube-system"'s parent to "bar".
-		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		config.SetNamespaces("", "kube-system")
 		exHier := newHierarchy("kube-system")
 		exHier.Spec.Parent = barName
 		updateHierarchy(ctx, exHier)
@@ -45,7 +45,7 @@ var _ = Describe("Hierarchy", func() {
 
 	It("should set IllegalParent condition if the parent is an excluded namespace", func() {
 		// Set bar's parent to the excluded-namespace "kube-system".
-		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		config.SetNamespaces("", "kube-system")
 		barHier := newHierarchy(barName)
 		barHier.Spec.Parent = "kube-system"
 		updateHierarchy(ctx, barHier)
@@ -382,7 +382,7 @@ var _ = Describe("Hierarchy", func() {
 	})
 
 	It("should remove included-namespace namespace labels from excluded namespaces", func() {
-		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		config.SetNamespaces("", "kube-system")
 		kubeSystem := getNamespace(ctx, "kube-system")
 
 		// Add additional label "other:other" to verify the labels are updated.

@@ -59,7 +59,7 @@ func (o *Object) Handle(ctx context.Context, req admission.Request) admission.Re
 	// Note: This is added just in case the "hnc.x-k8s.io/excluded-namespace=true"
 	// label is not added on the excluded namespaces. VWHConfiguration of this VWH
 	// already has a `namespaceSelector` to exclude namespaces with the label.
-	if config.ExcludedNamespaces[req.Namespace] {
+	if !config.IsNamespaceIncluded(req.Namespace) {
 		return allow("excluded namespace " + req.Namespace)
 	}
 	// Allow changes to the types that are not in propagate mode. This is to dynamically enable/disable

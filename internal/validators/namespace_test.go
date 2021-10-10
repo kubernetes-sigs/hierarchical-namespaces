@@ -231,7 +231,7 @@ func setSubAnnotation(ns *corev1.Namespace, pnm string) {
 func TestIllegalIncludedNamespaceNamespace(t *testing.T) {
 	f := foresttest.Create("-a-c") // a <- b; c <- d
 	vns := &Namespace{Forest: f}
-	config.ExcludedNamespaces["excluded"] = true
+	config.SetNamespaces("", "excluded")
 
 	tests := []struct {
 		name       string

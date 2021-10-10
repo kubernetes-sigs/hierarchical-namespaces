@@ -119,10 +119,10 @@ func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 			return allow("")
 		}
 	}
-	isExcluded := config.ExcludedNamespaces[req.ns.Name]
+	isIncluded := config.IsNamespaceIncluded(req.ns.Name)
 
 	// An excluded namespaces should not have included-namespace label.
-	if isExcluded && hasLabel {
+	if !isIncluded && hasLabel {
 		msg := fmt.Sprintf("You cannot enforce webhook rules on this excluded namespace using the %q label. "+
 			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
 			"for detail.", api.LabelIncludedNamespace)
@@ -133,7 +133,7 @@ func (v *Namespace) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 	// right value.
 	// Note: since we have a mutating webhook to set the correct label if it's
 	// missing before this, we only need to check if the label value is correct.
-	if !isExcluded && labelValue != "true" {
+	if isIncluded && labelValue != "true" {
 		msg := fmt.Sprintf("You cannot change the value of the %q label. It has to be set as true on a non-excluded namespace. "+
 			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
 			"for detail.", api.LabelIncludedNamespace)

@@ -22,7 +22,7 @@ var _ = Describe("Anchor", func() {
 	BeforeEach(func() {
 		fooName = createNS(ctx, "foo")
 		barName = createNSName("bar")
-		config.ExcludedNamespaces = nil
+		config.SetNamespaces("")
 	})
 
 	It("should create an subnamespace and update the hierarchy according to the anchor", func() {
@@ -52,14 +52,14 @@ var _ = Describe("Anchor", func() {
 	})
 
 	It("should remove the anchor in an excluded namespace", func() {
-		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		config.SetNamespaces("", "kube-system")
 		kube_system_anchor_bar := newAnchor(barName, "kube-system")
 		updateAnchor(ctx, kube_system_anchor_bar)
 		Eventually(canGetAnchor(ctx, barName, "kube-system")).Should(Equal(false))
 	})
 
 	It("should set the anchor.status.state to Forbidden if the subnamespace is an excluded namespace", func() {
-		config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+		config.SetNamespaces("", "kube-system")
 		foo_anchor_kube_system := newAnchor("kube-system", fooName)
 		updateAnchor(ctx, foo_anchor_kube_system)
 		Eventually(getAnchorState(ctx, fooName, "kube-system")).Should(Equal(api.Forbidden))

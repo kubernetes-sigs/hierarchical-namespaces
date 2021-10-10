@@ -16,7 +16,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 	// namespace "c".
 	f := foresttest.Create("-Aa")
 	h := &Anchor{Forest: f}
-	config.ExcludedNamespaces = map[string]bool{"kube-system": true}
+	config.SetNamespaces("", "kube-system")
 
 	tests := []struct {
 		name string

@@ -88,8 +88,8 @@ func (r *HierarchyConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	ns := req.NamespacedName.Namespace
 	log := loggerWithRID(r.Log).WithValues("ns", ns)
 
-	// Early exit if it's an excluded namespace.
-	if config.ExcludedNamespaces[ns] {
+	// Early exit if it's an excluded namespace
+	if !config.IsNamespaceIncluded(ns) {
 		return ctrl.Result{}, r.handleExcludedNamespace(ctx, log, ns)
 	}
 
@@ -418,7 +418,7 @@ func (r *HierarchyConfigReconciler) syncParent(log logr.Logger, inst *api.Hierar
 
 	// Sync this namespace with its current parent.
 	curParent := r.Forest.Get(inst.Spec.Parent)
-	if config.ExcludedNamespaces[inst.Spec.Parent] {
+	if !config.IsNamespaceIncluded(inst.Spec.Parent) {
 		log.Info("Setting ConditionActivitiesHalted: excluded namespace set as parent", "parent", inst.Spec.Parent)
 		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonIllegalParent, fmt.Sprintf("Parent %q is an excluded namespace", inst.Spec.Parent))
 	} else if curParent != nil && !curParent.Exists() {
