@@ -19,6 +19,7 @@ import (
 	"flag"
 	"os"
 	"strings"
+	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
@@ -169,11 +170,20 @@ func main() {
 	// TODO: Better understand the behaviour of Burst, and consider making it equal to QPS if
 	// it turns out to be harmful.
 	cfg.Burst = int(cfg.QPS * 1.5)
+
+	// Update leader election leases config, to more sensible defaults
+	leaseDuration := 90 * time.Second // default is 15s
+	renewDeadline := 60 * time.Second // default is 10s
+	retryPeriod := 10 * time.Second   // default is 2s
+
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,
 		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   leaderElectionId,
+		LeaseDuration:      &leaseDuration,
+		RenewDeadline:      &renewDeadline,
+		RetryPeriod:        &retryPeriod,
 		Port:               webhookServerPort,
 	})
 	if err != nil {
@@ -199,6 +209,13 @@ func main() {
 }
 
 func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
+	// Wait if enabled to become leader before creating controllers
+	if enableLeaderElection {
+		setupLog.Info("Waiting to become the leader")
+		<-mgr.Elected()
+		setupLog.Info("Have become the leader")
+	}
+
 	// The controllers won't work until the webhooks are operating, and those won't work until the
 	// certs are all in place.
 	setupLog.Info("Waiting for certificate generation to complete")
