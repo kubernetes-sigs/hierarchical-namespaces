@@ -41,10 +41,8 @@ import (
 	v1a2 "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
-	"sigs.k8s.io/hierarchical-namespaces/internal/mutators"
-	"sigs.k8s.io/hierarchical-namespaces/internal/reconcilers"
+	"sigs.k8s.io/hierarchical-namespaces/internal/setup"
 	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
-	"sigs.k8s.io/hierarchical-namespaces/internal/validators"
 )
 
 var (
@@ -183,7 +181,7 @@ func main() {
 
 	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
 	setupLog.Info("Starting certificate generation")
-	certsCreated, err := validators.CreateCertsIfNeeded(mgr, novalidation, internalCert, restartOnSecretRefresh)
+	certsCreated, err := setup.CreateCertsIfNeeded(mgr, novalidation, internalCert, restartOnSecretRefresh)
 	if err != nil {
 		setupLog.Error(err, "unable to set up cert rotation")
 		os.Exit(1)
@@ -212,19 +210,15 @@ func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
 	// other components.
 	f := forest.NewForest()
 
-	// Create all validating admission controllers.
+	// Create all validating and mutating admission controllers.
 	if !novalidation {
 		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
-		validators.Create(mgr, f)
+		setup.CreateWebhooks(mgr, f)
 	}
-
-	// Create mutating admission controllers.
-	setupLog.Info("Registering mutating webhook")
-	mutators.Create(mgr)
 
 	// Create all reconciling controllers
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := reconcilers.Create(mgr, f, maxReconciles, false); err != nil {
+	if err := setup.CreateReconcilers(mgr, f, maxReconciles, false); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}

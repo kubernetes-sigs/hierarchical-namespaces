@@ -5,7 +5,6 @@ import (
 )
 
 func SetNamespaces(regex string, excluded ...string) {
-
 	if regex == "" {
 		regex = ".*"
 	}
@@ -16,15 +15,16 @@ func SetNamespaces(regex string, excluded ...string) {
 	for _, exn := range excluded {
 		excludedNamespaces[exn] = true
 	}
-
 }
 
 func IsNamespaceIncluded(name string) bool {
-
 	if excludedNamespaces[name] {
 		return false
 	}
 
-	return includedNamespacesRegex.MatchString(name)
+	if includedNamespacesRegex == nil { // unit tests
+		return true
+	}
 
+	return includedNamespacesRegex.MatchString(name)
 }

@@ -1,6 +1,9 @@
 package foresttest
 
 import (
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 )
@@ -59,4 +62,15 @@ func Create(desc string) *forest.Forest {
 	}
 
 	return f
+}
+
+func CreateSecret(nm, nsn string, f *forest.Forest) {
+	if nm == "" || nsn == "" {
+		return
+	}
+	inst := &unstructured.Unstructured{}
+	inst.SetName(nm)
+	inst.SetNamespace(nsn)
+	inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
+	f.Get(nsn).SetSourceObject(inst)
 }
