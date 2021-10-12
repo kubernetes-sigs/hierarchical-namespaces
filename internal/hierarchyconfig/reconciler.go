@@ -191,6 +191,11 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 	// Sync the Hierarchy singleton with the in-memory forest.
 	needUpdateObjects := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
 
+	// If not leader exit early, without performing any write operations
+	if !config.IsLeader {
+		return nil
+	}
+
 	// Write back if anything's changed. Early-exit if we just write back exactly what we had and this
 	// isn't the first time we're syncing.
 	updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst)
@@ -755,7 +760,7 @@ func (r *Reconciler) updateObjects(ctx context.Context, log logr.Logger, ns stri
 	trs := r.Forest.GetTypeSyncers()
 	r.Forest.Unlock()
 	for _, tr := range trs {
-		if err := tr.SyncNamespace(ctx, log, ns); err != nil {
+		if err := tr.SyncObjects(ctx, log, ns); err != nil {
 			return err
 		}
 	}
@@ -850,12 +855,53 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 	}
 	opts := controller.Options{
 		MaxConcurrentReconciles: maxReconciles,
+		Reconciler:              r,
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&api.HierarchyConfiguration{}).
-		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
-		Watches(&source.Kind{Type: &api.SubnamespaceAnchor{}}, handler.EnqueueRequestsFromMapFunc(anchorMapFn)).
-		WithOptions(opts).
-		Complete(r)
+	c, err := controller.NewUnmanaged("hierarchyconfig-controller", mgr, opts)
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: &api.HierarchyConfiguration{}},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Channel{Source: r.Affected},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: &corev1.Namespace{}},
+		handler.EnqueueRequestsFromMapFunc(nsMapFn))
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: &api.SubnamespaceAnchor{}},
+		handler.EnqueueRequestsFromMapFunc(anchorMapFn))
+	if err != nil {
+		return err
+	}
+	return config.AddNonLeaderCtrl(mgr, c)
+}
+
+// BecomeLeader requeues hierarchy configs (required when instance becomes leader)
+func (r *Reconciler) BecomeLeader() {
+	r.enqueueAllObjects(context.Background(), r.Log)
+}
+
+// enqueueAllObjects enqueues all the current objects in all namespaces.
+func (r *Reconciler) enqueueAllObjects(ctx context.Context, log logr.Logger) error {
+	keys := r.Forest.GetNamespaceNames()
+	for _, ns := range keys {
+		// Enqueue all the current objects in the namespace.
+		if err := r.updateObjects(ctx, log, ns); err != nil {
+			log.Error(err, "Error while trying to enqueue local objects", "namespace", ns)
+			return err
+		}
+	}
+	return nil
 }

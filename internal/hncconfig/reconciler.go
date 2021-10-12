@@ -22,9 +22,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
@@ -130,6 +132,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// Load all conditions
 	r.loadNamespaceConditions(inst)
+
+	// Exit early if not the leader
+	if !config.IsLeader {
+		return ctrl.Result{}, nil
+	}
 
 	// Write back to the apiserver.
 	if err := r.writeSingleton(ctx, inst); err != nil {
@@ -556,12 +563,30 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Register the reconciler
-	err := ctrl.NewControllerManagedBy(mgr).
-		For(&api.HNCConfiguration{}).
-		Watches(&source.Channel{Source: r.Trigger}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &apiextensions.CustomResourceDefinition{}},
-			handler.EnqueueRequestsFromMapFunc(crdMapFn)).
-		Complete(r)
+	opts := controller.Options{Reconciler: r}
+	c, err := controller.NewUnmanaged("hncconfig-controller", mgr, opts)
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: &api.HNCConfiguration{}},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Channel{Source: r.Trigger},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: &apiextensions.CustomResourceDefinition{}},
+		handler.EnqueueRequestsFromMapFunc(crdMapFn))
+	if err != nil {
+		return err
+	}
+	err = config.AddNonLeaderCtrl(mgr, c)
 	if err != nil {
 		return err
 	}
@@ -630,4 +655,19 @@ func gvkForGR(gr schema.GroupResource, allRes []*restmapper.APIGroupResources) (
 		}
 	}
 	return schema.GroupVersionKind{}, &GVKErr{api.ReasonResourceNotFound, fmt.Sprintf("Resource %q not found", gr)}
+}
+
+// BecomeLeader calls SyncObjects on all type reconcillers (required when instance becomes leader)
+func (r *Reconciler) BecomeLeader() {
+	r.Log.V(1).Info("Requeue all objects (hierarchy updated or new namespace found)")
+	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
+	// from modifying the list at the same time.
+	r.Forest.Lock()
+	trs := r.Forest.GetTypeSyncers()
+	r.Forest.Unlock()
+	for _, tr := range trs {
+		if err := tr.SyncObjects(context.Background(), r.Log, ""); err != nil {
+			r.Log.V(1).Error(err, "Failed to SyncObjects for HNCConfig")
+		}
+	}
 }

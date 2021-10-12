@@ -8,3 +8,6 @@ package config
 // This value is controlled by the --unpropagated-annotation command line, which may be set multiple
 // times.
 var UnpropagatedAnnotations []string
+
+// IsLeader is global which repesents whether this HNC instance is the leader
+var IsLeader bool

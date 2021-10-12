@@ -216,6 +216,12 @@ func createManager() ctrl.Manager {
 	// TODO: Better understand the behaviour of Burst, and consider making it equal to QPS if
 	// it turns out to be harmful.
 	cfg.Burst = int(cfg.QPS * 1.5)
+
+	// If leader election is disabled then treat this instance as the HNC leader
+	if !enableLeaderElection {
+		config.IsLeader = true
+	}
+
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:             scheme,
 		MetricsBindAddress: metricsAddr,

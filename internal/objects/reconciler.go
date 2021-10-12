@@ -109,11 +109,19 @@ type HNCConfigReconcilerType interface {
 //
 // +kubebuilder:rbac:groups=*,resources=*,verbs=*
 
-// SyncNamespace can be called manually by the HierarchyConfigReconciler when the hierarchy changes.
+// SyncObjects can be called manually by the HierarchyConfigReconciler when the hierarchy changes.
 // It enqueues all the current objects in the namespace and local copies of the original objects
 // in the ancestors.
-func (r *Reconciler) SyncNamespace(ctx context.Context, log logr.Logger, ns string) error {
+func (r *Reconciler) SyncObjects(ctx context.Context, log logr.Logger, ns string) error {
 	log = log.WithValues("gvk", r.GVK)
+
+	// If ns is empty, then enqueue all objects (used when HNC instances become leader)
+	if ns == "" {
+		if err := r.enqueueAllObjects(ctx, log); err != nil {
+			return err
+		}
+		return nil
+	}
 
 	// Enqueue all the current objects in the namespace because some of them may have been deleted.
 	if err := r.enqueueLocalObjects(ctx, log, ns); err != nil {
@@ -225,7 +233,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// Sync with the forest and perform any required actions.
 	actions, srcInst := r.syncWithForest(ctx, log, inst)
-	return resp, r.operate(ctx, log, actions, inst, srcInst)
+
+	// Only complete actions, if reconciler is HNC leader instance
+	if !config.IsLeader {
+		return resp, nil
+	}
+	err := r.operate(ctx, log, actions, inst, srcInst)
+	return resp, err
 }
 
 // syncWithForest syncs the object instance with the in-memory forest. It returns the action to take on
@@ -513,9 +527,9 @@ func (r *Reconciler) enqueueLocalObjects(ctx context.Context, log logr.Logger, n
 	return nil
 }
 
-// enqueuePropagatedObjects is only called from SyncNamespace. It's the only place a forest lock is
-// needed in SyncNamespace, so we made it into a function with forest lock instead of holding the
-// lock for the entire SyncNamespace.
+// enqueuePropagatedObjects is only called from SyncObjects. It's the only place a forest lock is
+// needed in SyncObjects, so we made it into a function with forest lock instead of holding the
+// lock for the entire SyncObjects.
 func (r *Reconciler) enqueuePropagatedObjects(ctx context.Context, log logr.Logger, ns string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
@@ -784,10 +798,25 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 		// behave under heavy load, so I raised it to 10s during the PR review. The _average_ delay seen
 		// by users should still be about 5s though.
 		RateLimiter: workqueue.NewItemExponentialFailureRateLimiter(250*time.Millisecond, 10*time.Second),
+		Reconciler:  r,
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		For(target).
-		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
-		WithOptions(opts).
-		Complete(r)
+
+	// Register the reconciler
+	c, err := controller.NewUnmanaged(strings.ToLower(r.GVK.Kind), mgr, opts)
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Kind{Type: target},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Channel{Source: r.Affected},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	return config.AddNonLeaderCtrl(mgr, c)
 }

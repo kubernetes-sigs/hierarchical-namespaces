@@ -7,6 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"sigs.k8s.io/hierarchical-namespaces/internal/anchor"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hierarchyconfig"
@@ -57,6 +58,17 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, us
 	}
 	if err := hcr.SetupWithManager(mgr, maxReconciles); err != nil {
 		return fmt.Errorf("cannot create Hierarchy reconciler: %s", err.Error())
+	}
+
+	// If LeaderElection is enabled then Watch for Elected() to enable controller writes
+	if !config.IsLeader {
+		go func() {
+			<-mgr.Elected()
+			config.IsLeader = true
+			ar.BecomeLeader()
+			hnccfgr.BecomeLeader()
+			hcr.BecomeLeader()
+		}()
 	}
 
 	return nil

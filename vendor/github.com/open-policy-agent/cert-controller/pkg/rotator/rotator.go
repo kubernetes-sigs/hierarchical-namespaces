@@ -163,6 +163,11 @@ type CertRotator struct {
 	caNotInjected          chan struct{}
 }
 
+// NeedLeaderElection is false as this runnable can run in standby mode without leader lock
+func (cr *CertRotator) NeedLeaderElection() bool {
+	return false
+}
+
 // Start starts the CertRotator runnable to rotate certs and ensure the certs are ready.
 func (cr *CertRotator) Start(ctx context.Context) error {
 	if cr.reader == nil {
@@ -564,10 +569,18 @@ func reconcileSecretAndWebhookMapFunc(webhook WebhookInfo, r *ReconcileWH) func(
 	}
 }
 
+type ReconcileWHController struct {
+	controller.Controller
+}
+
+func (rc *ReconcileWHController) NeedLeaderElection() bool {
+	return false
+}
+
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func addController(mgr manager.Manager, r *ReconcileWH) error {
 	// Create a new controller
-	c, err := controller.New("cert-rotator", mgr, controller.Options{Reconciler: r})
+	c, err := controller.NewUnmanaged("reconcile-webhook-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
@@ -592,7 +605,7 @@ func addController(mgr manager.Manager, r *ReconcileWH) error {
 		}
 	}
 
-	return nil
+	return mgr.Add(&ReconcileWHController{c})
 }
 
 var _ reconcile.Reconciler = &ReconcileWH{}

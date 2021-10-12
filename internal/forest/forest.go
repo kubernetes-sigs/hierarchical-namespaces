@@ -37,8 +37,9 @@ type namedNamespaces map[string]*Namespace
 // TypeSyncer syncs objects of a specific type. Reconcilers implement the interface so that they can be
 // called by the HierarchyReconciler if the hierarchy changes.
 type TypeSyncer interface {
-	// SyncNamespace syncs objects of a namespace for a specific type.
-	SyncNamespace(context.Context, logr.Logger, string) error
+	// SyncObjects syncs objects of a namespace for a specific type
+	// string is namespace, or "" for all namespaces
+	SyncObjects(context.Context, logr.Logger, string) error
 
 	// Provides the GVK that is handled by the reconciler who implements the interface.
 	GetGVK() schema.GroupVersionKind

@@ -23,9 +23,11 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -56,6 +58,11 @@ type Reconciler struct {
 // Reconcile sets up some basic variables and then calls the business logic. It currently
 // only handles the creation of the namespaces but no deletion or state reporting yet.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// If not leader exiting, without performing any write operations
+	if !config.IsLeader {
+		return ctrl.Result{}, nil
+	}
+
 	log := logutils.WithRID(r.Log).WithValues("trigger", req.NamespacedName)
 	log.V(1).Info("Reconciling anchor")
 
@@ -415,9 +422,72 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 			}},
 		}
 	}
-	return ctrl.NewControllerManagedBy(mgr).
-		For(&api.SubnamespaceAnchor{}).
-		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
-		Complete(r)
+	opts := controller.Options{Reconciler: r}
+	c, err := controller.NewUnmanaged("anchor-controller", mgr, opts)
+	if err != nil {
+		return err
+	}
+	c.Watch(&source.Kind{
+		Type: &api.SubnamespaceAnchor{}},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(
+		&source.Channel{Source: r.Affected},
+		&handler.EnqueueRequestForObject{})
+	if err != nil {
+		return err
+	}
+	err = c.Watch(&source.Kind{
+		Type: &corev1.Namespace{}},
+		handler.EnqueueRequestsFromMapFunc(nsMapFn))
+	if err != nil {
+		return err
+
+	}
+	return config.AddNonLeaderCtrl(mgr, c)
+}
+
+// BecomeLeader requeues anchors (required when instance becomes leader)
+func (r *Reconciler) BecomeLeader() {
+	r.enqueueAllObjects(context.Background(), r.Log)
+}
+
+// getAnchorNames returns a list of anchor names in the given namespace.
+func (r *Reconciler) getAnchorNames(ctx context.Context, nm string) ([]string, error) {
+	var anms []string
+	// List all the anchor in the namespace.
+	ul := &unstructured.UnstructuredList{}
+	ul.SetKind(api.AnchorKind)
+	ul.SetAPIVersion(api.AnchorAPIVersion)
+	if err := r.List(ctx, ul, client.InNamespace(nm)); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, err
+		}
+		return anms, nil
+	}
+	// Create a list of strings of the anchor names.
+	for _, inst := range ul.Items {
+		anms = append(anms, inst.GetName())
+	}
+	return anms, nil
+}
+
+// enqueueAllObjects enqueues all the current anchor objects in all namespaces.
+func (r *Reconciler) enqueueAllObjects(ctx context.Context, log logr.Logger) error {
+	keys := r.Forest.GetNamespaceNames()
+	for _, ns := range keys {
+		// Get a list of subnamespace anchors in ns
+		anchors, err := r.getAnchorNames(ctx, ns)
+		if err != nil {
+			log.Error(err, "Error while trying to get subnamespace anchors", "namespace", ns)
+			//return err
+		}
+		for _, anchor := range anchors {
+			// Enqueue all anchors in the namespace.
+			r.Enqueue(r.Log, ns, anchor, "became leader")
+		}
+	}
+	return nil
 }
