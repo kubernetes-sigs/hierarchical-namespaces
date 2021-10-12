@@ -509,42 +509,49 @@ kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/rel
 
 <a name="admin-excluded-namespaces"/>
 
-### Excluding namespaces from HNC
+### Including and excluding namespaces from HNC
 
-***The following instructions are only required for HNC v0.8.x and higher***
+***Excluded namespaces are only available in HNC v0.8 and higher. Included
+namespaces are only available in HNC v0.9 and higher.***
 
 HNC installs a validating webhook on _all_ objects in your cluster. If HNC
 itself is damaged or inaccessible, this could result in all changes to all
 objects in your cluster being rejected, making it difficult to repair your
-cluster or even re-install HNC.
+cluster or even re-install HNC, without first deleting the webhook (webhook
+configs are not themselves affected by webhooks).
 
-
-In order to prevent HNC from damaging your cluster, you can exclude certain
-namespaces from some of HNC's webhooks. Excluded namespace cannot be the
-parent or child of any other namespace; any attempts to change the hierarchy of
-an excluded namespace, or create a subnamespace within it, will be rejected by
+In order to prevent HNC from damaging your cluster, you can limit which
+namespaces are managed by HNC. Unmanaged namespaces cannot be the parent or
+child of any other namespace; any attempts to change the hierarchy of an
+unmanaged namespace, or create a subnamespace within it, will be rejected by
 HNC. However, the critical webhooks will not operate in the excluded namespace,
 protecting your cluster's stability.
 
-In order to exclude namespaces from HNC:
-1. Determine the namespaces you want to exclude. At a minimum, you should exclude
-   `kube-system`, `kube-public`, and `kube-node-lease` as described in the
-   [installation instructions](#admin-install). By default, the HNC manifests
-   exclude all these critical system namespaces listed above, but you can exclude
-   any namespace you like.
-1. **This is required in HNC v0.8 only, but not applicable in HNC v0.9 and later** - Add the
- `hnc.x-k8s.io/excluded-namespace` label with the value of `true` to all the
-  excluded namespaces. 
-1. Ensure that all the namespaces you want to exclude are listed in the
-   [argument list](#admin-cli-args) with the option `--excluded-namespace`.
-1. Apply the HNC manifest.
+HNC supports two methods of specifying which namespaces should be managed, both
+of which are accessed from the HNC [argument list](#admin-cli-args):
 
-**In HNC v0.8 only (not applicable in HNC v0.9 and later)** - If you attempt to
-apply the `hnc.x-k8s.io/excluded-namespace` label to any namespace that is
-not _also_ listed in the command line args, HNC will not allow the change, or
-will remove the label when it is started. This prevents users with edit access
-to a single namespace from removing themselves from HNC without permission of
-the HNC administrator.
+* **Included namespace regex (HNC v0.9+ only):** If set, this will limit HNC to
+  only cover the namespaces included in this regex. For example, setting this
+  parameter to `test-.*` will ensure that HNC only manages namespaces that begin
+  with the prefix `test-` (HNC adds an implied `^...$` to the regex). If
+  omitted, HNC will manage _all_ namespaces in the cluster unless they are
+  specifically excluded. The included namespace regex is set using the
+  `--included-namespace-regex`, which can only be used once.
+* **Excluded namespaces:** These namespaces are excluded even if they match the
+  included namespace regex. The default installation of HNC excludes
+  `kube-system`, `kube-public`, and `kube-node-lease`, as described in the
+   [installation instructions](#admin-install). But you can exclude
+   any namespace you like. Excluded namespaces are specified using the
+   `--excluded-namespace` option, which can be specified multiple times, one
+   namespace per option.
+
+**In HNC v0.8 only (not applicable in HNC v0.9 and later):** In addition to
+specifying excluded namespaces on the command line, you must _also_ add the
+`hnc.x-k8s.io/excluded-namespace=true` label to all excluded namespaces, _after_
+you have restarted HNC with the correct parameter. If you attempt to apply this
+label to any namespace that is not _also_ listed in the command line args, HNC
+will not allow the change, or will remove the label when it is started. This
+label has no effect in HNC v0.9 or later.
 
 
 <a name="admin-backup-restore"/>
@@ -834,8 +841,12 @@ with significant caution.
 
 Interesting parameters include:
 
+* `--included-namespace-regex=<pattern>` (HNC v0.9+ only): limits which
+  namespaces are [managed by HNC](#admin-excluded-namespaces). Defaults to `.*`,
+  and may only be specified once.
 * `--excluded-namespace=<namespace>`: allows you to
-  [exclude a namespace](#admin-excluded-namespaces) from HNC.
+  [exclude a namespace](#admin-excluded-namespaces) from HNC. May be specified
+  multiple times, one namespace per option.
 * `--unpropagated-annotation=<string>`: empty by default, this argument
   can be specified multiple times, with each parameter representing an
   annotation name, such as `example.com/foo`. When HNC propagates objects from
