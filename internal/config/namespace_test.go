@@ -8,16 +8,16 @@ import (
 func TestIsNamespaceIncluded(t *testing.T) {
 
 	tests := []struct {
-		name              string
-		regex             string
-		excludeNamespaces []string
-		expect            bool
+		name     string
+		regex    string
+		excluded []string
+		expect   bool
 	}{
-		{name: "foobar", regex: "foo.*", excludeNamespaces: []string{"bar"}, expect: true},
-		{name: "bar", regex: "foo-.*", excludeNamespaces: []string{"bar"}, expect: false},
-		{name: "bar", regex: ".*", excludeNamespaces: []string{"bar"}, expect: false},
-		{name: "foo", regex: ".*", excludeNamespaces: []string{"bar"}, expect: true},
-		{name: "foo", regex: ".*", excludeNamespaces: []string{"bar", "foo"}, expect: false},
+		{name: "foobar", regex: "foo.*", excluded: []string{"bar"}, expect: true},
+		{name: "bar", regex: "foo-.*", excluded: []string{"bar"}, expect: false},
+		{name: "bar", regex: ".*", excluded: []string{"bar"}, expect: false},
+		{name: "foo", regex: ".*", excluded: []string{"bar"}, expect: true},
+		{name: "foo", regex: ".*", excluded: []string{"bar", "foo"}, expect: false},
 	}
 
 	for _, tc := range tests {
@@ -25,11 +25,11 @@ func TestIsNamespaceIncluded(t *testing.T) {
 			g := NewWithT(t)
 
 			// Test
-			SetNamespaces(tc.regex, tc.excludeNamespaces...)
-			isIncluded := IsNamespaceIncluded(tc.name)
+			SetNamespaces(tc.regex, tc.excluded...)
+			got := IsManagedNamespace(tc.name)
 
 			// Report
-			g.Expect(isIncluded).Should(Equal(tc.expect))
+			g.Expect(got).Should(Equal(tc.expect))
 		})
 	}
 

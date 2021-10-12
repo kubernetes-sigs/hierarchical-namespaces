@@ -99,8 +99,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	log := loggerWithRID(r.Log).WithValues("ns", ns)
 
 	// Early exit if it's an excluded namespace
-	if !config.IsNamespaceIncluded(ns) {
-		return ctrl.Result{}, r.handleExcludedNamespace(ctx, log, ns)
+	if !config.IsManagedNamespace(ns) {
+		return ctrl.Result{}, r.handleUnmanaged(ctx, log, ns)
 	}
 
 	stats.StartHierConfigReconcile()
@@ -109,7 +109,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return ctrl.Result{}, r.reconcile(ctx, log, ns)
 }
 
-func (r *Reconciler) handleExcludedNamespace(ctx context.Context, log logr.Logger, nm string) error {
+func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm string) error {
 	// Get the namespace. Early exist if the namespace doesn't exist or is purged.
 	// If so, there must be no namespace label or HC instance to delete.
 	nsInst, err := r.getNamespace(ctx, nm)
@@ -127,12 +127,22 @@ func (r *Reconciler) handleExcludedNamespace(ctx context.Context, log logr.Logge
 		return err
 	}
 
-	// Always delete hierarchyconfiguration (and any other HNC CRs) in the
-	// excluded namespaces. Note: since singletons in the excluded namespaces are
-	// never synced by HNC, there are no finalizers on the singletons that we can
-	// delete them without removing the finalizers first.
-	if err := r.deleteSingletonIfExists(ctx, log, nm); err != nil {
+	// Don't delete the hierarchy config, since the admin might be enabling and disabling the regex and
+	// we don't want this to be destructive. Instead, just remove the finalizers if there are any so that
+	// users can delete it if they like.
+	inst, _, err := r.getSingleton(ctx, nm)
+	if err != nil {
 		return err
+	}
+	if len(inst.ObjectMeta.Finalizers) > 0 || len(inst.Status.Children) > 0 {
+		log.Info("Removing finalizers and children on unmanaged singleton")
+		inst.ObjectMeta.Finalizers = nil
+		inst.Status.Children = nil
+		stats.WriteHierConfig()
+		if err := r.Update(ctx, inst); err != nil {
+			log.Error(err, "while removing finalizers on unmanaged namespace")
+			return err
+		}
 	}
 
 	return nil
@@ -428,9 +438,9 @@ func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguratio
 
 	// Sync this namespace with its current parent.
 	curParent := r.Forest.Get(inst.Spec.Parent)
-	if !config.IsNamespaceIncluded(inst.Spec.Parent) {
-		log.Info("Setting ConditionActivitiesHalted: excluded namespace set as parent", "parent", inst.Spec.Parent)
-		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonIllegalParent, fmt.Sprintf("Parent %q is an excluded namespace", inst.Spec.Parent))
+	if !config.IsManagedNamespace(inst.Spec.Parent) {
+		log.Info("Setting ConditionActivitiesHalted: unmanaged namespace set as parent", "parent", inst.Spec.Parent)
+		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonIllegalParent, fmt.Sprintf("Parent %q is an unmanaged namespace", inst.Spec.Parent))
 	} else if curParent != nil && !curParent.Exists() {
 		log.Info("Setting ConditionActivitiesHalted: parent doesn't exist (or hasn't been synced yet)", "parent", inst.Spec.Parent)
 		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonParentMissing, fmt.Sprintf("Parent %q does not exist", inst.Spec.Parent))
@@ -642,37 +652,6 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, 
 	}
 
 	return true, nil
-}
-
-// deleteSingletonIfExists deletes the singleton in the namespace if it exists.
-// Note: Make sure there's no finalizers on the singleton before calling this
-// function.
-func (r *Reconciler) deleteSingletonIfExists(ctx context.Context, log logr.Logger, nm string) error {
-	inst, deletingCRD, err := r.getSingleton(ctx, nm)
-	if err != nil {
-		return err
-	}
-
-	// Early exit if the singleton doesn't exist.
-	if inst.CreationTimestamp.IsZero() {
-		return nil
-	}
-
-	// If the CRD is being deleted, we don't need to delete it separately. It will
-	// be deleted with the CRD.
-	if deletingCRD {
-		log.Info("HC in excluded namespace is already being deleted")
-		return nil
-	}
-	log.Info("Deleting illegal HC in excluded namespace")
-
-	stats.WriteHierConfig()
-	if err := r.Delete(ctx, inst); err != nil {
-		log.Error(err, "while deleting on apiserver")
-		return err
-	}
-
-	return nil
 }
 
 func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {

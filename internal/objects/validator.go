@@ -59,8 +59,8 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	// Note: This is added just in case the "hnc.x-k8s.io/excluded-namespace=true"
 	// label is not added on the excluded namespaces. VWHConfiguration of this VWH
 	// already has a `namespaceSelector` to exclude namespaces with the label.
-	if !config.IsNamespaceIncluded(req.Namespace) {
-		return webhooks.Allow("excluded namespace " + req.Namespace)
+	if !config.IsManagedNamespace(req.Namespace) {
+		return webhooks.Allow("unmanaged namespace " + req.Namespace)
 	}
 	// Allow changes to the types that are not in propagate mode. This is to dynamically enable/disable
 	// object webhooks based on the types configured in hncconfig. Since the current admission rules only

@@ -79,14 +79,14 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 
 	switch req.op {
 	case k8sadm.Create:
-		// Can't create subnamespaces in excluded namespaces
-		if !config.IsNamespaceIncluded(pnm) {
-			msg := fmt.Sprintf("Cannot create a subnamespace in the excluded namespace %q", pnm)
+		// Can't create subnamespaces in unmanaged namespaces
+		if why := config.WhyUnmanaged(pnm); why != "" {
+			msg := fmt.Sprintf("Cannot create a subnamespace in the unmanaged namespace %q (%s)", pnm, why)
 			return webhooks.Deny(metav1.StatusReasonForbidden, msg)
 		}
-		// Can't create subnamespaces using excluded namespace names
-		if !config.IsNamespaceIncluded(cnm) {
-			msg := fmt.Sprintf("Cannot create a subnamespace using the excluded namespace name %q", cnm)
+		// Can't create subnamespaces using unmanaged namespace names
+		if why := config.WhyUnmanaged(cnm); why != "" {
+			msg := fmt.Sprintf("Cannot create a subnamespace using the unmanaged namespace name %q (%s)", cnm, why)
 			return webhooks.Deny(metav1.StatusReasonForbidden, msg)
 		}
 

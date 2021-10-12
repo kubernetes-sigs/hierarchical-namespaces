@@ -39,9 +39,9 @@ func TestStructure(t *testing.T) {
 		// should see denial message of excluded namespace for `kube-system`. As for
 		// `kube-public`, we will see missing parent/child instead of excluded
 		// namespaces denial message for it.
-		{name: "exclude parent kube-system", nnm: "a", pnm: "kube-system", fail: true, msgContains: "Cannot set the parent to the excluded namespace"},
+		{name: "exclude parent kube-system", nnm: "a", pnm: "kube-system", fail: true, msgContains: "excluded"},
 		{name: "missing parent kube-public", nnm: "a", pnm: "kube-public", fail: true, msgContains: "does not exist"},
-		{name: "exclude child kube-system", nnm: "kube-system", pnm: "a", fail: true, msgContains: "Cannot set the excluded namespace"},
+		{name: "exclude child kube-system", nnm: "kube-system", pnm: "a", fail: true, msgContains: "excluded"},
 		{name: "missing child kube-public", nnm: "kube-public", pnm: "a", fail: true, msgContains: "HNC has not reconciled namespace"},
 	}
 	for _, tc := range tests {
