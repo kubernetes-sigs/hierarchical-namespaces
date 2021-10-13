@@ -41,17 +41,6 @@ var _ = Describe("Hierarchy", func() {
 		Eventually(HasChild(ctx, barName, fooName)).Should(Equal(true))
 	})
 
-	It("should remove the hierarchyconfiguration singleton in an excluded namespacee", func() {
-		// Set the excluded-namespace "kube-system"'s parent to "bar".
-		config.SetNamespaces("", "kube-system")
-		exHier := NewHierarchy("kube-system")
-		exHier.Spec.Parent = barName
-		UpdateHierarchy(ctx, exHier)
-
-		// Verify the hierarchyconfiguration singleton is deleted.
-		Eventually(CanGetHierarchy(ctx, "kube-system")).Should(Equal(false))
-	})
-
 	It("should set IllegalParent condition if the parent is an excluded namespace", func() {
 		// Set bar's parent to the excluded-namespace "kube-system".
 		config.SetNamespaces("", "kube-system")

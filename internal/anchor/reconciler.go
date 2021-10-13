@@ -75,23 +75,29 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, err
 	}
 
-	// Always delete anchor (and any other HNC CRs) in the excluded namespaces and
-	// early exit.
-	if !config.IsNamespaceIncluded(pnm) {
-		// Since the anchors in the excluded namespaces are never synced by HNC,
-		// there are no finalizers on the anchors that we can delete them without
-		// removing the finalizers first.
-		log.Info("Deleting anchor in an excluded namespace")
-		return ctrl.Result{}, r.deleteInstance(ctx, log, inst)
+	// Anchors in unmanaged namespace should be ignored. Make sure it
+	// doesn't have any finalizers, otherwise, leave it alone.
+	if why := config.WhyUnmanaged(pnm); why != "" {
+		if len(inst.ObjectMeta.Finalizers) > 0 {
+			log.Info("Removing finalizers from anchor in unmanaged namespace", "reason", why)
+			inst.ObjectMeta.Finalizers = nil
+			return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// Report "Forbidden" state and early exit if the anchor name is an excluded
 	// namespace that should not be created as a subnamespace, but the webhook has
 	// been bypassed and the anchor has been successfully created. Forbidden
 	// anchors won't have finalizers.
-	if !config.IsNamespaceIncluded(nm) {
-		inst.Status.State = api.Forbidden
-		return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+	if why := config.WhyUnmanaged(nm); why != "" {
+		if inst.Status.State != api.Forbidden || len(inst.ObjectMeta.Finalizers) > 0 {
+			log.Info("Setting forbidden state on anchor with unmanaged name", "reason", why)
+			inst.Status.State = api.Forbidden
+			inst.ObjectMeta.Finalizers = nil
+			return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// Get the subnamespace. If it doesn't exist, initialize one.

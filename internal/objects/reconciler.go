@@ -200,7 +200,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	resp := ctrl.Result{}
 	log := logutils.WithRID(r.Log).WithValues("trigger", req.NamespacedName)
 
-	if !config.IsNamespaceIncluded(req.Namespace) {
+	if !config.IsManagedNamespace(req.Namespace) {
 		return resp, nil
 	}
 

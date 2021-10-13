@@ -52,7 +52,7 @@ func (m *Mutator) Handle(ctx context.Context, req admission.Request) admission.R
 // Currently, we only add `included-namespace` label to non-excluded namespaces
 // if the label is missing.
 func (m *Mutator) handle(log logr.Logger, ns *corev1.Namespace) {
-	if !config.IsNamespaceIncluded(ns.Name) {
+	if !config.IsManagedNamespace(ns.Name) {
 		return
 	}
 
@@ -61,7 +61,7 @@ func (m *Mutator) handle(log logr.Logger, ns *corev1.Namespace) {
 		if ns.Labels == nil {
 			ns.Labels = map[string]string{}
 		}
-		log.Info("Not an excluded namespace; set included-namespace label.")
+		log.Info("Managed namespace is missing included-namespace label; adding")
 		ns.Labels[api.LabelIncludedNamespace] = "true"
 	}
 }

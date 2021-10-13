@@ -120,12 +120,12 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 		return allow("HNC SA")
 	}
 
-	if !config.IsNamespaceIncluded(req.hc.Namespace) {
-		reason := fmt.Sprintf("Cannot set the excluded namespace %q as a child of another namespace", req.hc.Namespace)
+	if why := config.WhyUnmanaged(req.hc.Namespace); why != "" {
+		reason := fmt.Sprintf("Namespace %q is not managed by HNC (%s) and cannot be set as a child of another namespace", req.hc.Namespace, why)
 		return deny(metav1.StatusReasonForbidden, reason)
 	}
-	if !config.IsNamespaceIncluded(req.hc.Spec.Parent) {
-		reason := fmt.Sprintf("Cannot set the parent to the excluded namespace %q", req.hc.Spec.Parent)
+	if why := config.WhyUnmanaged(req.hc.Spec.Parent); why != "" {
+		reason := fmt.Sprintf("Namespace %q is not managed by HNC (%s) and cannot be set as the parent of another namespace", req.hc.Spec.Parent, why)
 		return deny(metav1.StatusReasonForbidden, reason)
 	}
 
@@ -333,8 +333,14 @@ func (v *Validator) getServerChecks(log logr.Logger, ns, curParent, newParent *f
 	}
 
 	// If this is currently a root and we're moving into a new tree, just check the parent.
-	if curParent == nil {
-		return []serverCheck{{nnm: newParent.Name(), reason: "proposed parent", checkType: checkAuthz}}
+	//
+	// Exception: if the current parent is unmanaged (e.g. it used to be managed before, but isn't anymore),
+	// treat it as though it's currently a root and allow the change.
+	if curParent == nil || !config.IsManagedNamespace(curParent.Name()) {
+		if newParent != nil { // could be nil if old parane is unmanaged
+			return []serverCheck{{nnm: newParent.Name(), reason: "proposed parent", checkType: checkAuthz}}
+		}
+		return nil
 	}
 
 	// If the current parent is missing, ask for a missing check. Note that only the *direct* parent
