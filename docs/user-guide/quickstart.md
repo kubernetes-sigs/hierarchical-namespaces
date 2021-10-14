@@ -209,7 +209,7 @@ simply use the config subcommand:
 kubectl hns config set-resource secrets --mode Propagate
 ```
 
-  Note: As of HNC v0.6+, the supported modes are `Propagate`, `Remove` and
+  Note: As of HNC v0.9+, the supported modes are `Propagate`, `Remove` and
   `Ignore`. More may be added in the future; you can run `kubectl hns config
   set-resource` for the latest documentation.
 
