@@ -5,17 +5,15 @@ release, and each release is tagged in Git. Usually, a release will be preceeded
 by one or more release candidates. Therefore, at a high level, the flow to
 release a new _minor_ version of HNC is:
 
-1. Create a release branch named `hnc-vMAJOR.MINOR`, such as `hnc-v0.5`. Note
-   that while regular semantic versioning is just `vMAJOR.MINOR`, we need to use
-   the `hnc-` prefix because this repo contains projects other than HNC.
+1. Create a release branch named `vMAJOR.MINOR`, such as `v0.9`.
 2. Use the Github UI to tag the first commit on that branch as
-   `hnc-vMAJOR.MINOR.0-rc1`, such as `hnc-v0.5.0-rc1`. Release and test
+   `vMAJOR.MINOR.0-rc1`, such as `v0.9.0-rc1`. Release and test
    according to the instructions below.
 3. If more release candidates are needed, number them sequentially. When you're
    happy with it, create a new release without the `-rcX` suffix, like
-   `hnc-v0.5.0`.
+   `v0.9.0`.
 
-To release a _patch_ version of HNC (e.g. `hnc-v0.5.1`), follow the same steps
+To release a _patch_ version of HNC (e.g. `v0.5.1`), follow the same steps
 but without creating a branch. Note that patches can have release candidates
 just like minor releases.
 
@@ -78,13 +76,9 @@ export HNC_PAT=<your personal access token>
 export HNC_IMG_TAG=<the semantic version, eg v0.1.0-rc1>
 ```
 
-Note that `HNC_IMG_TAG` does _not_ include the `hnc-` prefix. That is because
-the image tag will only apply to HNC images, while the _Git_ tag (and branch)
-names apply to this repo, which includes non-HNC projects.
-
 ### Create a release in Github
 
-1. Ensure that the Github tag name is `hnc-$HNC_IMG_TAG`, like `hnc-v0.1.0-rc1`.
+1. Ensure that the Github tag name is `$HNC_IMG_TAG`, like `v0.1.0-rc1`.
 2. Start by copying the text from earlier releases - e.g., include installation
    instructions, key new features, a detailed change log, known issues, and a
    test signoff grid. Modify it as appropriate for your new release. The test
