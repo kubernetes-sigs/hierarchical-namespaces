@@ -34,7 +34,7 @@ spec:
     The user guide contains much more information.
   homepage: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/tree/master/docs/user-guide
   platforms:
-  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/hnc-HNC_IMG_TAG/kubectl-hns.tar.gz
+  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/HNC_IMG_TAG/kubectl-hns.tar.gz
     selector:
       matchLabels:
         os: linux
@@ -46,7 +46,7 @@ spec:
       - from: "bin/kubectl/LICENSE"
         to: "."
     bin: "./kubectl-hns_linux_amd64"
-  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/hnc-HNC_IMG_TAG/kubectl-hns.tar.gz
+  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/HNC_IMG_TAG/kubectl-hns.tar.gz
     selector:
       matchLabels:
         os: darwin
@@ -58,7 +58,7 @@ spec:
       - from: "bin/kubectl/LICENSE"
         to: "."
     bin: "./kubectl-hns_darwin_amd64"
-  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/hnc-HNC_IMG_TAG/kubectl-hns.tar.gz
+  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/HNC_IMG_TAG/kubectl-hns.tar.gz
     selector:
       matchLabels:
         os: windows
