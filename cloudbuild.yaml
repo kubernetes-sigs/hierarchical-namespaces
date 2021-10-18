@@ -11,7 +11,7 @@ steps:
     git clone https://github.com/$_HNC_REPO_OWNER/hierarchical-namespaces
     cd hierarchical-namespaces
     echo Checking out $_HNC_IMG_TAG
-    git checkout _HNC_IMG_TAG
+    git checkout $_HNC_IMG_TAG
 # Build the manifests and the kubectl plugin
 - name: golang:1.17
   entrypoint: 'bash'
