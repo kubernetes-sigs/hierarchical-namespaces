@@ -417,8 +417,6 @@ release notes for that version.
 
 #### Prerequisites
 
-***These prerequisites apply to HNC v0.8 and later.***
-
 Ensure `kube-system`, `kube-public` and `kube-node-lease` namespaces are listed
 in the [argument list](#admin-cli-args) with the option `--excluded-namespace`.
 
@@ -511,8 +509,7 @@ kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/rel
 
 ### Including and excluding namespaces from HNC
 
-***Excluded namespaces are only available in HNC v0.8 and higher. Included
-namespaces are only available in HNC v0.9 and higher.***
+***Included namespaces are only available in HNC v0.9 and higher.***
 
 HNC installs a validating webhook on _all_ objects in your cluster. If HNC
 itself is damaged or inaccessible, this could result in all changes to all
