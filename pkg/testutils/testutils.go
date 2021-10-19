@@ -235,6 +235,8 @@ func RunCommand(cmdln ...string) (string, error) {
 	prefix := fmt.Sprintf("[%d] Running: ", time.Now().Unix())
 	GinkgoT().Log(prefix, args)
 	cmd := exec.Command(args[0], args[1:]...)
+	// Work around https://github.com/kubernetes/kubectl/issues/1098#issuecomment-929743957:
+	cmd.Env = append(os.Environ(), "KUBECTL_COMMAND_HEADERS=false")
 	stdout, err := cmd.CombinedOutput()
 	return string(stdout), err
 }
