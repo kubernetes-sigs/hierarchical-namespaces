@@ -16,10 +16,7 @@ across all namespaces in your team (e.g. a set of related microservices).
 Learn more in the [HNC User Guide](docs/user-guide) or get started with the
 instructions below!
 
-Credits:
-* Lead developer: @adrianludwin (aludwin@google.com)
-* Current contributors: @yiqigao217, @rjbez17, @GinnyJI
-* Other contributors include @sophieliu15, @lafh, @shivi28, @danielSbastos and @entro-pi - thanks all!
+Lead developer: @adrianludwin (aludwin@google.com)
 
 ## Using HNC
 
@@ -28,12 +25,10 @@ Credits:
 ### Getting started and learning more
 
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
-workstation, follow the instructions on our release pages.
-* [Latest version (v0.8.0)](https://github.com/kubernetes-sigs/multi-tenancy/releases/tag/hnc-v0.8.0)
-  * Note that this release is in a different repo since we are currently
-    migrating to this new repo. HNC v0.9.0 will be released from this repo.
-* Versions of HNC prior to HNC v0.9 are available from our [old
-  repo](https://github.com/kubernetes-sigs/multi-tenancy/releases/)
+workstation, follow the instructions on our [release
+pages](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/).
+Note that versions of HNC prior to HNC v0.9 are available from our [old
+repo](https://github.com/kubernetes-sigs/multi-tenancy/releases/).
 
 HNC is also supported by the following vendors:
 
@@ -59,9 +54,10 @@ objects you can't afford to lose (e.g. that aren't stored in a Git repository).
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
-* v1.0 - Likely late Q2 or early Q3 2021: HNC recommended for production use.
-* [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/1): move
-  HNC to its own repo; continued stability improvements.
+* [v1.0](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/2):
+  HNC recommended for production use (ETA late 2021)
+* [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/1):
+  move HNC to its own repo; continued stability improvements.
 * [v0.1-v0.8](https://github.com/kubernetes-sigs/multi-tenancy/milestones):
   see our old repo for details.
 
