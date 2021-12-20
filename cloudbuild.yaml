@@ -51,7 +51,7 @@ steps:
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
   - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_linux_amd64'
-# Upload plugin (Darwin)
+# Upload plugin (Darwin intel)
 - name: gcr.io/cloud-builders/curl
   args:
   - '-X'
@@ -63,6 +63,18 @@ steps:
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
   - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_darwin_amd64'
+# Upload plugin (Darwin arm64)
+- name: gcr.io/cloud-builders/curl
+  args:
+  - '-X'
+  - 'POST'
+  - '-H'
+  - 'Content-Type: application/x-application'
+  - '--data-binary'
+  - '@hierarchical-namespaces/bin/kubectl/kubectl-hns_darwin_arm64'
+  - '-u'
+  - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=kubectl-hns_darwin_arm64'
 # Upload plugin (Windows)
 - name: gcr.io/cloud-builders/curl
   args:
