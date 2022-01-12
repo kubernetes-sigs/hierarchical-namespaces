@@ -124,10 +124,10 @@ func TestCreateNamespace(t *testing.T) {
 	f := foresttest.Create("-")
 	vns := &Validator{Forest: f}
 	a := f.Get("a")
-	a.ExternalTreeLabels = map[string]int{
-		nm:       1,
-		a.Name(): 0,
-	}
+	a.SetLabels(map[string]string{
+		nm + api.LabelTreeDepthSuffix:       "1",
+		a.Name() + api.LabelTreeDepthSuffix: "0",
+	})
 
 	// Requested namespace uses "exhier" as name.
 	ns := &corev1.Namespace{}

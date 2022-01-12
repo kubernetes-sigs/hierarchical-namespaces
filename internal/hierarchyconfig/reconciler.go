@@ -331,15 +331,14 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 // syncExternalNamespace sets external tree labels to the namespace in the forest
 // if the namespace is an external namespace not managed by HNC.
 func (r *Reconciler) syncExternalNamespace(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) {
-	ns.Manager = nsInst.Annotations[api.AnnotationManagedBy]
-	if ns.Manager == "" || ns.Manager == api.MetaGroup {
+	mgr := nsInst.Annotations[api.AnnotationManagedBy]
+	if mgr == "" || mgr == api.MetaGroup {
 		// If the internal namespace is just converted from an external namespace,
 		// enqueue the descendants to remove the propagated external tree labels.
 		if ns.IsExternal() {
 			r.enqueueAffected(log, "subtree root converts from external to internal", ns.DescendantNames()...)
 		}
 		ns.Manager = api.MetaGroup
-		ns.ExternalTreeLabels = nil
 		return
 	}
 
@@ -348,18 +347,7 @@ func (r *Reconciler) syncExternalNamespace(log logr.Logger, nsInst *corev1.Names
 	if !ns.IsExternal() {
 		r.enqueueAffected(log, "subtree root converts from internal to external", ns.DescendantNames()...)
 	}
-
-	// Get tree labels and set them in the forest. If there's no tree labels on the
-	// namespace, set only one tree label of itself.
-	etls := make(map[string]int)
-	for tl, d := range nsInst.Labels {
-		enm := strings.TrimSuffix(tl, api.LabelTreeDepthSuffix)
-		if enm != tl {
-			etls[enm], _ = strconv.Atoi(d)
-		}
-	}
-	etls[ns.Name()] = 0
-	ns.ExternalTreeLabels = etls
+	ns.Manager = mgr
 }
 
 // syncSubnamespaceParent sets the parent to the owner and updates the SubnamespaceAnchorMissing
@@ -504,6 +492,9 @@ func (r *Reconciler) syncAnchors(log logr.Logger, ns *forest.Namespace, anms []s
 func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
 	if ns.IsExternal() {
 		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
+
+		// Set the labels so we can retrieve the external tree labels in the future if needed
+		ns.SetLabels(nsInst.Labels)
 		return false
 	}
 
@@ -530,9 +521,8 @@ func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, n
 		// Note it's impossible to have an external namespace as a non-root, which is
 		// enforced by both admission controllers and the reconciler here.
 		if curNS.IsExternal() {
-			for k, v := range curNS.ExternalTreeLabels {
-				l = k + api.LabelTreeDepthSuffix
-				metadata.SetLabel(nsInst, l, strconv.Itoa(depth+v))
+			for k, v := range curNS.GetTreeLabels() {
+				metadata.SetLabel(nsInst, k, strconv.Itoa(depth+v))
 			}
 			break
 		}
@@ -543,7 +533,7 @@ func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, n
 	// Update the labels in the forest so that we can quickly access the labels and
 	// compare if they match the given selector
 	if ns.SetLabels(nsInst.Labels) {
-		log.Info("Namespace tree labels have been updated.")
+		log.Info("Namespace managed and tree labels have been updated")
 		return true
 	}
 	return false
