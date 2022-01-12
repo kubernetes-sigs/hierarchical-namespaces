@@ -256,8 +256,8 @@ func (r *Reconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *
 	// what we'd _like_ to do. We still needed to sync the forest since we want to know when objects
 	// are added and removed, so we can sync them properly if the critical condition is resolved, but
 	// don't do anything else for now.
-	if ca := r.Forest.Get(inst.GetNamespace()).GetCritAncestor(); ca != "" {
-		log.Info("Namespace has 'ActivitiesHalted' condition; will not touch propagated object", "affectedNamespace", ca, "suppressedAction", action)
+	if halted := r.Forest.Get(inst.GetNamespace()).GetHaltedRoot(); halted != "" {
+		log.Info("Namespace has 'ActivitiesHalted' condition; will not touch propagated object", "haltedRoot", halted, "suppressedAction", action)
 		return actionNop, nil
 	}
 
@@ -478,10 +478,10 @@ func cleanSource(src *unstructured.Unstructured) *unstructured.Unstructured {
 
 func (r *Reconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured, reason string) {
 	sns := r.Forest.Get(src.GetNamespace())
-	if ca := sns.GetCritAncestor(); ca != "" {
-		// There's no point enqueuing anything if the source namespace has a crit condition since we'll
-		// just skip any action anyway.
-		log.V(1).Info("Will not enqueue descendants due to crit ancestor", "critAncestor", ca, "oldReason", reason)
+	if halted := sns.GetHaltedRoot(); halted != "" {
+		// There's no point enqueuing anything if the source namespace is halted since we'll just skip
+		// any action anyway.
+		log.V(1).Info("Will not enqueue descendants since activities are halted", "haltedRoot", halted, "oldReason", reason)
 		return
 	}
 	log.V(1).Info("Enqueuing descendant objects", "reason", reason)

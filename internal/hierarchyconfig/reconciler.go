@@ -290,11 +290,15 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
 
-	// Clear locally-set conditions in the forest; we'll re-add them if they're still relevant. But
-	// first, record whether there were any critical ones since if this changes, we'll need to notify
+	// Clear all conditions; we'll re-add them if they're still relevant. But first, record whether
+	// this namespace (excluding ancestors) was halted, since if that changes, we'll need to notify
 	// other namespaces.
-	hadCrit := ns.HasLocalCritCondition()
+	wasHalted := ns.IsHalted()
 	ns.ClearConditions()
+	// We can figure out this condition pretty easily...
+	if deletingCRD {
+		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonDeletingCRD, "The HierarchyConfiguration CRD is being deleted; all propagation is disabled.")
+	}
 
 	// Set external tree labels in the forest if this is an external namespace.
 	r.syncExternalNamespace(log, nsInst, ns)
@@ -306,6 +310,9 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	r.syncParent(log, inst, ns)
 	initial := r.markExisting(log, ns)
 
+	// Sync labels and annotations, now that the structure's been updated.
+	nsCustomerLabelUpdated := r.syncTreeLabels(log, nsInst, ns)
+
 	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
 	if ns.UpdateAllowCascadingDeletion(inst.Spec.AllowCascadingDeletion) {
@@ -315,11 +322,9 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 
 	// Sync the status
 	inst.Status.Children = ns.ChildNames()
-	r.syncConditions(log, inst, ns, deletingCRD, hadCrit)
+	r.syncConditions(log, inst, ns, wasHalted)
 
-	// Sync the tree labels. This should go last since it can depend on the conditions.
-	nsCustomerLabelUpdated := r.syncTreeLabels(log, nsInst, ns)
-
+	r.HNCConfigReconciler.Enqueue("namespace reconciled")
 	return initial || nsCustomerLabelUpdated
 }
 
@@ -431,6 +436,9 @@ func (r *Reconciler) markExisting(log logr.Logger, ns *forest.Namespace) bool {
 }
 
 func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
+	// As soon as the structure has been updated, do a cycle check.
+	defer r.setCycleCondition(log, ns)
+
 	if ns.IsExternal() {
 		ns.SetParent(nil)
 		return
@@ -459,16 +467,27 @@ func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguratio
 	// Change the parent.
 	ns.SetParent(curParent)
 
-	// Finally, enqueue all other namespaces that could be directly affected. The old and new parents
-	// have just gained/lost a child, while the descendants need to have their tree labels updated and
-	// their objects resynced. Note that it's fine if oldParent or curParent is nil - see
-	// enqueueAffected for details.
+	// Enqueue all other namespaces that could be directly affected. The old and new parents have just
+	// gained/lost a child, while the descendants need to have their tree labels updated and their
+	// objects resynced. Note that it's fine if oldParent or curParent is nil - see enqueueAffected
+	// for details.
 	//
 	// If we've just created a cycle, all the members of that cycle will be listed as the descendants,
 	// so enqueuing them will ensure that the conditions show up in all members of the cycle.
 	r.enqueueAffected(log, "removed as parent", oldParent.Name())
 	r.enqueueAffected(log, "set as parent", curParent.Name())
 	r.enqueueAffected(log, "subtree root has changed", ns.DescendantNames()...)
+}
+
+func (r *Reconciler) setCycleCondition(log logr.Logger, ns *forest.Namespace) {
+	cycle := ns.CycleNames()
+	if cycle == nil {
+		return
+	}
+
+	msg := fmt.Sprintf("Namespace is a member of the cycle: %s", strings.Join(cycle, " <- "))
+	log.Info(msg)
+	ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonInCycle, msg)
 }
 
 // syncAnchors updates the anchor list. If any anchor is created/deleted, it will enqueue
@@ -498,27 +517,27 @@ func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, n
 	// Look for all ancestors. Stop as soon as we find a namespaces that has a critical condition in
 	// the forest (note that AncestorHaltActivities is never included in the forest). This should handle orphans
 	// and cycles.
-	anc := ns
+	curNS := ns
 	depth := 0
-	for anc != nil {
-		l := anc.Name() + api.LabelTreeDepthSuffix
+	for curNS != nil {
+		l := curNS.Name() + api.LabelTreeDepthSuffix
 		metadata.SetLabel(nsInst, l, strconv.Itoa(depth))
-		if anc.HasLocalCritCondition() {
+		if curNS.IsHalted() {
 			break
 		}
 
 		// If the root is an external namespace, add all its external tree labels too.
 		// Note it's impossible to have an external namespace as a non-root, which is
 		// enforced by both admission controllers and the reconciler here.
-		if anc.IsExternal() {
-			for k, v := range anc.ExternalTreeLabels {
+		if curNS.IsExternal() {
+			for k, v := range curNS.ExternalTreeLabels {
 				l = k + api.LabelTreeDepthSuffix
 				metadata.SetLabel(nsInst, l, strconv.Itoa(depth+v))
 			}
 			break
 		}
 
-		anc = anc.Parent()
+		curNS = curNS.Parent()
 		depth++
 	}
 	// Update the labels in the forest so that we can quickly access the labels and
@@ -530,61 +549,22 @@ func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, n
 	return false
 }
 
-func (r *Reconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, deletingCRD, hadCrit bool) {
-	// Sync critical conditions after all locally-set conditions are updated.
-	r.syncCritConditions(log, ns, deletingCRD, hadCrit)
+func (r *Reconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, wasHalted bool) {
+	// If the halted status has changed, notify
+	if ns.IsHalted() != wasHalted {
+		msg := ""
+		if wasHalted {
+			log.Info("ActivitiesHalted condition removed")
+			msg = "removed"
+		} else {
+			log.Info("Setting ActivitiesHalted on namespace", "conditions", ns.Conditions())
+			msg = "added"
+		}
+		r.enqueueAffected(log, "descendant of a namespace with ActivitiesHalted "+msg, ns.DescendantNames()...)
+	}
 
 	// Convert and pass in-memory conditions to HierarchyConfiguration object.
 	inst.Status.Conditions = ns.Conditions()
-	setCritAncestorCondition(log, inst, ns)
-	r.HNCConfigReconciler.Enqueue("namespace reconciled")
-}
-
-// syncCritConditions enqueues the children of a namespace if the existing critical conditions in the
-// namespace are gone or critical conditions are newly found.
-func (r *Reconciler) syncCritConditions(log logr.Logger, ns *forest.Namespace, deletingCRD, hadCrit bool) {
-	// If we're in a cycle, determine that now
-	if cycle := ns.CycleNames(); cycle != nil {
-		msg := fmt.Sprintf("Namespace is a member of the cycle: %s", strings.Join(cycle, " <- "))
-		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonInCycle, msg)
-	}
-
-	if deletingCRD {
-		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonDeletingCRD, "The HierarchyConfiguration CRD is being deleted; all syncing is disabled.")
-	}
-
-	// Early exit if nothing's changed and there's no need to enqueue relatives.
-	if hadCrit == ns.HasLocalCritCondition() {
-		return
-	}
-
-	msg := ""
-	if hadCrit {
-		log.Info("ActivitiesHalted condition removed")
-		msg = "removed"
-	} else {
-		log.Info("Setting ActivitiesHalted on namespace", "conditions", ns.Conditions())
-		msg = "added"
-	}
-	r.enqueueAffected(log, "descendant of a namespace with ActivitiesHalted "+msg, ns.DescendantNames()...)
-}
-
-func setCritAncestorCondition(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
-	if ns.HasLocalCritCondition() {
-		return
-	}
-	ans := ns.Parent()
-	for ans != nil {
-		if !ans.HasLocalCritCondition() {
-			ans = ans.Parent()
-			continue
-		}
-		log.Info("Ancestor has a ActivitiesHalted condition", "ancestor", ans.Name())
-		msg := fmt.Sprintf("Propagation paused in the subtree of %q due to ActivitiesHalted condition", ans.Name())
-		condition := api.NewCondition(api.ConditionActivitiesHalted, api.ReasonAncestor, msg)
-		inst.Status.Conditions = append(inst.Status.Conditions, condition)
-		return
-	}
 }
 
 // enqueueAffected enqueues all affected namespaces for later reconciliation. This occurs in a
