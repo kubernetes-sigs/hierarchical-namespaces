@@ -55,12 +55,14 @@ const (
 	ConditionBadConfiguration string = "BadConfiguration"
 
 	// Condition reasons.
-	ReasonAncestor      string = "AncestorHaltActivities"
-	ReasonDeletingCRD   string = "DeletingCRD"
-	ReasonInCycle       string = "InCycle"
-	ReasonParentMissing string = "ParentMissing"
-	ReasonIllegalParent string = "IllegalParent"
-	ReasonAnchorMissing string = "SubnamespaceAnchorMissing"
+	ReasonAncestor                 string = "AncestorHaltActivities"
+	ReasonDeletingCRD              string = "DeletingCRD"
+	ReasonInCycle                  string = "InCycle"
+	ReasonParentMissing            string = "ParentMissing"
+	ReasonIllegalParent            string = "IllegalParent"
+	ReasonAnchorMissing            string = "SubnamespaceAnchorMissing"
+	ReasonIllegalManagedLabel      string = "IllegalManagedLabel"
+	ReasonIllegalManagedAnnotation string = "IllegalManagedAnnotation"
 )
 
 // AllConditions have all the conditions by type and reason. Please keep this
@@ -124,6 +126,18 @@ type HierarchyConfigurationSpec struct {
 	// AllowCascadingDeletion indicates if the subnamespaces of this namespace are
 	// allowed to cascading delete.
 	AllowCascadingDeletion bool `json:"allowCascadingDeletion,omitempty"`
+
+	// Lables is a list of labels and values to apply to the current namespace and all of its
+	// descendants. All label keys must match a regex specified on the command line by
+	// --managed-namespace-label. A namespace cannot have a KVP that conflicts with one of its
+	// ancestors.
+	Labels []MetaKVP `json:"labels,omitempty"`
+
+	// Annotations is a list of annotations and values to apply to the current namespace and all of
+	// its descendants. All annotation keys must match a regex specified on the command line by
+	// --managed-namespace-annotation. A namespace cannot have a KVP that conflicts with one of its
+	// ancestors.
+	Annotations []MetaKVP `json:"annotations,omitempty"`
 }
 
 // HierarchyStatus defines the observed state of Hierarchy
@@ -145,6 +159,18 @@ type HierarchyConfigurationList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []HierarchyConfiguration `json:"items"`
+}
+
+// MetaKVP represents a label or annotation
+type MetaKVP struct {
+	// Key is the name of the label or annotation. It must conform to the normal rules for Kubernetes
+	// label/annotation keys.
+	Key string `json:"key"`
+
+	// Value is the value of the label or annotation. It must confirm to the normal rules for
+	// Kubernetes label or annoation values, which are far more restrictive for labels than for
+	// anntations.
+	Value string `json:"value"`
 }
 
 // metav1.Condition is introduced in k8s.io/apimachinery v0.20.0-alpha.1 and we

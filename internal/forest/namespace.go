@@ -32,6 +32,14 @@ type Namespace struct {
 	// and to store the tree labels of external namespaces.
 	labels map[string]string
 
+	// ManagedLabels are all managed labels explicitly set on this namespace (i.e., excluding anything
+	// set by ancestors).
+	ManagedLabels map[string]string
+
+	// ManagedAnnotations are all managed annotations explicitly set on this namespace (i.e.,
+	// excluding anything set by ancestors).
+	ManagedAnnotations map[string]string
+
 	// sourceObjects store the objects created by users, identified by GVK and name.
 	// It serves as the source of truth for object controllers to propagate objects.
 	sourceObjects objects

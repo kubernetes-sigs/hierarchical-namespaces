@@ -311,7 +311,8 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	initial := r.markExisting(log, ns)
 
 	// Sync labels and annotations, now that the structure's been updated.
-	nsCustomerLabelUpdated := r.syncTreeLabels(log, nsInst, ns)
+	updatedLabels := r.syncLabels(log, inst, nsInst, ns)
+	r.syncAnnotations(log, inst, nsInst, ns)
 
 	// Sync other spec and spec-like info
 	r.syncAnchors(log, ns, anms)
@@ -325,7 +326,7 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	r.syncConditions(log, inst, ns, wasHalted)
 
 	r.HNCConfigReconciler.Enqueue("namespace reconciled")
-	return initial || nsCustomerLabelUpdated
+	return initial || updatedLabels
 }
 
 // syncExternalNamespace sets external tree labels to the namespace in the forest
@@ -488,33 +489,71 @@ func (r *Reconciler) syncAnchors(log logr.Logger, ns *forest.Namespace, anms []s
 	}
 }
 
-// Sync namespace tree labels. Return true if the labels are updated.
-func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
-	if ns.IsExternal() {
-		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
-
-		// Set the labels so we can retrieve the external tree labels in the future if needed
-		ns.SetLabels(nsInst.Labels)
-		return false
+// Sync namespace managed and tree labels. Return true if the labels are updated, so we know to
+// re-sync all objects that could be affected by exclusions.
+func (r *Reconciler) syncLabels(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
+	// Get a list of all managed labels from the config object.
+	managed := map[string]string{}
+	for _, kvp := range inst.Spec.Labels {
+		if !config.IsManagedLabel(kvp.Key) {
+			log.Info("Illegal managed label", "key", kvp.Key)
+			ns.SetCondition(api.ConditionBadConfiguration, api.ReasonIllegalManagedLabel, "Not a legal managed label (set via --managed-namespace-label): "+kvp.Key)
+			continue
+		}
+		managed[kvp.Key] = kvp.Value
 	}
 
-	// Remove all existing depth labels.
-	for k := range nsInst.Labels {
-		if strings.HasSuffix(k, api.LabelTreeDepthSuffix) {
+	// External namespaces can also have both managed and tree labels set directly. All other
+	// namespaces must have these removed now.
+	for k, v := range nsInst.Labels {
+		if config.IsManagedLabel(k) {
+			if ns.IsExternal() {
+				managed[k] = v
+			} else {
+				delete(nsInst.Labels, k)
+			}
+		}
+		if !ns.IsExternal() && strings.HasSuffix(k, api.LabelTreeDepthSuffix) {
 			delete(nsInst.Labels, k)
 		}
 	}
+	if len(managed) == 0 {
+		// Don't cause unnecessary updates from the default value
+		managed = nil
+	}
 
-	// Look for all ancestors. Stop as soon as we find a namespaces that has a critical condition in
-	// the forest (note that AncestorHaltActivities is never included in the forest). This should handle orphans
-	// and cycles.
+	// Record all managed labels in the forest. If they've changed, we need to enqueue all descendants
+	// to propagate the changes.
+	if !reflect.DeepEqual(ns.ManagedLabels, managed) {
+		ns.ManagedLabels = managed
+		log.Info("Updated managed label", "newLabels", managed)
+		r.enqueueAffected(log, "managed labels have changed", ns.DescendantNames()...)
+	}
+
+	// For external namespaces, we're pretty much done since HNC mainly doesn't manage the metadata of
+	// external namespaces. Just make sure the zero-depth tree label is set if it wasn't already, and
+	// store all its labels so the tree labels can be retrieved later.
+	if ns.IsExternal() {
+		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
+		ns.SetLabels(nsInst.Labels)
+
+		// There are no propagated objects in external namespaces so we don't need to notify the caller
+		// that any propagation-relevant labels have changed.
+		return false
+	}
+
+	// Set all managed and tree labels, starting from the current namespace and going up through the
+	// hierarchy.
 	curNS := ns
 	depth := 0
 	for curNS != nil {
-		l := curNS.Name() + api.LabelTreeDepthSuffix
-		metadata.SetLabel(nsInst, l, strconv.Itoa(depth))
-		if curNS.IsHalted() {
-			break
+		// Set the tree label from this layer of hierarchy
+		metadata.SetLabel(nsInst, curNS.Name()+api.LabelTreeDepthSuffix, strconv.Itoa(depth))
+
+		// Add any managed labels. TODO: add conditions for conflicts.
+		for k, v := range curNS.ManagedLabels {
+			log.V(1).Info("Setting managed label", "from", curNS.Name(), "key", k, "value", v)
+			metadata.SetLabel(nsInst, k, v)
 		}
 
 		// If the root is an external namespace, add all its external tree labels too.
@@ -524,19 +563,86 @@ func (r *Reconciler) syncTreeLabels(log logr.Logger, nsInst *corev1.Namespace, n
 			for k, v := range curNS.GetTreeLabels() {
 				metadata.SetLabel(nsInst, k, strconv.Itoa(depth+v))
 			}
+
+			// Note that it's impossible to have an external namespace as a non-root (enforced elsewhere)
+			// so technically we don't need to break out of the loop here. But I find it cleaner.
 			break
 		}
 
+		// Stop if this namespace is halted, which could indicate a cycle or orphan.
+		if curNS.IsHalted() {
+			break
+		}
 		curNS = curNS.Parent()
 		depth++
 	}
-	// Update the labels in the forest so that we can quickly access the labels and
-	// compare if they match the given selector
+
+	// Update the labels in the forest so that they can be used in object propagation. If they've
+	// changed, return true so that all propagated objects in this namespace can be compared to its
+	// new labels.
 	if ns.SetLabels(nsInst.Labels) {
-		log.Info("Namespace managed and tree labels have been updated")
+		log.Info("Namespace's managed and/or tree labels have been updated")
 		return true
 	}
 	return false
+}
+
+// Sync namespace managed annotations. This is mainly a simplified version of syncLabels with all
+// the tree stuff taken out.
+func (r *Reconciler) syncAnnotations(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
+	// Get a list of all managed annotations from the config object.
+	managed := map[string]string{}
+	for _, kvp := range inst.Spec.Annotations {
+		if !config.IsManagedAnnotation(kvp.Key) {
+			log.Info("Illegal managed annotation", "key", kvp.Key)
+			ns.SetCondition(api.ConditionBadConfiguration, api.ReasonIllegalManagedAnnotation, "Not a legal managed annotation (set via --managed-namespace-annotation): "+kvp.Key)
+			continue
+		}
+		managed[kvp.Key] = kvp.Value
+	}
+
+	// External namespaces can also have managed annotations set directly. All other namespaces must
+	// have these removed now.
+	for k, v := range nsInst.Annotations {
+		if config.IsManagedAnnotation(k) {
+			if ns.IsExternal() {
+				managed[k] = v
+			} else {
+				delete(nsInst.Annotations, k)
+			}
+		}
+	}
+
+	// Record all managed annotations in the forest. If they've changed, we need to enqueue all
+	// descendants to propagate the changes.
+	if !reflect.DeepEqual(ns.ManagedAnnotations, managed) {
+		ns.ManagedAnnotations = managed
+		r.enqueueAffected(log, "managed annotations have changed", ns.DescendantNames()...)
+	}
+
+	// For external namespaces, we're done since HNC mainly doesn't manage the metadata of
+	// external namespaces.
+	if ns.IsExternal() {
+		return
+	}
+
+	// Set all managed annotations, starting from the current namespace and going up through the
+	// hierarchy.
+	curNS := ns
+	depth := 0
+	for curNS != nil {
+		// Add any managed annotations. TODO: add conditions for conflicts.
+		for k, v := range curNS.ManagedAnnotations {
+			metadata.SetAnnotation(nsInst, k, v)
+		}
+
+		// Stop if this namespace is halted, which could indicate a cycle or orphan.
+		if curNS.IsHalted() {
+			break
+		}
+		curNS = curNS.Parent()
+		depth++
+	}
 }
 
 func (r *Reconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace, wasHalted bool) {

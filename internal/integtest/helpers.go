@@ -86,6 +86,14 @@ func GetLabel(ctx context.Context, from, label string) func() string {
 	}
 }
 
+func GetAnnotation(ctx context.Context, from, key string) func() string {
+	return func() string {
+		ns := GetNamespace(ctx, from)
+		val, _ := ns.GetAnnotations()[key]
+		return val
+	}
+}
+
 func HasChild(ctx context.Context, nm, cnm string) func() bool {
 	return func() bool {
 		children := GetHierarchy(ctx, nm).Status.Children
