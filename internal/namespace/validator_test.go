@@ -339,3 +339,50 @@ func TestIllegalIncludedNamespaceNamespace(t *testing.T) {
 func logResult(t *testing.T, result *metav1.Status) {
 	t.Logf("Got reason %q, code %d, msg %q", result.Reason, result.Code, result.Message)
 }
+func TestIllegalTreeOperations(t *testing.T) {
+	f := foresttest.Create("-")
+	vns := &Validator{Forest: f}
+
+	ns := &corev1.Namespace{}
+	oldNs := &corev1.Namespace{}
+	ns.Name = "a"
+
+	ns.SetLabels(map[string]string{api.LabelTreeDepthSuffix: "1"})
+	// Change tree label value
+	oldNs.SetLabels(map[string]string{api.LabelTreeDepthSuffix: "2"})
+
+	tests := []struct {
+		name    string
+		op      k8sadm.Operation
+		allowed bool
+		oldNs   *corev1.Namespace
+	}{
+		{name: "Creation of namespace with tree label in it", op: k8sadm.Create, allowed: false},
+		{name: "Update namespace with tree label in it", op: k8sadm.Update, allowed: false},
+		{name: "Update value of a tree in existing namespace", op: k8sadm.Update, allowed: false, oldNs: oldNs},
+		{name: "No tree label updates to namespace", op: k8sadm.Update, allowed: true, oldNs: ns},
+	}
+	for _, tc := range tests {
+		g := NewWithT(t)
+
+		var req *nsRequest
+		if tc.op == k8sadm.Create {
+			req = &nsRequest{
+				ns: ns,
+				op: tc.op,
+			}
+		} else {
+			req = &nsRequest{
+				ns:    ns,
+				op:    tc.op,
+				oldns: tc.oldNs,
+			}
+		}
+
+		got := vns.illegalTreeLabel(req)
+
+		logResult(t, got.AdmissionResponse.Result)
+		g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allowed))
+	}
+
+}
