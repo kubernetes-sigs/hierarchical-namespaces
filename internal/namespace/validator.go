@@ -3,6 +3,7 @@ package namespaces
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
@@ -86,6 +87,11 @@ func (v *Validator) handle(req *nsRequest) admission.Response {
 		if rsp := v.nameExistsInExternalHierarchy(req); !rsp.Allowed {
 			return rsp
 		}
+
+		if rsp := v.illegalTreeLabel(req); !rsp.Allowed {
+			return rsp
+		}
+
 	case k8sadm.Update:
 		if rsp := v.illegalIncludedNamespaceLabel(req); !rsp.Allowed {
 			return rsp
@@ -96,12 +102,51 @@ func (v *Validator) handle(req *nsRequest) admission.Response {
 		if rsp := v.conflictBetweenParentAndExternalManager(req, ns); !rsp.Allowed {
 			return rsp
 		}
+
+		if rsp := v.illegalTreeLabel(req); !rsp.Allowed {
+			return rsp
+		}
+
 	case k8sadm.Delete:
 		if rsp := v.cannotDeleteSubnamespace(req); !rsp.Allowed {
 			return rsp
 		}
 		if rsp := v.illegalCascadingDeletion(ns); !rsp.Allowed {
 			return rsp
+		}
+	}
+
+	return webhooks.Allow("")
+}
+
+// illegalTreeLabel checks if tree labels are being created or modified
+// by any user or service account since only HNC service account is
+// allowed to do so
+func (v *Validator) illegalTreeLabel(req *nsRequest) admission.Response {
+	msg := "Cannot set or modify tree label %q in namespace %q; these can only be modified by HNC."
+
+	oldLabels := map[string]string{}
+	if req.oldns != nil {
+		oldLabels = req.oldns.Labels
+	}
+	// Ensure the users hasn't added or changed any tree labels
+	for key, val := range req.ns.Labels {
+		if !strings.Contains(key, api.LabelTreeDepthSuffix) {
+			continue
+		}
+
+		// Check if new HNC label tree key isn't being added
+		if oldLabels[key] != val {
+			return webhooks.Deny(metav1.StatusReasonForbidden, fmt.Sprintf(msg, key, req.ns.Name))
+		}
+	}
+
+	for key := range oldLabels {
+		//  Make sure nothing's been deleted
+		if strings.Contains(key, api.LabelTreeDepthSuffix) {
+			if _, ok := req.ns.Labels[key]; !ok {
+				return webhooks.Deny(metav1.StatusReasonForbidden, fmt.Sprintf(msg, key, req.ns.Name))
+			}
 		}
 	}
 
