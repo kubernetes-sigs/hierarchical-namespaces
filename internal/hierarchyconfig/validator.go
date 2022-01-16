@@ -175,11 +175,11 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 		return deny(metav1.StatusReasonServiceUnavailable, msg)
 	}
 
-	// Deny the request if the namespace has a critical ancestor - but not if it's critical itself,
-	// since we may be trying to resolve the critical condition.
-	critAnc := ns.GetCritAncestor()
-	if critAnc != "" && critAnc != ns.Name() {
-		msg := fmt.Sprintf("The ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration.", critAnc, ns.Name())
+	// Deny the request if the namespace has a halted root - but not if it's halted itself, since we
+	// may be trying to resolve the halted condition.
+	haltedRoot := ns.GetHaltedRoot()
+	if haltedRoot != "" && haltedRoot != ns.Name() {
+		msg := fmt.Sprintf("The ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration.", haltedRoot, ns.Name())
 		return deny(metav1.StatusReasonForbidden, msg)
 	}
 
