@@ -194,7 +194,12 @@ func (v *Validator) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 // namespace name cannot be updated.
 func (v *Validator) nameExistsInExternalHierarchy(req *nsRequest) admission.Response {
 	for _, nm := range v.Forest.GetNamespaceNames() {
-		if _, ok := v.Forest.Get(nm).ExternalTreeLabels[req.ns.Name]; ok {
+		ns := v.Forest.Get(nm)
+		if !ns.IsExternal() {
+			continue
+		}
+		externalTreeLabels := ns.GetTreeLabels()
+		if _, ok := externalTreeLabels[req.ns.Name]; ok {
 			msg := fmt.Sprintf("The namespace name %q is reserved by the external hierarchy manager %q.", req.ns.Name, v.Forest.Get(nm).Manager)
 			return webhooks.Deny(metav1.StatusReasonAlreadyExists, msg)
 		}

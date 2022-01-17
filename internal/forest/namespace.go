@@ -2,6 +2,8 @@ package forest
 
 import (
 	"reflect"
+	"strconv"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -26,7 +28,8 @@ type Namespace struct {
 	exists                 bool
 	allowCascadingDeletion bool
 
-	// labels store the original namespaces' labels
+	// labels store the original namespaces' labels, and are used for object propagation exceptions
+	// and to store the tree labels of external namespaces.
 	labels map[string]string
 
 	// sourceObjects store the objects created by users, identified by GVK and name.
@@ -44,15 +47,10 @@ type Namespace struct {
 	// Anchors store a list of anchors in the namespace.
 	Anchors []string
 
-	// Manager stores the manager of the namespace. The default value
-	// "hnc.x-k8s.io" means it's managed by HNC.
+	// Manager stores the manager of the namespace. The default value of "hnc.x-k8s.io" means it's
+	// managed by HNC. Any other value means that the namespace is an "external" namespace, whose
+	// metadata (e.g. labels) are set outside of HNC.
 	Manager string
-
-	// ExternalTreeLabels stores external tree labels if this namespace is an external namespace.
-	// It will be empty if the namespace is not external. External namespace will at least have one
-	// tree label of itself. The key is the tree label without ".tree.hnc.x-k8s.io/depth" suffix.
-	// The value is the depth.
-	ExternalTreeLabels map[string]int
 }
 
 // Name returns the name of the namespace, of "<none>" if the namespace is nil.
@@ -88,6 +86,19 @@ func (ns *Namespace) UnsetExists() bool {
 	ns.exists = false
 	ns.clean() // clean up if this is a useless data structure
 	return changed
+}
+
+// GetTreeLabels returns all the tree labels with the values converted into integers for easier
+// manipulation.
+func (ns *Namespace) GetTreeLabels() map[string]int {
+	r := map[string]int{}
+	for k, v := range ns.labels {
+		if !strings.Contains(k, api.LabelTreeDepthSuffix) {
+			continue
+		}
+		r[k], _ = strconv.Atoi(v)
+	}
+	return r
 }
 
 func (ns *Namespace) GetLabels() labels.Set {
@@ -176,5 +187,5 @@ func (ns *Namespace) HasAnchor(n string) bool {
 
 // IsExternal returns true if the namespace is not managed by HNC.
 func (ns *Namespace) IsExternal() bool {
-	return len(ns.ExternalTreeLabels) > 0
+	return ns.Manager != "" && ns.Manager != api.MetaGroup
 }

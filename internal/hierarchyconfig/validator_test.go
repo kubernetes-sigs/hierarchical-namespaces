@@ -70,8 +70,8 @@ func TestChangeParentOnManagedBy(t *testing.T) {
 	l := zap.New()
 
 	// Make c and d external namespaces
-	f.Get("c").ExternalTreeLabels = map[string]int{"c" + api.LabelTreeDepthSuffix: 0}
-	f.Get("d").ExternalTreeLabels = map[string]int{"d" + api.LabelTreeDepthSuffix: 0}
+	f.Get("c").Manager = "external-tool"
+	f.Get("d").Manager = "external-tool"
 
 	// These cases test changing parent for internal or external namespaces, described
 	// in the table at https://bit.ly/hnc-external-hierarchy#heading=h.z9mkbslfq41g
