@@ -3,10 +3,12 @@ package anchor
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
@@ -76,6 +78,12 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 	pnm := req.anchor.Namespace
 	cnm := req.anchor.Name
 	cns := v.Forest.Get(cnm)
+
+	errStrs := validation.IsDNS1123Label(cnm)
+	if len(errStrs) != 0 {
+		msg := fmt.Sprintf("Subnamespace %s is not a valid namespace name: %s", cnm, strings.Join(errStrs, "; "))
+		return webhooks.Deny(metav1.StatusReasonInvalid, msg)
+	}
 
 	switch req.op {
 	case k8sadm.Create:

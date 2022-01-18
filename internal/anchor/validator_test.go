@@ -31,6 +31,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 		{name: "with an existing ns name (the ns is not a subnamespace of it)", pnm: "c", cnm: "b", fail: true},
 		{name: "for existing non-subns child", pnm: "a", cnm: "c", fail: true},
 		{name: "for existing subns", pnm: "a", cnm: "b"},
+		{name: "for non DNS label compliant child", pnm: "a", cnm: "child.01", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
