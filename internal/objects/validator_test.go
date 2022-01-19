@@ -211,6 +211,60 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
+		name: "Deny changes to HNC annotations in propagated objects",
+		fail: true,
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+					"annotations": map[string]interface{}{
+						api.AnnotationPropagatePrefix + "/select": "abc",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Deny changes to HNC labels in propagated objects",
+		fail: true,
+		oldInst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+					},
+				},
+			},
+		},
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"labels": map[string]interface{}{
+						api.LabelInheritedFrom: "foo",
+						api.MetaGroup + "/foo": "foo",
+					},
+				},
+			},
+		},
+	}, {
 		name: "Deny spec changes to propagated objects",
 		fail: true,
 		oldInst: &unstructured.Unstructured{

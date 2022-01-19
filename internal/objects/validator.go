@@ -281,6 +281,12 @@ func (v *Validator) handleInherited(ctx context.Context, op k8sadm.Operation, ne
 				"Cannot modify object propagated from namespace \""+oldSource+"\"")
 		}
 
+		// Check for all the labels and annotations (including HNC and non HNC)
+		if !reflect.DeepEqual(oldInst.GetLabels(), inst.GetLabels()) || !reflect.DeepEqual(oldInst.GetAnnotations(), inst.GetAnnotations()) {
+			return webhooks.Deny(metav1.StatusReasonForbidden,
+				"Cannot modify object propagated from namespace \""+oldSource+"\"")
+		}
+
 		return webhooks.Allow("no illegal updates to propagated object")
 	}
 
