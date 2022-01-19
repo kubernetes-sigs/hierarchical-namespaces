@@ -65,6 +65,8 @@ var (
 	restartOnSecretRefresh  bool
 	unpropagatedAnnotations arrayArg
 	excludedNamespaces      arrayArg
+	managedNamespaceLabels  arrayArg
+	managedNamespaceAnnots  arrayArg
 	includedNamespacesRegex string
 )
 
@@ -97,13 +99,19 @@ func main() {
 	flag.IntVar(&webhookServerPort, "webhook-server-port", 443, "The port that the webhook server serves at.")
 	flag.Var(&unpropagatedAnnotations, "unpropagated-annotation", "An annotation that, if present, will be stripped out of any propagated copies of an object. May be specified multiple times, with each instance specifying one annotation. See the user guide for more information.")
 	flag.Var(&excludedNamespaces, "excluded-namespace", "A namespace that, if present, will be excluded from HNC management. May be specified multiple times, with each instance specifying one namespace. See the user guide for more information.")
-	flag.StringVar(&includedNamespacesRegex, "included-namespace-regex", ".*", "Namespace regular expression. Namespaces that match this regexp will be included and handle by HNC. As it is a regex, this parameter cannot be specified multiple times. Implicit wrapping of the expression \"^...$\" is done here")
+	flag.StringVar(&includedNamespacesRegex, "included-namespace-regex", ".*", "Namespace regular expression. Namespaces that match this regexp will be included and handle by HNC. The regex is implicitly wrapped by \"^...$\" and may only be specified once.")
 	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
+	flag.Var(&managedNamespaceLabels, "managed-namespace-label", "A regex indicating the labels on namespaces that are managed by HNC. These labels may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
+	flag.Var(&managedNamespaceAnnots, "managed-namespace-annotation", "A regex indicating the annotations on namespaces that are managed by HNC. These annotations may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
 	flag.Parse()
+
 	// Assign the array args to the configuration variables after the args are parsed.
 	config.UnpropagatedAnnotations = unpropagatedAnnotations
-
 	config.SetNamespaces(includedNamespacesRegex, excludedNamespaces...)
+	if err := config.SetManagedMeta(managedNamespaceLabels, managedNamespaceAnnots); err != nil {
+		setupLog.Error(err, "Illegal flag values")
+		os.Exit(1)
+	}
 
 	// Enable OpenCensus exporters to export metrics
 	// to Stackdriver Monitoring.
