@@ -382,6 +382,26 @@ func RecoverHNC() {
 	cleanupNamespaces(a, b)
 }
 
+func AddDisableEnforcedTypesArg() {
+	// If hncRecoverPath is not set, we should not get here, but if we do, return early and - propably - fail the tests
+	// as the changes done in this prep function require the original manifest file to recover a "normal" state.
+	if hncRecoverPath == "" {
+		return
+	}
+
+	// read manifest file, look for the "command:" line and add the required arg as a new line before the match
+	content, err := ioutil.ReadFile(hncRecoverPath)
+	if err != nil {
+		return
+	}
+	manifest := string(content)
+	manifest = strings.Replace(manifest, "        command:", "        - --disable-enforced-types\n        command:", 1)
+	MustApplyYAML(manifest)
+
+	// give HNC time to redeploy the manager
+	time.Sleep(5 * time.Second)
+}
+
 func writeTempFile(cxt string) string {
 	f, err := ioutil.TempFile(os.TempDir(), "e2e-test-*.yaml")
 	Expect(err).Should(BeNil())

@@ -68,6 +68,7 @@ var (
 	managedNamespaceLabels  arrayArg
 	managedNamespaceAnnots  arrayArg
 	includedNamespacesRegex string
+	disableEnforcedTypes    bool
 )
 
 func init() {
@@ -103,10 +104,14 @@ func main() {
 	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
 	flag.Var(&managedNamespaceLabels, "managed-namespace-label", "A regex indicating the labels on namespaces that are managed by HNC. These labels may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
 	flag.Var(&managedNamespaceAnnots, "managed-namespace-annotation", "A regex indicating the annotations on namespaces that are managed by HNC. These annotations may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
+	flag.BoolVar(&disableEnforcedTypes, "disable-enforced-types", false, "Disables the enforced types \"Roles\" and \"Rolebindings\" - thus making them removable.")
 	flag.Parse()
 
 	// Assign the array args to the configuration variables after the args are parsed.
 	config.UnpropagatedAnnotations = unpropagatedAnnotations
+	// Assign the "disable enforced types" toggle
+	config.EnforcedTypesDisabled = disableEnforcedTypes
+
 	config.SetNamespaces(includedNamespacesRegex, excludedNamespaces...)
 	if err := config.SetManagedMeta(managedNamespaceLabels, managedNamespaceAnnots); err != nil {
 		setupLog.Error(err, "Illegal flag values")

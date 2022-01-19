@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/selectors"
 
@@ -100,7 +101,7 @@ func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
 		field := field.NewPath("spec", "resources").Index(i)
 		// Validate the type configured is not an HNC enforced type.
-		if api.IsEnforcedType(r) {
+		if !config.EnforcedTypesDisabled && api.IsEnforcedType(r) {
 			return webhooks.DenyInvalid(field, fmt.Sprintf("Invalid configuration of %s in the spec, because it's enforced by HNC "+
 				"with 'Propagate' mode. Please remove it from the spec.", gr))
 		}

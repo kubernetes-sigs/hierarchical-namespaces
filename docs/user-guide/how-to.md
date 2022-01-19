@@ -873,3 +873,8 @@ Interesting parameters include:
   load on your metrics database (through increased metric cardinality) and also
   by increasing how carefully you need to guard your metrics against
   unauthorized viewers.
+* `--disable-enforced-types`: not set by default. If set, the default enforced
+  types `roles` and `rolebindings` are not enforced anymore, meaning they are
+  not propagated by default and have to be configured additionally, if required.
+  This option allows the use of HNC for other object kinds, while not necessarily
+  managing roles and rolebindings.

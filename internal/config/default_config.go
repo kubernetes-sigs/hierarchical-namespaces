@@ -8,3 +8,10 @@ package config
 // This value is controlled by the --unpropagated-annotation command line, which may be set multiple
 // times.
 var UnpropagatedAnnotations []string
+
+// EnforcedTypesDisabled is a boolean toggle that can be used to disable the default enforced types
+// "role" and "rolebindings" from being managed by HNC. If set to `true`, it's possible to remove
+// both kinds of objects from the default managed types.
+//
+// This option is controlled by the --disable-enforced-types command line argument.
+var EnforcedTypesDisabled bool

@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
@@ -155,9 +156,12 @@ func (r *Reconciler) reconcileTypes(inst *api.HNCConfiguration) error {
 	// Overwrite the type set each time. Initialize them with the enforced types.
 	r.activeGVKMode = gr2gvkMode{}
 	r.activeGR = gvk2gr{}
-	if err := r.ensureEnforcedTypes(inst, allRes); err != nil {
-		// Early exit if any enforced types are not found for some reason to retry.
-		return err
+
+	if !config.EnforcedTypesDisabled {
+		if err := r.ensureEnforcedTypes(inst, allRes); err != nil {
+			// Early exit if any enforced types are not found for some reason to retry.
+			return err
+		}
 	}
 
 	// Add all valid configurations from user-configured types.
@@ -200,7 +204,7 @@ func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration, allRes []*
 			log := r.Log.WithValues("resource", gr, "appliedMode", gvkMode.mode)
 			msg := ""
 			// Set a different message if the type is enforced by HNC.
-			if api.IsEnforcedType(rsc) {
+			if !config.EnforcedTypesDisabled && api.IsEnforcedType(rsc) {
 				msg = fmt.Sprintf("The sync mode for %q is enforced by HNC as %q and cannot be overridden", gr, api.Propagate)
 				log.Info("The sync mode for this resource is enforced by HNC and cannot be overridden")
 			} else {
