@@ -70,6 +70,9 @@ var (
 	includedNamespacesRegex string
 )
 
+// init preloads some global vars before main() starts. Since this is the top-level module, I'm not
+// sure what happens _between_ init() and main() but this is the way kubebuilder left things so I'm
+// going to leave it alone.
 func init() {
 	setupLog.Info("Starting main.go:init()")
 	defer setupLog.Info("Finished main.go:init()")
@@ -82,6 +85,32 @@ func init() {
 }
 
 func main() {
+	parseFlags()
+	metricsCleanupFn := enableMetrics()
+	defer metricsCleanupFn()
+	mgr := createManager()
+
+	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
+	setupLog.Info("Starting certificate generation")
+	certsReady, err := setup.CreateCertsIfNeeded(mgr, novalidation, internalCert, restartOnSecretRefresh)
+	if err != nil {
+		setupLog.Error(err, "unable to set up cert rotation")
+		os.Exit(1)
+	}
+
+	// The call to mgr.Start will never return, but the certs won't be ready until the manager starts
+	// and we can't set up the webhooks without them. So start a goroutine which will wait until the
+	// certs are ready, and then create the rest of the HNC controllers.
+	go startControllers(mgr, certsReady)
+
+	setupLog.Info("Starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
+	}
+}
+
+func parseFlags() {
 	setupLog.Info("Parsing flags")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableStackdriver, "enable-stackdriver", true, "If true, export metrics to stackdriver")
@@ -112,6 +141,12 @@ func main() {
 		setupLog.Error(err, "Illegal flag values")
 		os.Exit(1)
 	}
+}
+
+// enableMetrics returns a function to call from main() to export any remaining metrics when main()
+// is exiting.
+func enableMetrics() func() {
+	var cleanupFn func()
 
 	// Enable OpenCensus exporters to export metrics
 	// to Stackdriver Monitoring.
@@ -126,11 +161,13 @@ func main() {
 			ReportingInterval: stats.ReportingInterval,
 		})
 		if err == nil {
-			// Flush must be called before main() exits to ensure metrics are recorded.
-			defer sd.Flush()
 			err = sd.StartMetricsExporter()
 			if err == nil {
-				defer sd.StopMetricsExporter()
+				cleanupFn = func() {
+					// Flush must be called before main() exits to ensure metrics are recorded.
+					sd.Flush()
+					sd.StopMetricsExporter()
+				}
 			}
 		}
 		if err != nil {
@@ -151,6 +188,10 @@ func main() {
 		setupLog.Error(err, "Could not create Prometheus exporter")
 	}
 
+	return cleanupFn
+}
+
+func createManager() ctrl.Manager {
 	setupLog.Info("Configuring controller-manager")
 	logLevel := zapcore.InfoLevel
 	if debugLogs {
@@ -183,32 +224,17 @@ func main() {
 		Port:               webhookServerPort,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
-
-	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
-	setupLog.Info("Starting certificate generation")
-	certsCreated, err := setup.CreateCertsIfNeeded(mgr, novalidation, internalCert, restartOnSecretRefresh)
-	if err != nil {
-		setupLog.Error(err, "unable to set up cert rotation")
-		os.Exit(1)
-	}
-
-	go startControllers(mgr, certsCreated)
-
-	setupLog.Info("Starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
+	return mgr
 }
 
-func startControllers(mgr ctrl.Manager, certsCreated chan struct{}) {
+func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
 	// The controllers won't work until the webhooks are operating, and those won't work until the
 	// certs are all in place.
 	setupLog.Info("Waiting for certificate generation to complete")
-	<-certsCreated
+	<-certsReady
 
 	if testLog {
 		stats.StartLoggingActivity()
