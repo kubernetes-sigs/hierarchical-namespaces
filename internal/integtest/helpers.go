@@ -300,9 +300,9 @@ func MakeObject(ctx context.Context, resource string, nsName, name string) {
 	createdObjects = append(createdObjects, inst)
 }
 
-// MakeObjectWithAnnotation creates an empty object with annotation given kind in a specific
+// MakeObjectWithAnnotations creates an empty object with annotation given kind in a specific
 // namespace. The kind and its corresponding GVK should be included in the GVKs map.
-func MakeObjectWithAnnotation(ctx context.Context, resource string, nsName,
+func MakeObjectWithAnnotations(ctx context.Context, resource string, nsName,
 	name string, a map[string]string) {
 	inst := &unstructured.Unstructured{}
 	inst.SetGroupVersionKind(GVKs[resource])
@@ -313,9 +313,22 @@ func MakeObjectWithAnnotation(ctx context.Context, resource string, nsName,
 	createdObjects = append(createdObjects, inst)
 }
 
-// UpdateObjectWithAnnotation gets an object given it's kind, nsName and name, adds the annotation
+// MakeObjectWithLabels creates an empty object with label given kind in a specific
+// namespace. The kind and its corresponding GVK should be included in the GVKs map.
+func MakeObjectWithLabels(ctx context.Context, resource string, nsName,
+	name string, l map[string]string) {
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs[resource])
+	inst.SetNamespace(nsName)
+	inst.SetName(name)
+	inst.SetLabels(l)
+	ExpectWithOffset(1, K8sClient.Create(ctx, inst)).Should(Succeed())
+	createdObjects = append(createdObjects, inst)
+}
+
+// UpdateObjectWithAnnotations gets an object given it's kind, nsName and name, adds the annotation
 // and updates this object
-func UpdateObjectWithAnnotation(ctx context.Context, resource string, nsName,
+func UpdateObjectWithAnnotations(ctx context.Context, resource string, nsName,
 	name string, a map[string]string) error {
 	nnm := types.NamespacedName{Namespace: nsName, Name: name}
 	inst := &unstructured.Unstructured{}
