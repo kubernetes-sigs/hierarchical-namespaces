@@ -158,19 +158,46 @@ func GetNoneSelector(inst *unstructured.Unstructured) (bool, error) {
 	return noneSelector, nil
 }
 
-// cmExclusions are known (istio and kube-root) CA configmap which are excluded from propagation
-var cmExclusions = []string{"istio-ca-root-cert", "kube-root-ca.crt"}
+// cmExclusionsByName are known (istio and kube-root) CA configmap which are excluded from propagation
+var cmExclusionsByName = []string{"istio-ca-root-cert", "kube-root-ca.crt"}
+
+// A label as a key, value pair, used to exclude resources matching this label (both key and value).
+type ExclusionByLabelsSpec struct {
+	Key   string
+	Value string
+}
+
+// ExclusionByLabelsSpec are known label key-value pairs which are excluded from propagation. Right
+// now only used to exclude resources created by Rancher, see "System Tools > Remove"
+// (https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove)
+var exclusionByLabels = []ExclusionByLabelsSpec{
+	{Key: "cattle.io/creator", Value: "norman"},
+}
 
 // isExcluded returns true to indicate that this object is excluded from being propagated
 func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 	name := inst.GetName()
 	kind := inst.GetKind()
 	group := inst.GroupVersionKind().Group
+	labels := inst.GetLabels()
 
-	for _, excludedResourceName := range cmExclusions {
+	// exclusion by name
+	for _, excludedResourceName := range cmExclusionsByName {
 		if group == "" && kind == "ConfigMap" && name == excludedResourceName {
 			return true, nil
 		}
 	}
+
+	// exclusion by labels
+	for _, res := range exclusionByLabels {
+		gotLabelValue, ok := labels[res.Key]
+		// check for presence has to be explicit, as empty label values are allowed and a
+		// nonexisting key in the `labels` map will also return an empty string ("") - potentially
+		// causing false matches if `ok` is not checked
+		if ok && gotLabelValue == res.Value {
+			return true, nil
+		}
+	}
+
 	return false, nil
 }

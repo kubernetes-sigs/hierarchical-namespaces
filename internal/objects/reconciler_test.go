@@ -142,7 +142,7 @@ var _ = Describe("Exceptions", func() {
 				tc.treeSelector = ReplaceStrings(tc.treeSelector, names)
 
 				// Create a Role with the selector and treeSelector annotation
-				MakeObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{
+				MakeObjectWithAnnotations(ctx, api.RoleResource, names[p], "testrole", map[string]string{
 					api.AnnotationSelector:     tc.selector,
 					api.AnnotationTreeSelector: tc.treeSelector,
 					api.AnnotationNoneSelector: tc.noneSelector,
@@ -215,7 +215,7 @@ var _ = Describe("Exceptions", func() {
 				}
 
 				// update the role with the selector and treeSelector annotation
-				UpdateObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{
+				UpdateObjectWithAnnotations(ctx, api.RoleResource, names[p], "testrole", map[string]string{
 					api.AnnotationSelector:     tc.selector,
 					api.AnnotationTreeSelector: tc.treeSelector,
 					api.AnnotationNoneSelector: tc.noneSelector,
@@ -232,7 +232,7 @@ var _ = Describe("Exceptions", func() {
 				}
 
 				// remove the annotation and verify that the object is back for every namespace
-				UpdateObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{})
+				UpdateObjectWithAnnotations(ctx, api.RoleResource, names[p], "testrole", map[string]string{})
 				for _, ns := range names {
 					Eventually(HasObject(ctx, api.RoleResource, ns, "testrole")).Should(BeTrue(), "When propagating testrole to %s", ns)
 				}
@@ -304,7 +304,7 @@ var _ = Describe("Exceptions", func() {
 				Eventually(HasObject(ctx, api.RoleResource, names[nolabelchild], "testrole")).Should(BeTrue(), "When propagating testrole to %s", names[nolabelchild])
 				// Add `select` exception annotation with propagate label and verify the
 				// object is only propagated to children with the label.
-				UpdateObjectWithAnnotation(ctx, api.RoleResource, names[p], "testrole", map[string]string{
+				UpdateObjectWithAnnotations(ctx, api.RoleResource, names[p], "testrole", map[string]string{
 					api.AnnotationSelector: label,
 				})
 				Eventually(HasObject(ctx, api.RoleResource, names[nolabelchild], "testrole")).Should(BeFalse(), "When propagating testrole to %s", names[nolabelchild])
@@ -398,7 +398,7 @@ var _ = Describe("Basic propagation", func() {
 		Expect(ObjectInheritedFrom(ctx, "configmaps", barName, "foo-config")).Should(Equal(fooName))
 	})
 
-	It("should not propagate builtin exclusions", func() {
+	It("should not propagate builtin exclusions by name", func() {
 		SetParent(ctx, barName, fooName)
 		MakeObject(ctx, "configmaps", fooName, "istio-ca-root-cert")
 		MakeObject(ctx, "configmaps", fooName, "kube-root-ca.crt")
@@ -409,6 +409,27 @@ var _ = Describe("Basic propagation", func() {
 		Eventually(HasObject(ctx, "configmaps", barName, "gets-propagated")).Should(BeTrue())
 		Eventually(HasObject(ctx, "configmaps", barName, "istio-ca-root-cert")).Should(BeFalse())
 		Eventually(HasObject(ctx, "configmaps", barName, "kube-root-ca.crt")).Should(BeFalse())
+	})
+
+	It("should not propagate builtin exclusions by labels", func() {
+		SetParent(ctx, barName, fooName)
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-blocked", map[string]string{"cattle.io/creator": "norman"})
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-wrong-value", map[string]string{"cattle.io/creator": "testme"})
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-something", map[string]string{"app": "hello-world"})
+		AddToHNCConfig(ctx, api.RBACGroup, api.RoleKind, api.Propagate)
+
+		// the first one should not propagate, everything else should
+		Consistently(HasObject(ctx, "roles", barName, "role-with-labels-blocked")).Should(BeFalse())
+		Eventually(HasObject(ctx, "roles", barName, "role-with-labels-wrong-value")).Should(BeTrue())
+		Eventually(HasObject(ctx, "roles", barName, "role-with-labels-something")).Should(BeTrue())
+
+		// lets try the same with config maps, they are also filtered and should not propagate
+		MakeObjectWithLabels(ctx, "configmaps", fooName, "cm-with-label-1", map[string]string{"cattle.io/creator": "norman"})
+		MakeObjectWithLabels(ctx, "configmaps", fooName, "cm-with-label-2", map[string]string{"app": "hello-world"})
+		AddToHNCConfig(ctx, "", "configmaps", api.Propagate)
+
+		Consistently(HasObject(ctx, "configmaps", barName, "cm-with-label-1")).Should(BeFalse())
+		Eventually(HasObject(ctx, "configmaps", barName, "cm-with-label-2")).Should(BeTrue())
 	})
 
 	It("should be removed if the hierarchy changes", func() {
@@ -658,7 +679,7 @@ var _ = Describe("Basic propagation", func() {
 
 	It("should avoid propagating banned annotations", func() {
 		SetParent(ctx, barName, fooName)
-		MakeObjectWithAnnotation(ctx, "roles", fooName, "foo-annot-role", map[string]string{
+		MakeObjectWithAnnotations(ctx, "roles", fooName, "foo-annot-role", map[string]string{
 			"annot-a": "value-a",
 			"annot-b": "value-b",
 		})
@@ -682,7 +703,7 @@ var _ = Describe("Basic propagation", func() {
 
 		// Tell the HNC config not to propagate annot-a and verify that this time, it's not annotated
 		config.UnpropagatedAnnotations = []string{"annot-a"}
-		MakeObjectWithAnnotation(ctx, "roles", fooName, "foo-annot-role", map[string]string{
+		MakeObjectWithAnnotations(ctx, "roles", fooName, "foo-annot-role", map[string]string{
 			"annot-a": "value-a",
 			"annot-b": "value-b",
 		})

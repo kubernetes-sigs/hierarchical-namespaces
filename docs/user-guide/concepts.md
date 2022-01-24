@@ -361,6 +361,14 @@ adding annotations is not possible and HNC will by default exclude them.
 Similarly, Kubernetes ServiceAccount Secrets will also by default be excluded
 from propagation.
 
+In addition, propagation exclusions are also used for Rancher-managed Kubernetes
+clusters. Rancher uses a "project" concept that bundles namespaces and thus sets
+roles, rolebindings, etc. for all namespaces of a project. This leads to
+conflicts with HNC, so all resources created by Rancher (which are automatically
+labeled with `"cattle.io/creator": "norman"` by Rancher, cf. [their
+docs](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove)) are
+excluded from propagation.
+
 <a name="admin"/>
 
 ## Administration
