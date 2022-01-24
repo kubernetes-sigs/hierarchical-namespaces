@@ -16,6 +16,7 @@ limitations under the License.
 package integtest
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -44,8 +45,9 @@ import (
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
-	K8sClient client.Client
-	testEnv   *envtest.Environment
+	K8sClient          client.Client
+	testEnv            *envtest.Environment
+	k8sManagerCancelFn context.CancelFunc
 )
 
 func HNCRun(t *testing.T, title string) {
@@ -108,12 +110,17 @@ func HNCBeforeSuite() {
 	Expect(K8sClient).ToNot(BeNil())
 
 	go func() {
-		err = k8sManager.Start(ctrl.SetupSignalHandler())
+		var ctx context.Context
+		ctx, k8sManagerCancelFn = context.WithCancel(ctrl.SetupSignalHandler())
+		err = k8sManager.Start(ctx)
 		Expect(err).ToNot(HaveOccurred())
 	}()
 }
 
 func HNCAfterSuite() {
+	if k8sManagerCancelFn != nil {
+		k8sManagerCancelFn()
+	}
 	By("tearing down the test environment")
 	Expect(testEnv).ToNot(BeNil())
 	err := testEnv.Stop()
