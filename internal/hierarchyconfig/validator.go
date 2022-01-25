@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -23,6 +22,7 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/selectors"
+	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
 )
 
 const (
@@ -89,7 +89,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	decoded, err := v.decodeRequest(req)
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
-		return deny(metav1.StatusReasonBadRequest, err.Error())
+		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 
 	resp := v.handle(ctx, log, decoded)
@@ -122,11 +122,11 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 
 	if why := config.WhyUnmanaged(req.hc.Namespace); why != "" {
 		reason := fmt.Sprintf("Namespace %q is not managed by HNC (%s) and cannot be set as a child of another namespace", req.hc.Namespace, why)
-		return deny(metav1.StatusReasonForbidden, reason)
+		return webhooks.Deny(metav1.StatusReasonForbidden, reason)
 	}
 	if why := config.WhyUnmanaged(req.hc.Spec.Parent); why != "" {
 		reason := fmt.Sprintf("Namespace %q is not managed by HNC (%s) and cannot be set as the parent of another namespace", req.hc.Spec.Parent, why)
-		return deny(metav1.StatusReasonForbidden, reason)
+		return webhooks.Deny(metav1.StatusReasonForbidden, reason)
 	}
 
 	// Do all checks that require holding the in-memory lock. Generate a list of server checks we
@@ -172,7 +172,7 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 	// Wait until the namespace has been synced
 	if !ns.Exists() {
 		msg := fmt.Sprintf("HNC has not reconciled namespace %q yet - please try again in a few moments.", ns.Name())
-		return deny(metav1.StatusReasonServiceUnavailable, msg)
+		return webhooks.Deny(metav1.StatusReasonServiceUnavailable, msg)
 	}
 
 	// Deny the request if the namespace has a halted root - but not if it's halted itself, since we
@@ -180,7 +180,7 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 	haltedRoot := ns.GetHaltedRoot()
 	if haltedRoot != "" && haltedRoot != ns.Name() {
 		msg := fmt.Sprintf("The ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration.", haltedRoot, ns.Name())
-		return deny(metav1.StatusReasonForbidden, msg)
+		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
 	}
 
 	return allow("")
@@ -190,7 +190,7 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
 	if ns.IsExternal() && newParent != nil {
 		msg := fmt.Sprintf("Namespace %q is managed by %q, not HNC, so it cannot have a parent in HNC.", ns.Name(), ns.Manager)
-		return deny(metav1.StatusReasonForbidden, msg)
+		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
 	}
 
 	if curParent == newParent {
@@ -200,12 +200,12 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// Prevent changing parent of a subnamespace
 	if ns.IsSub {
 		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a subnamespace of %q", ns.Name(), newParent.Name(), curParent.Name())
-		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+		return webhooks.Deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
 	// non existence of parent namespace -> not allowed
 	if newParent != nil && !newParent.Exists() {
-		return deny(metav1.StatusReasonForbidden, "The requested parent "+newParent.Name()+" does not exist")
+		return webhooks.Deny(metav1.StatusReasonForbidden, "The requested parent "+newParent.Name()+" does not exist")
 	}
 
 	// Is this change structurally legal? Note that this can "leak" information about the hierarchy
@@ -214,7 +214,7 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// have visibility into its ancestry and descendents, and this check can only fail if the new
 	// parent conflicts with something in the _existing_ hierarchy.
 	if reason := ns.CanSetParent(newParent); reason != "" {
-		return deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+		return webhooks.Deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
 	}
 
 	// Prevent overwriting source objects in the descendants after the hierarchy change.
@@ -222,7 +222,7 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		msg := "Cannot update hierarchy because it would overwrite the following object(s):\n"
 		msg += "  * " + strings.Join(co, "\n  * ") + "\n"
 		msg += "To fix this, please rename or remove the conflicting objects first."
-		return deny(metav1.StatusReasonConflict, msg)
+		return webhooks.Deny(metav1.StatusReasonConflict, msg)
 	}
 
 	return allow("")
@@ -394,23 +394,23 @@ func (v *Validator) checkServer(ctx context.Context, log logr.Logger, ui *authnv
 			log.Info("Checking existance", "object", req.nnm, "reason", req.reason)
 			exists, err := v.server.Exists(ctx, req.nnm)
 			if err != nil {
-				return deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking existance for %q, the %s: %s", req.nnm, req.reason, err))
+				return webhooks.Deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking existance for %q, the %s: %s", req.nnm, req.reason, err))
 			}
 
 			if exists {
 				msg := fmt.Sprintf("HNC has not reconciled namespace %q yet - please try again in a few moments.", req.nnm)
-				return deny(metav1.StatusReasonServiceUnavailable, msg)
+				return webhooks.Deny(metav1.StatusReasonServiceUnavailable, msg)
 			}
 
 		case checkAuthz:
 			log.Info("Checking authz", "object", req.nnm, "reason", req.reason)
 			allowed, err := v.server.IsAdmin(ctx, ui, req.nnm)
 			if err != nil {
-				return deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking authz for %q, the %s: %s", req.nnm, req.reason, err))
+				return webhooks.Deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking authz for %q, the %s: %s", req.nnm, req.reason, err))
 			}
 
 			if !allowed {
-				return deny(metav1.StatusReasonUnauthorized, fmt.Sprintf("User %s is not authorized to modify the subtree of %s, which is the %s",
+				return webhooks.Deny(metav1.StatusReasonUnauthorized, fmt.Sprintf("User %s is not authorized to modify the subtree of %s, which is the %s",
 					ui.Username, req.nnm, req.reason))
 			}
 		}
@@ -524,70 +524,4 @@ func allow(msg string) admission.Response {
 			Message: msg,
 		},
 	}}
-}
-
-// deny is a replacement for controller-runtime's admission.Denied() that allows you to set _both_ a
-// human-readable message _and_ a machine-readable reason, and also sets the code correctly instead
-// of hardcoding it to 403 Forbidden.
-func deny(reason metav1.StatusReason, msg string) admission.Response {
-	return admission.Response{AdmissionResponse: k8sadm.AdmissionResponse{
-		Allowed: false,
-		Result: &metav1.Status{
-			Code:    codeFromReason(reason),
-			Message: msg,
-			Reason:  reason,
-		}},
-	}
-}
-
-// denyInvalid is a wrapper for deny with reason metav1.StatusReasonInvalid
-func denyInvalid(field *field.Path, msg string) admission.Response {
-	// We need to set the custom message in both Details and Message fields.
-	//
-	// When manipulating the HNC configuration object via kubectl directly, kubectl
-	// ignores the Message field and displays the Details field if an error is
-	// StatusReasonInvalid (see implementation here: https://github.com/kubernetes/kubectl/blob/master/pkg/cmd/util/helpers.go#L145-L160).
-	//
-	// When manipulating the HNC configuration object via the hns kubectl plugin,
-	// if an error is StatusReasonInvalid, only the Message field will be displayed. This is because
-	// the Error method (https://github.com/kubernetes/client-go/blob/cb664d40f84c27bee45c193e4acb0fcd549b0305/rest/request.go#L1273)
-	// calls FromObject (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L100),
-	// which generates a StatusError (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L35) object.
-	// *StatusError implements the Error interface using only the Message
-	// field (https://github.com/kubernetes/apimachinery/blob/7e441e0f246a2db6cf1855e4110892d1623a80cf/pkg/api/errors/errors.go#L49)).
-	// Therefore, when displaying the error, only the Message field will be available.
-	resp := deny(metav1.StatusReasonInvalid, msg)
-	resp.Result.Details = &metav1.StatusDetails{
-		Causes: []metav1.StatusCause{{
-			Message: msg,
-			Field:   field.String(),
-		}},
-	}
-
-	return resp
-}
-
-// codeFromReason implements the needed subset of
-// https://godoc.org/k8s.io/apimachinery/pkg/apis/meta/v1#StatusReason
-func codeFromReason(reason metav1.StatusReason) int32 {
-	switch reason {
-	case metav1.StatusReasonUnknown:
-		return 500
-	case metav1.StatusReasonUnauthorized:
-		return 401
-	case metav1.StatusReasonForbidden:
-		return 403
-	case metav1.StatusReasonConflict:
-		return 409
-	case metav1.StatusReasonBadRequest:
-		return 400
-	case metav1.StatusReasonInvalid:
-		return 422
-	case metav1.StatusReasonInternalError:
-		return 500
-	case metav1.StatusReasonServiceUnavailable:
-		return 503
-	default:
-		return 500
-	}
 }
