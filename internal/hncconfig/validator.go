@@ -7,15 +7,16 @@ import (
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
-	"sigs.k8s.io/hierarchical-namespaces/internal/selectors"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
+	"sigs.k8s.io/hierarchical-namespaces/internal/selectors"
 	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
 )
 
@@ -96,13 +97,14 @@ func (v *Validator) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 }
 
 func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
+	allErrs := field.ErrorList{}
 	for i, r := range inst.Spec.Resources {
 		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
-		field := field.NewPath("spec", "resources").Index(i)
+		fldPath := field.NewPath("spec", "resources").Index(i)
 		// Validate the type configured is not an HNC enforced type.
 		if api.IsEnforcedType(r) {
-			return webhooks.DenyInvalid(field, fmt.Sprintf("Invalid configuration of %s in the spec, because it's enforced by HNC "+
-				"with 'Propagate' mode. Please remove it from the spec.", gr))
+			fldErr := field.Invalid(fldPath, gr, "always uses the 'Propagate' mode and cannot be configured")
+			allErrs = append(allErrs, fldErr)
 		}
 
 		// Validate the type exists in the apiserver. If yes, convert GR to GVK. We
@@ -110,16 +112,22 @@ func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		// overwriting conflict (forest uses GVK as the key for object reconcilers).
 		gvk, err := v.translator.gvkForGR(gr)
 		if err != nil {
-			return webhooks.DenyInvalid(field,
-				fmt.Sprintf("Cannot find the %s in the apiserver with error: %s", gr, err.Error()))
+			fldErr := field.Invalid(fldPath, gr, "unknown resource")
+			allErrs = append(allErrs, fldErr)
 		}
 
 		// Validate if the configuration of a type already exists. Each type should
 		// only have one configuration.
 		if _, exists := ts[gvk]; exists {
-			return webhooks.DenyInvalid(field, fmt.Sprintf("Duplicate configurations for %s", gr))
+			fldErr := field.Duplicate(fldPath, gr)
+			allErrs = append(allErrs, fldErr)
 		}
 		ts[gvk] = r.Mode
+	}
+	if len(allErrs) > 0 {
+		gk := schema.GroupKind{Group: api.GroupVersion.Group, Kind: "HNCConfiguration"}
+		err := apierrors.NewInvalid(gk, api.HNCConfigSingleton, allErrs)
+		return webhooks.DenyFromAPIError(err)
 	}
 	return webhooks.Allow("")
 }

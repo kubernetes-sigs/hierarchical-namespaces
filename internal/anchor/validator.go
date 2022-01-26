@@ -7,8 +7,11 @@ import (
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
@@ -81,8 +84,15 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 
 	errStrs := validation.IsDNS1123Label(cnm)
 	if len(errStrs) != 0 {
-		msg := fmt.Sprintf("Subnamespace %s is not a valid namespace name: %s", cnm, strings.Join(errStrs, "; "))
-		return webhooks.Deny(metav1.StatusReasonInvalid, msg)
+		fldPath := field.NewPath("metadata", "name")
+		msg := fmt.Sprintf("not a valid namespace name: %s", strings.Join(errStrs, "; "))
+		allErrs := field.ErrorList{
+			field.Invalid(fldPath, cnm, msg),
+		}
+
+		gk := schema.GroupKind{Group: api.GroupVersion.Group, Kind: "SubnamespaceAnchor"}
+		err := apierrors.NewInvalid(gk, cnm, allErrs)
+		return webhooks.DenyFromAPIError(err)
 	}
 
 	switch req.op {
