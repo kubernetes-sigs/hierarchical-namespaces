@@ -2,14 +2,12 @@ package anchor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -55,11 +53,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	decoded, err := v.decodeRequest(log, req)
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
-		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
-	}
-	if decoded == nil {
-		// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688
-		return webhooks.Allow("")
+		return webhooks.DenyBadRequest(err)
 	}
 
 	resp := v.handle(decoded)
@@ -89,23 +83,22 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 		allErrs := field.ErrorList{
 			field.Invalid(fldPath, cnm, msg),
 		}
-
-		gk := schema.GroupKind{Group: api.GroupVersion.Group, Kind: "SubnamespaceAnchor"}
-		err := apierrors.NewInvalid(gk, cnm, allErrs)
-		return webhooks.DenyFromAPIError(err)
+		return webhooks.DenyInvalid(api.SubnamespaceAnchorGK, cnm, allErrs)
 	}
 
 	switch req.op {
 	case k8sadm.Create:
 		// Can't create subnamespaces in unmanaged namespaces
 		if why := config.WhyUnmanaged(pnm); why != "" {
-			msg := fmt.Sprintf("Cannot create a subnamespace in the unmanaged namespace %q (%s)", pnm, why)
-			return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+			err := fmt.Errorf("cannot create a subnamespace in the unmanaged namespace %q (%s)", pnm, why)
+			// TODO(erikgb): Add to list of Invalid field errors?
+			return webhooks.DenyForbidden(api.SubnamespaceAnchorGR, pnm, err)
 		}
 		// Can't create subnamespaces using unmanaged namespace names
 		if why := config.WhyUnmanaged(cnm); why != "" {
-			msg := fmt.Sprintf("Cannot create a subnamespace using the unmanaged namespace name %q (%s)", cnm, why)
-			return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+			err := fmt.Errorf("cannot create a subnamespace using the unmanaged namespace name %q (%s)", cnm, why)
+			// TODO(erikgb): Add to list of Invalid field errors?
+			return webhooks.DenyForbidden(api.SubnamespaceAnchorGR, cnm, err)
 		}
 
 		// Can't create anchors for existing namespaces, _unless_ it's for a subns with a missing
@@ -113,8 +106,9 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 		if cns.Exists() {
 			childIsMissingAnchor := (cns.Parent().Name() == pnm && cns.IsSub)
 			if !childIsMissingAnchor {
-				msg := fmt.Sprintf("Cannot create a subnamespace using an existing namespace name %q", cnm)
-				return webhooks.Deny(metav1.StatusReasonConflict, msg)
+				err := errors.New("cannot create a subnamespace using an existing namespace")
+				// TODO(erikgb): Add to list of Invalid field errors?
+				return webhooks.DenyConflict(api.SubnamespaceAnchorGR, cnm, err)
 			}
 		}
 
@@ -122,8 +116,8 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 		// Don't allow the anchor to be deleted if it's in a good state and has descendants of its own,
 		// unless allowCascadingDeletion is set.
 		if req.anchor.Status.State == api.Ok && cns.ChildNames() != nil && !cns.AllowsCascadingDeletion() {
-			msg := fmt.Sprintf("The subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDeletion flag or make it a leaf first.", cnm)
-			return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+			err := fmt.Errorf("subnamespace %s is not a leaf and doesn't allow cascading deletion. Please set allowCascadingDeletion flag or make it a leaf first", cnm)
+			return webhooks.DenyForbidden(api.SubnamespaceAnchorGR, cnm, err)
 		}
 
 	default:
@@ -138,14 +132,10 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 func (v *Validator) decodeRequest(log logr.Logger, in admission.Request) (*anchorRequest, error) {
 	anchor := &api.SubnamespaceAnchor{}
 	var err error
-	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only uses req.Object,
-	// which will be empty for a DELETE request.
+	// For DELETE request, use DecodeRaw() from req.OldObject, since Decode() only
+	// uses req.Object, which will be empty for a DELETE request.
 	if in.Operation == k8sadm.Delete {
 		log.V(1).Info("Decoding a delete request.")
-		if in.OldObject.Raw == nil {
-			// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688
-			return nil, nil
-		}
 		err = v.decoder.DecodeRaw(in.OldObject, anchor)
 	} else {
 		err = v.decoder.Decode(in, anchor)

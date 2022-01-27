@@ -2,17 +2,17 @@ package namespaces
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
 )
@@ -21,6 +21,10 @@ const (
 	// ServingPath is where the validator will run. Must be kept in sync
 	// with the kubebuilder markers below.
 	ServingPath = "/validate-v1-namespace"
+)
+
+var (
+	namespaceGR = corev1.Resource("namespaces")
 )
 
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
@@ -53,11 +57,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	decoded, err := v.decodeRequest(log, req)
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
-		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
-	}
-	if decoded == nil {
-		// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/688
-		return webhooks.Allow("")
+		return webhooks.DenyBadRequest(err)
 	}
 
 	resp := v.handle(decoded)
@@ -123,8 +123,6 @@ func (v *Validator) handle(req *nsRequest) admission.Response {
 // by any user or service account since only HNC service account is
 // allowed to do so
 func (v *Validator) illegalTreeLabel(req *nsRequest) admission.Response {
-	msg := "Cannot set or modify tree label %q in namespace %q; these can only be modified by HNC."
-
 	oldLabels := map[string]string{}
 	if req.oldns != nil {
 		oldLabels = req.oldns.Labels
@@ -137,7 +135,9 @@ func (v *Validator) illegalTreeLabel(req *nsRequest) admission.Response {
 
 		// Check if new HNC label tree key isn't being added
 		if oldLabels[key] != val {
-			return webhooks.Deny(metav1.StatusReasonForbidden, fmt.Sprintf(msg, key, req.ns.Name))
+			err := fmt.Errorf("cannot set or modify tree label %q in namespace %q; these can only be managed by HNC", key, req.ns.Name)
+			// TODO(erikgb): Invalid field error list better?
+			return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 		}
 	}
 
@@ -145,7 +145,9 @@ func (v *Validator) illegalTreeLabel(req *nsRequest) admission.Response {
 		//  Make sure nothing's been deleted
 		if strings.Contains(key, api.LabelTreeDepthSuffix) {
 			if _, ok := req.ns.Labels[key]; !ok {
-				return webhooks.Deny(metav1.StatusReasonForbidden, fmt.Sprintf(msg, key, req.ns.Name))
+				err := fmt.Errorf("cannot remove tree label %q in namespace %q; these can only be managed by HNC", key, req.ns.Name)
+				// TODO(erikgb): Invalid field error list better?
+				return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 			}
 		}
 	}
@@ -170,10 +172,11 @@ func (v *Validator) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 
 	// An excluded namespaces should not have included-namespace label.
 	if !isIncluded && hasLabel {
-		msg := fmt.Sprintf("You cannot enforce webhook rules on this unmanaged namespace using the %q label. "+
+		err := fmt.Errorf("you cannot enforce webhook rules on this unmanaged namespace using the %q label. "+
 			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
-			"for detail.", api.LabelIncludedNamespace)
-		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+			"for detail", api.LabelIncludedNamespace)
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 
 	// An included-namespace should have the included-namespace label with the
@@ -181,10 +184,11 @@ func (v *Validator) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 	// Note: since we have a mutating webhook to set the correct label if it's
 	// missing before this, we only need to check if the label value is correct.
 	if isIncluded && labelValue != "true" {
-		msg := fmt.Sprintf("You cannot change the value of the %q label. It has to be set as true on all managed namespaces. "+
+		err := fmt.Errorf("you cannot change the value of the %q label. It has to be set as true on all managed namespaces. "+
 			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
-			"for detail.", api.LabelIncludedNamespace)
-		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+			"for detail", api.LabelIncludedNamespace)
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 
 	return webhooks.Allow("")
@@ -200,8 +204,8 @@ func (v *Validator) nameExistsInExternalHierarchy(req *nsRequest) admission.Resp
 		}
 		externalTreeLabels := ns.GetTreeLabels()
 		if _, ok := externalTreeLabels[req.ns.Name]; ok {
-			msg := fmt.Sprintf("The namespace name %q is reserved by the external hierarchy manager %q.", req.ns.Name, v.Forest.Get(nm).Manager)
-			return webhooks.Deny(metav1.StatusReasonAlreadyExists, msg)
+			msg := fmt.Errorf("is reserved by the external hierarchy manager %q", v.Forest.Get(nm).Manager)
+			return webhooks.DenyConflict(namespaceGR, req.ns.Name, msg)
 		}
 	}
 	return webhooks.Allow("")
@@ -214,9 +218,10 @@ func (v *Validator) nameExistsInExternalHierarchy(req *nsRequest) admission.Resp
 func (v *Validator) conflictBetweenParentAndExternalManager(req *nsRequest, ns *forest.Namespace) admission.Response {
 	mgr := req.ns.Annotations[api.AnnotationManagedBy]
 	if mgr != "" && mgr != api.MetaGroup && ns.Parent() != nil {
-		msg := fmt.Sprintf("Namespace %q is a child of %q. Namespaces with parents defined by HNC cannot also be managed externally. "+
-			"To manage this namespace with %q, first make it a root in HNC.", ns.Name(), ns.Parent().Name(), mgr)
-		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+		err := fmt.Errorf("is a child of %q. Namespaces with parents defined by HNC cannot also be managed externally. "+
+			"To manage this namespace with %q, first make it a root in HNC", ns.Parent().Name(), mgr)
+		// TODO(erikgb): Conflict error better?
+		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 	return webhooks.Allow("")
 }
@@ -233,8 +238,8 @@ func (v *Validator) cannotDeleteSubnamespace(req *nsRequest) admission.Response 
 	// See issue https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/847.
 	anchorExists := v.Forest.Get(parent).HasAnchor(req.ns.Name)
 	if anchorExists {
-		msg := fmt.Sprintf("The namespace %s is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace.", req.ns.Name, parent)
-		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+		err := fmt.Errorf("is a subnamespace. Please delete the anchor from the parent namespace %s to delete the subnamespace", parent)
+		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 	return webhooks.Allow("")
 }
@@ -246,8 +251,8 @@ func (v *Validator) illegalCascadingDeletion(ns *forest.Namespace) admission.Res
 
 	for _, cnm := range ns.ChildNames() {
 		if v.Forest.Get(cnm).IsSub {
-			msg := "This namespaces contains subnamespaces. Please remove all subnamespaces before deleting this namespace, or set 'allowCascadingDeletion' to delete them automatically."
-			return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+			err := errors.New("contains subnamespaces. Please remove all subnamespaces before deleting this namespace, or set 'allowCascadingDeletion' to delete them automatically")
+			return webhooks.DenyForbidden(namespaceGR, ns.Name(), err)
 		}
 	}
 	return webhooks.Allow("no subnamespaces found")

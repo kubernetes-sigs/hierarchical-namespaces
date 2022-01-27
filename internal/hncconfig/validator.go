@@ -2,13 +2,12 @@ package hncconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/go-logr/logr"
 	k8sadm "k8s.io/api/admission/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/rest"
@@ -49,7 +48,9 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 
 	if req.Operation == k8sadm.Delete {
 		if req.Name == api.HNCConfigSingleton {
-			return webhooks.Deny(metav1.StatusReasonForbidden, "Deleting the 'config' object is forbidden")
+			err := errors.New("deleting the 'config' object is forbidden")
+			// TODO(erikgb): MethodNotSupported error better?
+			return webhooks.DenyForbidden(api.HNCConfigurationGR, api.HNCConfigSingleton, err)
 		} else {
 			// We allow deleting other objects. We should never enter this case with the CRD validation. We introduced
 			// the CRD validation in v0.6. Before that, it was protected by the validation controller. If users somehow
@@ -62,7 +63,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	inst := &api.HNCConfiguration{}
 	if err := v.decoder.Decode(req, inst); err != nil {
 		log.Error(err, "Couldn't decode request")
-		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
+		return webhooks.DenyBadRequest(err)
 	}
 
 	resp := v.handle(inst)
@@ -118,9 +119,7 @@ func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		ts[gvk] = r.Mode
 	}
 	if len(allErrs) > 0 {
-		gk := schema.GroupKind{Group: api.GroupVersion.Group, Kind: "HNCConfiguration"}
-		err := apierrors.NewInvalid(gk, api.HNCConfigSingleton, allErrs)
-		return webhooks.DenyFromAPIError(err)
+		return webhooks.DenyInvalid(api.HNCConfigurationGK, api.HNCConfigSingleton, allErrs)
 	}
 	return webhooks.Allow("")
 }
@@ -139,7 +138,9 @@ func (v *Validator) checkForest(ts gvkSet) admission.Response {
 			msg := fmt.Sprintf("Cannot update configuration because setting type %q to 'Propagate' mode would overwrite user-created object(s):\n", gvk)
 			msg += strings.Join(conflicts, "\n")
 			msg += "\nTo fix this, please rename or remove the conflicting objects first."
-			return webhooks.Deny(metav1.StatusReasonConflict, msg)
+			err := errors.New(msg)
+			// TODO(erikgb): Invalid field error better?
+			return webhooks.DenyConflict(api.HNCConfigurationGR, api.Singleton, err)
 		}
 	}
 

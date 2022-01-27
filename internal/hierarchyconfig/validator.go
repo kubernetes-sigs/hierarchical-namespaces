@@ -2,6 +2,7 @@ package hierarchyconfig
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	authnv1 "k8s.io/api/authentication/v1"
 	authzv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -92,7 +92,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	decoded, err := v.decodeRequest(req)
 	if err != nil {
 		log.Error(err, "Couldn't decode request")
-		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
+		return webhooks.DenyBadRequest(err)
 	}
 
 	resp := v.handle(ctx, log, decoded)
@@ -124,19 +124,19 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 	}
 
 	if why := config.WhyUnmanaged(req.hc.Namespace); why != "" {
-		reason := fmt.Sprintf("Namespace %q is not managed by HNC (%s) and cannot be set as a child of another namespace", req.hc.Namespace, why)
-		return webhooks.Deny(metav1.StatusReasonForbidden, reason)
+		err := fmt.Errorf("namespace %q is not managed by HNC (%s) and cannot be set as a child of another namespace", req.hc.Namespace, why)
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 	if why := config.WhyUnmanaged(req.hc.Spec.Parent); why != "" {
-		reason := fmt.Sprintf("Namespace %q is not managed by HNC (%s) and cannot be set as the parent of another namespace", req.hc.Spec.Parent, why)
-		return webhooks.Deny(metav1.StatusReasonForbidden, reason)
+		err := fmt.Errorf("namespace %q is not managed by HNC (%s) and cannot be set as the parent of another namespace", req.hc.Spec.Parent, why)
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	allErrs := validateManagedMeta(req.hc)
 	if len(allErrs) > 0 {
-		gk := schema.GroupKind{Group: api.GroupVersion.Group, Kind: "HierarchyConfiguration"}
-		err := apierrors.NewInvalid(gk, req.hc.Name, allErrs)
-		return webhooks.DenyFromAPIError(err)
+		return webhooks.DenyInvalid(api.HierarchyConfigurationGK, req.hc.Name, allErrs)
 	}
 
 	// Do all checks that require holding the in-memory lock. Generate a list of server checks we
@@ -182,15 +182,16 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 	// Wait until the namespace has been synced
 	if !ns.Exists() {
 		msg := fmt.Sprintf("HNC has not reconciled namespace %q yet - please try again in a few moments.", ns.Name())
-		return webhooks.Deny(metav1.StatusReasonServiceUnavailable, msg)
+		return webhooks.DenyServiceUnavailable(msg)
 	}
 
 	// Deny the request if the namespace has a halted root - but not if it's halted itself, since we
 	// may be trying to resolve the halted condition.
 	haltedRoot := ns.GetHaltedRoot()
 	if haltedRoot != "" && haltedRoot != ns.Name() {
-		msg := fmt.Sprintf("The ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration.", haltedRoot, ns.Name())
-		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+		err := fmt.Errorf("ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration", haltedRoot, ns.Name())
+		// TODO(erikgb): InternalError better?
+		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	return allow("")
@@ -199,8 +200,9 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 // checkParent validates if the parent is legal based on the current in-memory state of the forest.
 func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
 	if ns.IsExternal() && newParent != nil {
-		msg := fmt.Sprintf("Namespace %q is managed by %q, not HNC, so it cannot have a parent in HNC.", ns.Name(), ns.Manager)
-		return webhooks.Deny(metav1.StatusReasonForbidden, msg)
+		err := fmt.Errorf("namespace %q is managed by %q, not HNC, so it cannot have a parent in HNC", ns.Name(), ns.Manager)
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	if curParent == newParent {
@@ -209,13 +211,16 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 
 	// Prevent changing parent of a subnamespace
 	if ns.IsSub {
-		reason := fmt.Sprintf("Cannot set the parent of %q to %q because it's a subnamespace of %q", ns.Name(), newParent.Name(), curParent.Name())
-		return webhooks.Deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+		err := fmt.Errorf("illegal parent: Cannot set the parent of %q to %q because it's a subnamespace of %q", ns.Name(), newParent.Name(), curParent.Name())
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyConflict(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	// non existence of parent namespace -> not allowed
 	if newParent != nil && !newParent.Exists() {
-		return webhooks.Deny(metav1.StatusReasonForbidden, "The requested parent "+newParent.Name()+" does not exist")
+		err := fmt.Errorf("requested parent %q does not exist", newParent.Name())
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	// Is this change structurally legal? Note that this can "leak" information about the hierarchy
@@ -224,7 +229,9 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// have visibility into its ancestry and descendents, and this check can only fail if the new
 	// parent conflicts with something in the _existing_ hierarchy.
 	if reason := ns.CanSetParent(newParent); reason != "" {
-		return webhooks.Deny(metav1.StatusReasonConflict, "Illegal parent: "+reason)
+		err := fmt.Errorf("illegal parent: %s", reason)
+		// TODO(erikgb): Invalid field error better?
+		return webhooks.DenyConflict(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	// Prevent overwriting source objects in the descendants after the hierarchy change.
@@ -232,7 +239,8 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 		msg := "Cannot update hierarchy because it would overwrite the following object(s):\n"
 		msg += "  * " + strings.Join(co, "\n  * ") + "\n"
 		msg += "To fix this, please rename or remove the conflicting objects first."
-		return webhooks.Deny(metav1.StatusReasonConflict, msg)
+		err := errors.New(msg)
+		return webhooks.DenyConflict(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	return allow("")
@@ -401,26 +409,28 @@ func (v *Validator) checkServer(ctx context.Context, log logr.Logger, ui *authnv
 	for _, req := range reqs {
 		switch req.checkType {
 		case checkMissing:
-			log.Info("Checking existance", "object", req.nnm, "reason", req.reason)
+			log.Info("Checking existence", "object", req.nnm, "reason", req.reason)
 			exists, err := v.server.Exists(ctx, req.nnm)
 			if err != nil {
-				return webhooks.Deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking existance for %q, the %s: %s", req.nnm, req.reason, err))
+				err = fmt.Errorf("while checking existance for %q, the %s: %w", req.nnm, req.reason, err)
+				return webhooks.DenyInternalError(err)
 			}
 
 			if exists {
 				msg := fmt.Sprintf("HNC has not reconciled namespace %q yet - please try again in a few moments.", req.nnm)
-				return webhooks.Deny(metav1.StatusReasonServiceUnavailable, msg)
+				return webhooks.DenyServiceUnavailable(msg)
 			}
 
 		case checkAuthz:
 			log.Info("Checking authz", "object", req.nnm, "reason", req.reason)
 			allowed, err := v.server.IsAdmin(ctx, ui, req.nnm)
 			if err != nil {
-				return webhooks.Deny(metav1.StatusReasonUnknown, fmt.Sprintf("while checking authz for %q, the %s: %s", req.nnm, req.reason, err))
+				err = fmt.Errorf("while checking authz for %q, the %s: %w", req.nnm, req.reason, err)
+				return webhooks.DenyInternalError(err)
 			}
 
 			if !allowed {
-				return webhooks.Deny(metav1.StatusReasonUnauthorized, fmt.Sprintf("User %s is not authorized to modify the subtree of %s, which is the %s",
+				return webhooks.DenyUnauthorized(fmt.Sprintf("User %s is not authorized to modify the subtree of %s, which is the %s",
 					ui.Username, req.nnm, req.reason))
 			}
 		}
@@ -433,8 +443,7 @@ func (v *Validator) checkServer(ctx context.Context, log logr.Logger, ui *authnv
 // and b) factor out in unit tests.
 func (v *Validator) decodeRequest(in admission.Request) (*request, error) {
 	hc := &api.HierarchyConfiguration{}
-	err := v.decoder.Decode(in, hc)
-	if err != nil {
+	if err := v.decoder.Decode(in, hc); err != nil {
 		return nil, err
 	}
 
@@ -484,7 +493,7 @@ func (r *realClient) Exists(ctx context.Context, nnm string) (bool, error) {
 	nsn := types.NamespacedName{Name: nnm}
 	ns := &corev1.Namespace{}
 	if err := r.client.Get(ctx, nsn, ns); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err

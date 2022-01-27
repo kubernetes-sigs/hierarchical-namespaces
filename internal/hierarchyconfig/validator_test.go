@@ -96,8 +96,8 @@ func TestStructure(t *testing.T) {
 	}{
 		{name: "ok", nnm: "a", pnm: "c"},
 		{name: "missing parent", nnm: "a", pnm: "brumpf", fail: true, msgContains: "does not exist"},
-		{name: "self-cycle", nnm: "a", pnm: "a", fail: true, msgContains: "Illegal parent"},
-		{name: "other cycle", nnm: "a", pnm: "b", fail: true, msgContains: "Illegal parent"},
+		{name: "self-cycle", nnm: "a", pnm: "a", fail: true, msgContains: "illegal parent"},
+		{name: "other cycle", nnm: "a", pnm: "b", fail: true, msgContains: "illegal parent"},
 		// Since we only set `kube-system` as excluded namespaces for this test, we
 		// should see denial message of excluded namespace for `kube-system`. As for
 		// `kube-public`, we will see missing parent/child instead of excluded
