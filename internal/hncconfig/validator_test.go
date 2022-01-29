@@ -20,7 +20,7 @@ import (
 )
 
 var (
-	// This mapping is used to implement a fake grTranslator with GVKFor() method.
+	// This mapping is used to implement a fake resourceMapper.
 	gr2gvk = map[schema.GroupResource]schema.GroupVersionKind{
 		{Group: api.RBACGroup, Resource: api.RoleResource}:        {Group: api.RBACGroup, Version: "v1", Kind: api.RoleKind},
 		{Group: api.RBACGroup, Resource: api.RoleBindingResource}: {Group: api.RBACGroup, Version: "v1", Kind: api.RoleBindingKind},
@@ -64,9 +64,9 @@ func TestDeletingOtherObject(t *testing.T) {
 func TestRBACTypes(t *testing.T) {
 	f := forest.NewForest()
 	validator := &Validator{
-		translator: fakeGRTranslator{},
-		Forest:     f,
-		Log:        zap.New(),
+		mapper: fakeResourceMapper{},
+		Forest: f,
+		Log:    zap.New(),
 	}
 
 	tests := []struct {
@@ -104,11 +104,11 @@ func TestRBACTypes(t *testing.T) {
 }
 
 func TestNonRBACTypes(t *testing.T) {
-	f := fakeGRTranslator{"crontabs"}
+	f := fakeResourceMapper{"crontabs"}
 	tests := []struct {
 		name      string
 		configs   []api.ResourceSpec
-		validator fakeGRTranslator
+		validator fakeResourceMapper
 		allow     bool
 	}{
 		{
@@ -152,9 +152,9 @@ func TestNonRBACTypes(t *testing.T) {
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
 			validator := &Validator{
-				translator: tc.validator,
-				Forest:     forest.NewForest(),
-				Log:        zap.New(),
+				mapper: tc.validator,
+				Forest: forest.NewForest(),
+				Log:    zap.New(),
 			}
 
 			got := validator.handle(c)
@@ -209,9 +209,9 @@ func TestPropagateConflict(t *testing.T) {
 			c.Name = api.HNCConfigSingleton
 			f := foresttest.Create(tc.forest)
 			validator := &Validator{
-				translator: fakeGRTranslator{},
-				Forest:     f,
-				Log:        zap.New(),
+				mapper: fakeResourceMapper{},
+				Forest: f,
+				Log:    zap.New(),
 			}
 
 			// Add source objects to the forest.
@@ -235,11 +235,11 @@ func TestPropagateConflict(t *testing.T) {
 	}
 }
 
-// fakeGRTranslator implements grTranslator. Any kind that are in the slice are
-// denied; anything else are translated.
-type fakeGRTranslator []string
+// fakeResourceMapper implements resourceMapper for unit tests.
+// Any kind that are in the slice are denied; anything else are translated.
+type fakeResourceMapper []string
 
-func (f fakeGRTranslator) gvkForGR(gr schema.GroupResource) (schema.GroupVersionKind, error) {
+func (f fakeResourceMapper) NamespacedKindFor(gr schema.GroupResource) (schema.GroupVersionKind, error) {
 	for _, r := range f {
 		if r == gr.Resource {
 			return schema.GroupVersionKind{}, fmt.Errorf("%s does not exist", gr)

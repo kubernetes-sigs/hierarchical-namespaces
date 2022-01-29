@@ -15,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/apimeta"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/selectors"
 	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
@@ -32,18 +33,10 @@ const (
 // +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-hnc-x-k8s-io-v1alpha2-hncconfigurations,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=hncconfigurations,sideEffects=None,verbs=create;update;delete,versions=v1alpha2,name=hncconfigurations.hnc.x-k8s.io
 
 type Validator struct {
-	Log        logr.Logger
-	Forest     *forest.Forest
-	translator grTranslator
-	decoder    *admission.Decoder
-}
-
-// grTranslator checks if a resource exists. The check should typically be
-// performed against the apiserver, but need to be stubbed out in unit testing.
-type grTranslator interface {
-	// gvkForGR returns the mapping GVK for a GR if it exists in the apiserver. If
-	// it doesn't exist, return the error.
-	gvkForGR(gr schema.GroupResource) (schema.GroupVersionKind, error)
+	Log     logr.Logger
+	Forest  *forest.Forest
+	mapper  resourceMapper
+	decoder *admission.Decoder
 }
 
 type gvkSet map[schema.GroupVersionKind]api.SynchronizationMode
@@ -107,12 +100,12 @@ func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 			allErrs = append(allErrs, fldErr)
 		}
 
-		// Validate the type exists in the apiserver. If yes, convert GR to GVK. We
-		// use GVK because we will need to checkForest() later to avoid source
+		// Validate the resource exists and is namespaced. And convert GR to GVK.
+		// We use GVK because we will need to checkForest() later to avoid source
 		// overwriting conflict (forest uses GVK as the key for object reconcilers).
-		gvk, err := v.translator.gvkForGR(gr)
+		gvk, err := v.mapper.NamespacedKindFor(gr)
 		if err != nil {
-			fldErr := field.Invalid(fldPath, gr, "unknown resource")
+			fldErr := field.Invalid(fldPath, gr, err.Error())
 			allErrs = append(allErrs, fldErr)
 		}
 
@@ -228,24 +221,12 @@ func (a ancestorObjects) add(onm string, ns *forest.Namespace) {
 	a[onm] = append(a[onm], ns.Name())
 }
 
-// realGRTranslator implements grTranslator, and is not used during unit tests.
-type realGRTranslator struct {
-	config *rest.Config
-}
-
-// gvkForGR searches a given GR in the apiserver and returns the mapping GVK. It
-// returns an empty GVK and an error if the GR doesn't exist.
-func (r *realGRTranslator) gvkForGR(gr schema.GroupResource) (schema.GroupVersionKind, error) {
-	allRes, err := getAPIGroupResources(r.config)
-	if err != nil {
-		return schema.GroupVersionKind{}, err
-	}
-
-	return gvkForGR(gr, allRes)
-}
-
 func (v *Validator) InjectConfig(cf *rest.Config) error {
-	v.translator = &realGRTranslator{config: cf}
+	mapper, err := apimeta.NewGroupKindMapper(cf)
+	if err != nil {
+		return err
+	}
+	v.mapper = mapper
 	return nil
 }
 

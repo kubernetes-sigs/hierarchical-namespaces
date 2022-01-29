@@ -7,6 +7,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 
 	"sigs.k8s.io/hierarchical-namespaces/internal/anchor"
+	"sigs.k8s.io/hierarchical-namespaces/internal/apimeta"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hierarchyconfig"
@@ -35,11 +36,17 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, us
 		return fmt.Errorf("cannot create anchor reconciler: %s", err.Error())
 	}
 
+	mapper, err := apimeta.NewGroupKindMapper(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("cannot create API mapper: %w", err)
+	}
+
 	// Create the HNC Config reconciler.
 	hnccfgr := &hncconfig.Reconciler{
 		Client:                 mgr.GetClient(),
 		Log:                    ctrl.Log.WithName("hncconfig").WithName("reconcile"),
 		Manager:                mgr,
+		ResourceMapper:         mapper,
 		Forest:                 f,
 		Trigger:                make(chan event.GenericEvent),
 		HierarchyConfigUpdates: hcChan,
