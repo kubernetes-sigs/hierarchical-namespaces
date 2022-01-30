@@ -51,6 +51,7 @@ var (
 )
 
 var (
+	probeAddr               string
 	metricsAddr             string
 	enableStackdriver       bool
 	maxReconciles           int
@@ -89,6 +90,7 @@ func main() {
 	metricsCleanupFn := enableMetrics()
 	defer metricsCleanupFn()
 	mgr := createManager()
+	setupChecks(mgr)
 
 	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
 	setupLog.Info("Starting certificate generation")
@@ -112,6 +114,7 @@ func main() {
 
 func parseFlags() {
 	setupLog.Info("Parsing flags")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableStackdriver, "enable-stackdriver", true, "If true, export metrics to stackdriver")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", false,
@@ -217,17 +220,29 @@ func createManager() ctrl.Manager {
 	// it turns out to be harmful.
 	cfg.Burst = int(cfg.QPS * 1.5)
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: metricsAddr,
-		LeaderElection:     enableLeaderElection,
-		LeaderElectionID:   leaderElectionId,
-		Port:               webhookServerPort,
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		HealthProbeBindAddress: probeAddr,
+		LeaderElection:         enableLeaderElection,
+		LeaderElectionID:       leaderElectionId,
+		Port:                   webhookServerPort,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
 	}
 	return mgr
+}
+
+func setupChecks(mgr ctrl.Manager) {
+	if err := mgr.AddHealthzCheck("healthz", mgr.GetWebhookServer().StartedChecker()); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", mgr.GetWebhookServer().StartedChecker()); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
+	}
 }
 
 func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
