@@ -179,8 +179,6 @@ func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 	name := inst.GetName()
 	kind := inst.GetKind()
 	group := inst.GroupVersionKind().Group
-	labels := inst.GetLabels()
-
 	// exclusion by name
 	for _, excludedResourceName := range cmExclusionsByName {
 		if group == "" && kind == "ConfigMap" && name == excludedResourceName {
@@ -190,7 +188,7 @@ func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 
 	// exclusion by labels
 	for _, res := range exclusionByLabels {
-		gotLabelValue, ok := labels[res.Key]
+		gotLabelValue, ok := inst.GetLabels()[res.Key]
 		// check for presence has to be explicit, as empty label values are allowed and a
 		// nonexisting key in the `labels` map will also return an empty string ("") - potentially
 		// causing false matches if `ok` is not checked

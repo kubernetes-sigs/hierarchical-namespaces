@@ -141,7 +141,7 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 
 	// Do all checks that require holding the in-memory lock. Generate a list of server checks we
 	// should perform once the lock is released.
-	serverChecks, resp := v.checkForest(log, req.hc)
+	serverChecks, resp := v.checkForest(req.hc)
 	if !resp.Allowed {
 		return resp
 	}
@@ -154,7 +154,7 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 // forest. If it is, it returns a list of checks we need to perform against the apiserver in order
 // to be allowed to make the change; these checks are executed _after_ the in-memory lock is
 // released.
-func (v *Validator) checkForest(log logr.Logger, hc *api.HierarchyConfiguration) ([]serverCheck, admission.Response) {
+func (v *Validator) checkForest(hc *api.HierarchyConfiguration) ([]serverCheck, admission.Response) {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
 
@@ -174,7 +174,7 @@ func (v *Validator) checkForest(log logr.Logger, hc *api.HierarchyConfiguration)
 	}
 
 	// The structure looks good. Get the list of namespaces we need server checks on.
-	return v.getServerChecks(log, ns, curParent, newParent), allow("")
+	return v.getServerChecks(curParent, newParent), allow("")
 }
 
 // checkNS looks for problems with the current namespace that should prevent changes.
@@ -335,7 +335,7 @@ type serverCheck struct {
 // admin trying to resolve the cycle has permissions on *all* the namespaces in the cycle. For the
 // new parent, perhaps we should ban moving a namespace *to* a tree with a cycle in it, but that's
 // harder to implement and seems like it's not worth the effort.
-func (v *Validator) getServerChecks(log logr.Logger, ns, curParent, newParent *forest.Namespace) []serverCheck {
+func (v *Validator) getServerChecks(curParent, newParent *forest.Namespace) []serverCheck {
 	// No need for any checks if nothing's changing.
 	if curParent == newParent {
 		// Note that this also catches the case where both are nil

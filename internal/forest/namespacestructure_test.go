@@ -74,10 +74,10 @@ func TestDescendantNames(t *testing.T) {
 	//          |
 	//         789
 	kinship := map[string][]string{
-		"a":   []string{"b", "c"},
-		"b":   []string{"x", "y", "z"},
-		"c":   []string{"123", "456"},
-		"123": []string{"789"},
+		"a":   {"b", "c"},
+		"b":   {"x", "y", "z"},
+		"c":   {"123", "456"},
+		"123": {"789"},
 	}
 
 	// Create the forest

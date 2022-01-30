@@ -183,7 +183,7 @@ func recordPeakConcurrentReconciles() {
 		recordMetric(peak.concurrentHierConfigReconcile, hierConfigReconcileConcurrent)
 		peak.concurrentHierConfigReconcile = 0
 
-		for gk, _ := range peak.concurrentObjectReconcile {
+		for gk := range peak.concurrentObjectReconcile {
 			recordObjectMetric(peak.concurrentObjectReconcile[gk], objectReconcileConcurrent, gk)
 			peak.concurrentObjectReconcile[gk] = 0
 		}

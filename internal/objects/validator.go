@@ -96,7 +96,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	}
 
 	// Run the actual logic.
-	resp := v.handle(ctx, log, req.Operation, inst, oldInst)
+	resp := v.handle(ctx, req.Operation, inst, oldInst)
 	if !resp.Allowed {
 		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	} else {
@@ -115,7 +115,7 @@ func (v *Validator) isPropagateType(gvk metav1.GroupVersionKind) bool {
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
-func (v *Validator) handle(ctx context.Context, log logr.Logger, op k8sadm.Operation, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (v *Validator) handle(ctx context.Context, op k8sadm.Operation, inst, oldInst *unstructured.Unstructured) admission.Response {
 	// Find out if the object was/is inherited, and where it's inherited from.
 	oldSource, oldInherited := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
 	newSource, newInherited := metadata.GetLabel(inst, api.LabelInheritedFrom)
@@ -157,7 +157,7 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, op k8sadm.Opera
 
 func validateSelectorAnnot(inst *unstructured.Unstructured) string {
 	annots := inst.GetAnnotations()
-	for key, _ := range annots {
+	for key := range annots {
 		// for example: segs = ["propagate.hnc.x-k8s.io", "select"]
 		segs := strings.SplitN(key, "/", 2)
 		// for example: prefix = ["propagate", "hnc.x-k8s.io"]

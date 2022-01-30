@@ -159,7 +159,7 @@ func (ns *Namespace) DescendantNames() []string {
 		return nil
 	}
 	d := []string{}
-	for k, _ := range ds {
+	for k := range ds {
 		d = append(d, k)
 	}
 	sort.Strings(d)

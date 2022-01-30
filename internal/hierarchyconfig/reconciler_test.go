@@ -32,7 +32,7 @@ var _ = Describe("Hierarchy", func() {
 		fooName = CreateNS(ctx, "foo")
 		barName = CreateNS(ctx, "bar")
 		config.SetNamespaces("")
-		config.SetManagedMeta(nil, nil)
+		Expect(config.SetManagedMeta(nil, nil)).Should(Succeed())
 	})
 
 	It("should set a child on the parent", func() {
@@ -408,7 +408,7 @@ var _ = Describe("Hierarchy", func() {
 	})
 
 	It("should propagate managed labels and not unmanaged labels", func() {
-		config.SetManagedMeta([]string{"legal-.*"}, nil)
+		Expect(config.SetManagedMeta([]string{"legal-.*"}, nil)).Should(Succeed())
 
 		// Set the managed label and confirm that it only exists on one namespace
 		fooHier := NewHierarchy(fooName)
@@ -454,7 +454,7 @@ var _ = Describe("Hierarchy", func() {
 	})
 
 	It("should propagate managed annotations and not unmanaged annotations", func() {
-		config.SetManagedMeta(nil, []string{"legal-.*"})
+		Expect(config.SetManagedMeta(nil, []string{"legal-.*"})).Should(Succeed())
 
 		// Set the managed annotation and confirm that it only exists on one namespace
 		fooHier := NewHierarchy(fooName)

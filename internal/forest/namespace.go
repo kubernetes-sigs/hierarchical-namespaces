@@ -174,7 +174,7 @@ func (ns *Namespace) SetAnchors(anchors []string) (diff []string) {
 		}
 	}
 
-	for nm, _ := range add {
+	for nm := range add {
 		// This new anchor is not in the old anchor list.
 		diff = append(diff, nm)
 	}

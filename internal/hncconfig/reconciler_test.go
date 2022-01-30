@@ -448,17 +448,17 @@ func getNamedHNCConfigCondition(ctx context.Context, nm, tp, reason string) func
 // If you're making a change that won't be reflected in the status (e.g. removing Role), call
 // updateTypeConfig, which doesn't confirm that the mode's taken effect.
 func setTypeConfig(ctx context.Context, group, resource string, mode api.SynchronizationMode) {
-	updateTypeConfigWithOffset(1, ctx, group, resource, mode)
+	updateTypeConfigWithOffset(ctx, 1, group, resource, mode)
 	EventuallyWithOffset(1, typeStatusMode(ctx, group, resource)).Should(Equal(mode), "While setting type config for %s/%s to %s", group, resource, mode)
 }
 
 // updateTypeConfig is like setTypeConfig but it doesn't wait to confirm that the change was
 // successful.
 func updateTypeConfig(ctx context.Context, group, resource string, mode api.SynchronizationMode) {
-	updateTypeConfigWithOffset(1, ctx, group, resource, mode)
+	updateTypeConfigWithOffset(ctx, 1, group, resource, mode)
 }
 
-func updateTypeConfigWithOffset(offset int, ctx context.Context, group, resource string, mode api.SynchronizationMode) {
+func updateTypeConfigWithOffset(ctx context.Context, offset int, group, resource string, mode api.SynchronizationMode) {
 	EventuallyWithOffset(offset+1, func() error {
 		// Get the existing spec from the apiserver
 		c, err := GetHNCConfig(ctx)

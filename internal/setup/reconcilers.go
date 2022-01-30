@@ -17,7 +17,9 @@ import (
 //
 // This function is called both from main.go as well as from the integ tests.
 func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, useFakeClient bool) error {
-	crd.Setup(mgr, useFakeClient)
+	if err := crd.Setup(mgr, useFakeClient); err != nil {
+		return err
+	}
 
 	hcChan := make(chan event.GenericEvent)
 	anchorChan := make(chan event.GenericEvent)

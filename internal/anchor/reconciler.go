@@ -355,7 +355,7 @@ func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *a
 
 // deleteInstance deletes the anchor instance. Note: Make sure there's no
 // finalizers on the instance before calling this function.
-func (r *Reconciler) deleteInstance(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor) error {
+func (r *Reconciler) deleteInstance(ctx context.Context, inst *api.SubnamespaceAnchor) error {
 	if err := r.Delete(ctx, inst); err != nil {
 		return fmt.Errorf("while deleting on apiserver: %w", err)
 	}

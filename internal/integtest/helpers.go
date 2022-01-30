@@ -328,17 +328,16 @@ func MakeObjectWithLabels(ctx context.Context, resource string, nsName,
 
 // UpdateObjectWithAnnotations gets an object given it's kind, nsName and name, adds the annotation
 // and updates this object
-func UpdateObjectWithAnnotations(ctx context.Context, resource string, nsName,
-	name string, a map[string]string) error {
+func UpdateObjectWithAnnotations(ctx context.Context, resource, nsName, name string, a map[string]string) {
 	nnm := types.NamespacedName{Namespace: nsName, Name: name}
 	inst := &unstructured.Unstructured{}
 	inst.SetGroupVersionKind(GVKs[resource])
 	err := K8sClient.Get(ctx, nnm, inst)
-	if err != nil {
-		return err
-	}
+	Expect(err).ShouldNot(HaveOccurred())
+
 	inst.SetAnnotations(a)
-	return K8sClient.Update(ctx, inst)
+	err = K8sClient.Update(ctx, inst)
+	Expect(err).ShouldNot(HaveOccurred())
 }
 
 // DeleteObject deletes an object of the given kind in a specific namespace. The kind and

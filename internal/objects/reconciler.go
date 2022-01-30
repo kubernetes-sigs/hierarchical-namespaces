@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"sync"
 	"time"
 
@@ -121,7 +120,7 @@ func (r *Reconciler) SyncNamespace(ctx context.Context, log logr.Logger, ns stri
 	}
 
 	// Enqueue local copies of the originals in the ancestors to catch any new or changed objects.
-	r.enqueuePropagatedObjects(ctx, log, ns)
+	r.enqueuePropagatedObjects(log, ns)
 
 	return nil
 }
@@ -224,14 +223,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	// Sync with the forest and perform any required actions.
-	actions, srcInst := r.syncWithForest(ctx, log, inst)
+	actions, srcInst := r.syncWithForest(log, inst)
 	return resp, r.operate(ctx, log, actions, inst, srcInst)
 }
 
 // syncWithForest syncs the object instance with the in-memory forest. It returns the action to take on
 // the object (delete, write or do nothing) and a source object if the action is to write it. It can
 // also update the forest if a source object is added or removed.
-func (r *Reconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
+func (r *Reconciler) syncWithForest(log logr.Logger, inst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
 	// This is the only place we should lock the forest in each Reconcile, so this fn needs to return
 	// everything relevant for the rest of the Reconcile. This fn shouldn't contact the apiserver since
 	// that's a slow operation and everything will block on the lock being held.
@@ -240,17 +239,17 @@ func (r *Reconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *
 
 	// If this namespace isn't ready to be synced (or is never synced), early exit. We'll be called
 	// again if this changes.
-	if r.skipNamespace(ctx, log, inst) {
+	if r.skipNamespace(log, inst) {
 		return actionNop, nil
 	}
 
 	// If the object's missing and we know how to handle it, return early.
-	if missingAction := r.syncMissingObject(ctx, log, inst); missingAction != actionUnknown {
+	if missingAction := r.syncMissingObject(log, inst); missingAction != actionUnknown {
 		return missingAction, nil
 	}
 
 	// Update the forest and get the intended action.
-	action, srcInst := r.syncObject(ctx, log, inst)
+	action, srcInst := r.syncObject(log, inst)
 
 	// If the namespace has a critical condition, we shouldn't actually take any action, regardless of
 	// what we'd _like_ to do. We still needed to sync the forest since we want to know when objects
@@ -264,7 +263,7 @@ func (r *Reconciler) syncWithForest(ctx context.Context, log logr.Logger, inst *
 	return action, srcInst
 }
 
-func (r *Reconciler) skipNamespace(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) bool {
+func (r *Reconciler) skipNamespace(log logr.Logger, inst *unstructured.Unstructured) bool {
 	// If it's about to be deleted, do nothing, just wait for it to be actually deleted.
 	if !inst.GetDeletionTimestamp().IsZero() {
 		return true
@@ -284,7 +283,7 @@ func (r *Reconciler) skipNamespace(ctx context.Context, log logr.Logger, inst *u
 // determine a final action to take, it returns that action, otherwise it returns actionUnknown
 // which indicates that we need to call the regular syncObject method. Note that this method may
 // modify `inst`.
-func (r *Reconciler) syncMissingObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) syncAction {
+func (r *Reconciler) syncMissingObject(log logr.Logger, inst *unstructured.Unstructured) syncAction {
 	// If the object exists, skip.
 	if inst.GetCreationTimestamp() != (v1.Time{}) {
 		return actionUnknown
@@ -295,7 +294,7 @@ func (r *Reconciler) syncMissingObject(ctx context.Context, log logr.Logger, ins
 	// descendants, but there's nothing else to do.
 	if ns.HasSourceObject(r.GVK, inst.GetName()) {
 		ns.DeleteSourceObject(r.GVK, inst.GetName())
-		r.syncPropagation(ctx, log, inst)
+		r.syncPropagation(log, inst)
 		return actionNop
 	}
 
@@ -328,7 +327,7 @@ func (r *Reconciler) syncMissingObject(ctx context.Context, log logr.Logger, ins
 }
 
 // syncObject determines if this object is a source or propagated copy and handles it accordingly.
-func (r *Reconciler) syncObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
+func (r *Reconciler) syncObject(log logr.Logger, inst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
 	// If for some reason this has been called on an object that isn't namespaced, let's generate some
 	// logspam!
 	if inst.GetNamespace() == "" {
@@ -340,10 +339,10 @@ func (r *Reconciler) syncObject(ctx context.Context, log logr.Logger, inst *unst
 
 	// If the object should be propagated, we will sync it as an propagated object.
 	if yes, srcInst := r.shouldSyncAsPropagated(log, inst); yes {
-		return r.syncPropagated(log, inst, srcInst)
+		return r.syncPropagated(inst, srcInst)
 	}
 
-	r.syncSource(ctx, log, inst)
+	r.syncSource(log, inst)
 	// No action needs to take on source objects.
 	return actionNop, nil
 }
@@ -396,7 +395,7 @@ func (r *Reconciler) getTopSourceToPropagate(log logr.Logger, inst *unstructured
 
 // syncPropagated will determine whether to delete the obsolete copy or overwrite it with the source.
 // Or do nothing if it remains the same as the source object.
-func (r *Reconciler) syncPropagated(log logr.Logger, inst, srcInst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
+func (r *Reconciler) syncPropagated(inst, srcInst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
 	ns := r.Forest.Get(inst.GetNamespace())
 	// Delete this local source object from the forest if it exists. (This could
 	// only happen when we are trying to overwrite a conflicting source).
@@ -425,7 +424,7 @@ func (r *Reconciler) syncPropagated(log logr.Logger, inst, srcInst *unstructured
 	// The object already exists and doesn't need to be updated. This will typically happen when HNC
 	// is restarted - all the propagated objects already exist on the apiserver. Record that it exists
 	// for our statistics.
-	r.recordPropagatedObject(log, inst.GetNamespace(), inst.GetName())
+	r.recordPropagatedObject(inst.GetNamespace(), inst.GetName())
 
 	// Nothing more needs to be done.
 	return actionNop, nil
@@ -435,7 +434,7 @@ func (r *Reconciler) syncPropagated(log logr.Logger, inst, srcInst *unstructured
 // will enqueue all the descendants if the source can be propagated. The
 // propagation exceptions will be checked when reconciling the (enqueued)
 // propagated objects.
-func (r *Reconciler) syncSource(ctx context.Context, log logr.Logger, src *unstructured.Unstructured) {
+func (r *Reconciler) syncSource(log logr.Logger, src *unstructured.Unstructured) {
 	// Update or create a copy of the source object in the forest. We now store
 	// all the source objects in the forests no matter if the mode is 'Propagate'
 	// or not, because HNCConfig webhook will also check the non-'Propagate' mode
@@ -445,7 +444,7 @@ func (r *Reconciler) syncSource(ctx context.Context, log logr.Logger, src *unstr
 	ns.SetSourceObject(cleanSource(src))
 
 	// Enqueue propagated copies for this possibly deleted source
-	r.syncPropagation(ctx, log, src)
+	r.syncPropagation(log, src)
 }
 
 // cleanSource creates a sanitized version of the object to store in the forest. In particular, it
@@ -476,7 +475,7 @@ func cleanSource(src *unstructured.Unstructured) *unstructured.Unstructured {
 	return src
 }
 
-func (r *Reconciler) enqueueDescendants(ctx context.Context, log logr.Logger, src *unstructured.Unstructured, reason string) {
+func (r *Reconciler) enqueueDescendants(log logr.Logger, src *unstructured.Unstructured, reason string) {
 	sns := r.Forest.Get(src.GetNamespace())
 	if halted := sns.GetHaltedRoot(); halted != "" {
 		// There's no point enqueuing anything if the source namespace is halted since we'll just skip
@@ -516,7 +515,7 @@ func (r *Reconciler) enqueueLocalObjects(ctx context.Context, log logr.Logger, n
 // enqueuePropagatedObjects is only called from SyncNamespace. It's the only place a forest lock is
 // needed in SyncNamespace, so we made it into a function with forest lock instead of holding the
 // lock for the entire SyncNamespace.
-func (r *Reconciler) enqueuePropagatedObjects(ctx context.Context, log logr.Logger, ns string) {
+func (r *Reconciler) enqueuePropagatedObjects(log logr.Logger, ns string) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 
@@ -568,7 +567,7 @@ func (r *Reconciler) deleteObject(ctx context.Context, log logr.Logger, inst *un
 
 	// Remove the propagated object from the map because we are confident that the object was successfully deleted
 	// on the apiserver.
-	r.recordRemovedObject(log, inst.GetNamespace(), inst.GetName())
+	r.recordRemovedObject(inst.GetNamespace(), inst.GetName())
 	return nil
 }
 
@@ -608,8 +607,8 @@ func (r *Reconciler) writeObject(ctx context.Context, log logr.Logger, inst, src
 
 		// The error type is 'Invalid' after I tested it out with different error types
 		// from https://godoc.org/k8s.io/apimachinery/pkg/api/errors
-		api := strings.Split(inst.GetAPIVersion(), "/")[0]
-		if err != nil && errors.IsInvalid(err) && inst.GetKind() == "RoleBinding" && api == "rbac.authorization.k8s.io" {
+		group := inst.GroupVersionKind().Group
+		if err != nil && errors.IsInvalid(err) && inst.GetKind() == "RoleBinding" && group == "rbac.authorization.k8s.io" {
 			// Log this error because we're about to throw it away.
 			log.Error(err, "Couldn't update propagated object; will try to delete and recreate instead")
 			if err = r.Delete(ctx, inst); err == nil {
@@ -634,7 +633,7 @@ func (r *Reconciler) writeObject(ctx context.Context, log logr.Logger, inst, src
 
 	// Add the object to the map if it does not exist because we are confident that the object was updated/created
 	// successfully on the apiserver.
-	r.recordPropagatedObject(log, inst.GetNamespace(), inst.GetName())
+	r.recordPropagatedObject(inst.GetNamespace(), inst.GetName())
 	return nil
 }
 
@@ -677,12 +676,12 @@ func hasPropagatedLabel(inst *unstructured.Unstructured) bool {
 //
 // The method can be called when the source was deleted by users, or if it will no longer be
 // propagated, e.g. because the user's changed the sync mode in the HNC Config.
-func (r *Reconciler) syncPropagation(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) {
+func (r *Reconciler) syncPropagation(log logr.Logger, inst *unstructured.Unstructured) {
 	// Signal the config reconciler for reconciliation because it is possible that the source object is
 	// deleted on the apiserver.
 	r.HNCConfigReconciler.Enqueue("source object")
 
-	r.enqueueDescendants(ctx, log, inst, "source object")
+	r.enqueueDescendants(log, inst, "source object")
 }
 
 // shouldPropagateSource returns true if the object should be propagated by the HNC. The following
@@ -732,7 +731,7 @@ func (r *Reconciler) shouldPropagateSource(log logr.Logger, inst *unstructured.U
 
 // recordPropagatedObject records the fact that this object has been propagated, so we can report
 // statistics in the HNC Config.
-func (r *Reconciler) recordPropagatedObject(log logr.Logger, namespace, name string) {
+func (r *Reconciler) recordPropagatedObject(namespace, name string) {
 	r.propagatedObjectsLock.Lock()
 	defer r.propagatedObjectsLock.Unlock()
 
@@ -748,7 +747,7 @@ func (r *Reconciler) recordPropagatedObject(log logr.Logger, namespace, name str
 
 // recordRemovedObject records the fact that this (possibly) previously propagated object no longer
 // exists.
-func (r *Reconciler) recordRemovedObject(log logr.Logger, namespace, name string) {
+func (r *Reconciler) recordRemovedObject(namespace, name string) {
 	r.propagatedObjectsLock.Lock()
 	defer r.propagatedObjectsLock.Unlock()
 

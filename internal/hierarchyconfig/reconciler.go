@@ -186,7 +186,7 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 	}
 
 	// Update whether the HC is deletable.
-	r.updateFinalizers(ctx, log, inst, nsInst, anms)
+	r.updateFinalizers(log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
 	needUpdateObjects := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
@@ -253,7 +253,7 @@ func (r *Reconciler) addIncludedNamespaceLabel(log logr.Logger, nsInst *corev1.N
 // the namespace (with some exceptions). The main reason is that the HC stores the
 // .spec.allowCascadingDeletion field, so if we allowed this object to be deleted before all
 // descendants have been deleted, we would lose the knowledge that cascading deletion is enabled.
-func (r *Reconciler) updateFinalizers(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
+func (r *Reconciler) updateFinalizers(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
 	// No-one should put a finalizer on a hierarchy config except us. See
 	// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/623 as we try to enforce that.
 	switch {
