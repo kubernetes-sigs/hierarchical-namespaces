@@ -19,6 +19,8 @@ import (
 // This function is called both from main.go as well as from the integ tests.
 func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, useFakeClient bool) error {
 	crd.Setup(mgr, useFakeClient)
+	setupLog := ctrl.Log.WithName("setup").WithName("reconcilers")
+	setupLog.Info("Creating reconcilers")
 
 	hcChan := make(chan event.GenericEvent)
 	anchorChan := make(chan event.GenericEvent)
@@ -63,7 +65,9 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, us
 	// If LeaderElection is enabled then Watch for Elected() to enable controller writes
 	if !config.IsLeader {
 		go func() {
+			setupLog.Info("Waiting to be elected leader...")
 			<-mgr.Elected()
+			setupLog.Info("Elected as leader")
 			config.IsLeader = true
 			ar.BecomeLeader()
 			hnccfgr.BecomeLeader()
