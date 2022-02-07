@@ -95,7 +95,7 @@ func TestRBACTypes(t *testing.T) {
 			c := &api.HNCConfiguration{Spec: api.HNCConfigurationSpec{Resources: tc.configs}}
 			c.Name = api.HNCConfigSingleton
 
-			got := validator.handle(context.Background(), c)
+			got := validator.handle(c)
 
 			logResult(t, got.AdmissionResponse.Result)
 			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allow))
@@ -157,7 +157,7 @@ func TestNonRBACTypes(t *testing.T) {
 				Log:        zap.New(),
 			}
 
-			got := validator.handle(context.Background(), c)
+			got := validator.handle(c)
 
 			logResult(t, got.AdmissionResponse.Result)
 			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allow))
@@ -224,7 +224,7 @@ func TestPropagateConflict(t *testing.T) {
 				}
 				f.Get(string(ns)).SetSourceObject(inst)
 			}
-			got := validator.handle(context.Background(), c)
+			got := validator.handle(c)
 
 			logResult(t, got.AdmissionResponse.Result)
 			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allow))

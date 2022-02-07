@@ -35,7 +35,7 @@ func Create(desc string) *forest.Forest {
 	f := forest.NewForest()
 
 	// First, create all legit namespaces
-	for i, _ := range desc {
+	for i := range desc {
 		nm := string(lower + byte(i))
 		ns := f.Get(nm)
 		ns.SetExists()

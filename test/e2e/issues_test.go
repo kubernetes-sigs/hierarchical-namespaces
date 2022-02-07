@@ -10,15 +10,14 @@ import (
 var _ = Describe("Issues", func() {
 
 	const (
-		nsParent      = "parent"
-		nsChild       = "child"
-		nsSub1        = "sub1"
-		nsSub2        = "sub2"
-		nsSub1Sub1    = "sub1-sub1"
-		nsSub2Sub1    = "sub2-sub1"
-		nsSubSub2     = "sub-sub2"
-		nsSubChild    = "sub-child"
-		nsSubSubChild = "sub-sub-child"
+		nsParent   = "parent"
+		nsChild    = "child"
+		nsSub1     = "sub1"
+		nsSub2     = "sub2"
+		nsSub1Sub1 = "sub1-sub1"
+		nsSub2Sub1 = "sub2-sub1"
+		nsSubSub2  = "sub-sub2"
+		nsSubChild = "sub-child"
 	)
 
 	BeforeEach(func() {

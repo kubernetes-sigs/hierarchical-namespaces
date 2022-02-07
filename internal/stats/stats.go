@@ -133,8 +133,7 @@ func init() {
 func StartLoggingActivity() {
 	log := ctrl.Log.WithName("reconcileCounter")
 	var total, lastTotal, lastCur counter = 0, 0, 0
-	working := false
-	go logging(log, total, lastTotal, lastCur, working)
+	go logging(log, total, lastTotal, lastCur, false)
 }
 
 func logging(log logr.Logger, total, lastTotal, lastCur counter, working bool) {

@@ -92,7 +92,6 @@ func TestType(t *testing.T) {
 func TestInheritedFromLabel(t *testing.T) {
 	f := forest.NewForest()
 	v := &Validator{Forest: f}
-	l := zap.New()
 
 	tests := []struct {
 		name      string
@@ -136,7 +135,7 @@ func TestInheritedFromLabel(t *testing.T) {
 			metadata.SetLabel(inst, tc.newLabel, tc.newValue)
 
 			// Test
-			got := v.handle(context.Background(), l, k8sadm.Update, inst, oldInst)
+			got := v.handle(context.Background(), k8sadm.Update, inst, oldInst)
 
 			// Report
 			code := got.AdmissionResponse.Result.Code
@@ -151,7 +150,6 @@ func TestInheritedFromLabel(t *testing.T) {
 func TestUserChanges(t *testing.T) {
 	f := forest.NewForest()
 	v := &Validator{Forest: f}
-	l := zap.New()
 
 	tests := []struct {
 		name       string
@@ -630,7 +628,7 @@ func TestUserChanges(t *testing.T) {
 			c := fakeNSClient{isDeleting: tc.isDeleting}
 			v.client = c
 			// Test
-			got := v.handle(context.Background(), l, op, tc.inst, tc.oldInst)
+			got := v.handle(context.Background(), op, tc.inst, tc.oldInst)
 			// Report
 			code := got.AdmissionResponse.Result.Code
 			reason := got.AdmissionResponse.Result.Reason
@@ -749,7 +747,6 @@ func TestCreatingConflictSource(t *testing.T) {
 			f := foresttest.Create(tc.forest)
 			foresttest.CreateSecret(tc.conflictInstName, tc.conflictNamespace, f)
 			v := &Validator{Forest: f}
-			l := zap.New()
 			op := k8sadm.Create
 			inst := &unstructured.Unstructured{}
 			inst.SetName(tc.newInstName)
@@ -757,7 +754,7 @@ func TestCreatingConflictSource(t *testing.T) {
 			inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
 			inst.SetAnnotations(tc.newInstAnnotation)
 			// Test
-			got := v.handle(context.Background(), l, op, inst, &unstructured.Unstructured{})
+			got := v.handle(context.Background(), op, inst, &unstructured.Unstructured{})
 			// Report
 			code := got.AdmissionResponse.Result.Code
 			reason := got.AdmissionResponse.Result.Reason

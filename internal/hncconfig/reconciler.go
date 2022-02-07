@@ -31,10 +31,6 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
 )
 
-// hnccrSingleton stores a pointer to the cluster-wide config reconciler so anyone can
-// request that it updates itself (see UpdateHNCConfig, below).
-var hnccrSingleton *Reconciler
-
 // Reconciler is responsible for determining the HNC configuration from the HNCConfiguration CR,
 // as well as ensuring all objects are propagated correctly when the HNC configuration changes.
 // It can also set the status of the HNCConfiguration CR.

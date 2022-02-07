@@ -18,7 +18,6 @@ package kubectl
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -153,16 +152,6 @@ func setAllowCascadingDeletion(hc *api.HierarchyConfiguration, nnm string, allow
 		}
 		*numChanges++
 	}
-}
-
-func normalizeStringArray(in []string) []string {
-	out := []string{}
-	for _, val := range in {
-		for _, s := range strings.Split(val, ",") {
-			out = append(out, s)
-		}
-	}
-	return out
 }
 
 func newSetCmd() *cobra.Command {

@@ -72,7 +72,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 
-	resp := v.handle(ctx, inst)
+	resp := v.handle(inst)
 	if !resp.Allowed {
 		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	} else {
@@ -83,7 +83,7 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 
 // handle implements the validation logic of this validator for Create and Update operations,
 // allowing it to be more easily unit tested (ie without constructing a full admission.Request).
-func (v *Validator) handle(ctx context.Context, inst *api.HNCConfiguration) admission.Response {
+func (v *Validator) handle(inst *api.HNCConfiguration) admission.Response {
 	ts := gvkSet{}
 	// Convert all valid types from GR to GVK. If any type is invalid, e.g. not
 	// exist in the apiserver, wrong configuration, deny the request.
@@ -93,7 +93,7 @@ func (v *Validator) handle(ctx context.Context, inst *api.HNCConfiguration) admi
 
 	// Lastly, check if changing a type to "Propagate" mode would cause
 	// overwriting user-created objects.
-	return v.checkForest(inst, ts)
+	return v.checkForest(ts)
 }
 
 func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
@@ -132,7 +132,7 @@ func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 	return webhooks.Allow("")
 }
 
-func (v *Validator) checkForest(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
+func (v *Validator) checkForest(ts gvkSet) admission.Response {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
 
@@ -217,11 +217,11 @@ func (v *Validator) getNewPropagateTypes(ts gvkSet) gvkSet {
 type ancestorObjects map[string][]string
 
 func (a ancestorObjects) copy() ancestorObjects {
-	copy := ancestorObjects{}
+	objs := ancestorObjects{}
 	for k, v := range a {
-		copy[k] = v
+		objs[k] = v
 	}
-	return copy
+	return objs
 }
 
 func (a ancestorObjects) add(onm string, ns *forest.Namespace) {
