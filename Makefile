@@ -104,6 +104,10 @@ build: generate fmt vet manifests
 	     -o bin/kubectl/kubectl-hns_darwin_amd64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
+	GOOS=darwin GOARCH=arm64 go build \
+	     -o bin/kubectl/kubectl-hns_darwin_arm64 \
+	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
+	     ./cmd/kubectl/main.go
 	GOOS=linux GOARCH=arm64 go build \
 	     -o bin/kubectl/kubectl-hns_linux_arm64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
