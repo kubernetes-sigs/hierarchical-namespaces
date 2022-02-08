@@ -8,23 +8,21 @@ import (
 	"sync"
 	"time"
 
-	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/restmapper"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-
 	"github.com/go-logr/logr"
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/apimeta"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
@@ -38,6 +36,9 @@ type Reconciler struct {
 	client.Client
 	Log     logr.Logger
 	Manager ctrl.Manager
+
+	// ResourceMapper allows the reconciler to map resources to kinds
+	ResourceMapper resourceMapper
 
 	// Forest is the in-memory data structure that is shared with all other reconcilers.
 	Forest *forest.Forest
@@ -75,15 +76,6 @@ type gr2gvkMode map[schema.GroupResource]gvkMode
 
 // gvk2gr keeps track of a group of unique GVKs with the mapping GRs.
 type gvk2gr map[schema.GroupVersionKind]schema.GroupResource
-
-type GVKErr struct {
-	Reason string
-	Msg    string
-}
-
-func (e *GVKErr) Error() string {
-	return e.Msg
-}
 
 // checkPeriod is the period that the config reconciler checks if it needs to reconcile the
 // `config` singleton.
@@ -141,39 +133,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // make sure there's no dup and the types exist. Update the type set with GR to
 // GVK mappings.
 func (r *Reconciler) reconcileTypes(inst *api.HNCConfiguration) error {
-	// Get all resources for all groups.
-	allRes, err := getAPIGroupResources(r.Manager.GetConfig())
-	if err != nil {
-		r.Log.Error(err, "while trying to get all resources")
-		return err
-	}
-
 	// Overwrite the type set each time. Initialize them with the enforced types.
 	r.activeGVKMode = gr2gvkMode{}
 	r.activeGR = gvk2gr{}
-	if err := r.ensureEnforcedTypes(inst, allRes); err != nil {
+	if err := r.ensureEnforcedTypes(inst); err != nil {
 		// Early exit if any enforced types are not found for some reason to retry.
 		return err
 	}
 
 	// Add all valid configurations from user-configured types.
-	r.reconcileConfigTypes(inst, allRes)
+	r.reconcileConfigTypes(inst)
 	return nil
 }
 
 // ensureEnforcedTypes ensures HNC enforced types 'roles' and 'rolebindings' are
 // in the type set. Return error to retry (if any) since they are enforced types.
-func (r *Reconciler) ensureEnforcedTypes(inst *api.HNCConfiguration, allRes []*restmapper.APIGroupResources) error {
+func (r *Reconciler) ensureEnforcedTypes(inst *api.HNCConfiguration) error {
 	for _, t := range api.EnforcedTypes {
 		gr := schema.GroupResource{Group: t.Group, Resource: t.Resource}
 
 		// Look if the resource exists in the API server.
-		gvk, err := gvkForGR(gr, allRes)
+		gvk, err := r.ResourceMapper.NamespacedKindFor(gr)
 		if err != nil {
-			// If the type is not found, log error and write conditions and return the
-			// error for a retry.
+			// Error looking up enforced types. Log error, write conditions and return the error for a retry.
 			r.Log.Error(err, "while trying to reconcile the enforced resource", "resource", gr)
-			r.writeCondition(inst, api.ConditionBadTypeConfiguration, api.ReasonResourceNotFound, err.Error())
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, reasonForGVKError(err), err.Error())
 			return err
 		}
 		r.activeGVKMode[gr] = gvkMode{gvk, t.Mode}
@@ -186,7 +170,7 @@ func (r *Reconciler) ensureEnforcedTypes(inst *api.HNCConfiguration, allRes []*r
 // types 'roles' and 'rolebindings'). It makes sure there's no dup and the types
 // exist. Update the type set with GR to GVK mappings. We will not return errors
 // to retry but only set conditions since the configuration may be incorrect.
-func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration, allRes []*restmapper.APIGroupResources) {
+func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration) {
 	// Get valid settings in the spec.resources of the `config` singleton.
 	for _, rsc := range inst.Spec.Resources {
 		gr := schema.GroupResource{Group: rsc.Group, Resource: rsc.Resource}
@@ -208,14 +192,11 @@ func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration, allRes []*
 		}
 
 		// Look if the resource exists in the API server.
-		gvk, err := gvkForGR(gr, allRes)
+		gvk, err := r.ResourceMapper.NamespacedKindFor(gr)
 		if err != nil {
-			// If the type is not found or namespaced, log error and write conditions but don't
-			// early exit since the other types can still be reconciled.
+			// Log error and write conditions, but don't early exit since the other types can still be reconciled.
 			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
-			if gvkerr, ok := err.(*GVKErr); ok {
-				r.writeCondition(inst, api.ConditionBadTypeConfiguration, gvkerr.Reason, gvkerr.Msg)
-			}
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, reasonForGVKError(err), err.Error())
 			continue
 		}
 		r.activeGVKMode[gr] = gvkMode{gvk, rsc.Mode}
@@ -582,48 +563,20 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return nil
 }
 
-// getAPIGroupResources creates a discovery client to get all the resources for all
-// groups from the apiserver.
-func getAPIGroupResources(config *rest.Config) ([]*restmapper.APIGroupResources, error) {
-	dc, err := discovery.NewDiscoveryClientForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return restmapper.GetAPIGroupResources(dc)
+// resourceMapper allows callers to map resources to kinds.
+type resourceMapper interface {
+	// NamespacedKindFor returns the priority mapping GVK for a namespaced GR.
+	// If the GR doesn't exist, or isn't namespaced, returns an error.
+	NamespacedKindFor(gr schema.GroupResource) (schema.GroupVersionKind, error)
 }
 
-// gvkForGR searches the GR in apiserver and returns the mapping GVK. If the GR
-// doesn't exist, return an empty GVK and the error.
-func gvkForGR(gr schema.GroupResource, allRes []*restmapper.APIGroupResources) (schema.GroupVersionKind, error) {
-	// Look for a matching resource from all resources.
-	for _, groupedResources := range allRes {
-		group := groupedResources.Group
-		// Skip resources from a different group.
-		if group.Name != gr.Group {
-			continue
-		}
-		// Search in the grouped resources by version. We will use the first version
-		// that the resource exists in. It's safe because the resource is supported
-		// in that GroupVersion and apiserver will do the api conversion if needed.
-		for _, version := range group.Versions {
-			for _, resource := range groupedResources.VersionedResources[version.Version] {
-				if resource.Name == gr.Resource {
-					if !resource.Namespaced {
-						return schema.GroupVersionKind{}, &GVKErr{api.ReasonResourceNotNamespaced, fmt.Sprintf("Resource %q is not namespaced", gr)}
-					}
-					// Please note that we cannot use resource.group or resource.version
-					// here because they are preferred group/version and they are default
-					// to empty to imply this current containing group/version. Therefore,
-					// resource.group and resource.version are always empty in this case.
-					gvk := schema.GroupVersionKind{
-						Group:   gr.Group,
-						Version: version.Version,
-						Kind:    resource.Kind,
-					}
-					return gvk, nil
-				}
-			}
-		}
+func reasonForGVKError(err error) string {
+	reason := api.ReasonUnknown
+	switch {
+	case meta.IsNoMatchError(err):
+		reason = api.ReasonResourceNotFound
+	case apimeta.IsNotNamespacedError(err):
+		reason = api.ReasonResourceNotNamespaced
 	}
-	return schema.GroupVersionKind{}, &GVKErr{api.ReasonResourceNotFound, fmt.Sprintf("Resource %q not found", gr)}
+	return reason
 }

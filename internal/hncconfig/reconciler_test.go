@@ -301,7 +301,7 @@ var _ = Describe("HNCConfiguration", func() {
 		AddToHNCConfig(ctx, api.RBACGroup, "clusterroles", api.Propagate)
 
 		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonResourceNotNamespaced)).
-			Should(ContainSubstring("Resource \"clusterroles.rbac.authorization.k8s.io\" is not namespaced"))
+			Should(ContainSubstring("resource \"clusterroles.rbac.authorization.k8s.io\" is not namespaced"))
 	})
 
 	It("should set NumPropagatedObjects back to 0 after deleting the source object in propagate mode", func() {
