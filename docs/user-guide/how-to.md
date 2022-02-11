@@ -15,6 +15,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Organize full namespaces into a hierarchy](#use-full)
   * [Resolve conditions on a namespace](#use-resolve-cond)
   * [Limit the propagation of an object to descendant namespaces](#use-limit-propagation)
+  * [Add a label or annotation to all namespaces in a subtree](#use-managed-labels)
 * [Administer HNC](#admin)
   * [Install or upgrade HNC on a cluster](#admin-install)
   * [Uninstall HNC from a cluster](#admin-uninstall)
@@ -22,6 +23,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Backing up and restoring HNC data](#admin-backup-restore)
   * [Administer who has access to HNC properties](#admin-access)
   * [Modify the resources propagated by HNC](#admin-resources)
+  * [Ask HNC to manage certain labels and annotations](#admin-managed-labels)
   * [Gather metrics](#admin-metrics)
   * [Modify command-line arguments](#admin-cli-args)
 
@@ -189,9 +191,9 @@ destination (descendant) namespace.
 ### Select namespaces based on their hierarchies
 
 HNC inserts labels onto your namespaces to allow trees (and subtrees) of
-namespaces to be selected by policies such as `NetworkPolicy`.
-
-This section is under construction (as of Oct 2020). For now, please see the
+namespaces to be selected by policies such as Network Policies. For more
+information, read about the [concept](concepts.md#basic-labels) or see an
+example for how they can apply to Network Policies in the
 [quickstart](quickstart.md#netpol).
 
 <a name="use-subns-delete"/>
@@ -400,6 +402,37 @@ metadata:
 ... other fields ...
 EOF
 ```
+
+<a name="use-managed-labels"/>
+
+### Add a label or annotation to all namespaces in a subtree
+
+***Managed labels and annotations are planned for HNC v1.0+***
+
+If your administrator has [created managed labels or
+annotations](#admin-managed-labels), you may set them on any namespace where you
+have permission to edit the `hierarchyconfigurations/hierarchy` object. For
+example, if your admin has set `env` as a managed label, you may set it on your
+namespace as follows:
+
+```
+apiVersion: hnc.x-k8s.io/v1alpha2
+kind: HierarchyConfiguration
+metadata:
+  name: hierarchy
+  namespace: child
+  … < other stuff > …
+spec:
+  labels:          # add
+  - key: env       # add
+    value: prod    # add
+```
+
+You may similarly set managed annotations via the `.spec.annotations` list. Note
+that any label or annotation that conflicts with one set in an ancestor
+namespace will be silently ignored (this will eventually
+[be](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/143)
+[improved](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/144)).
 
 <a name="admin"/>
 
@@ -723,6 +756,32 @@ Alternatively, if you're certain you want to start propagating objects
 immediately, you can use the `--force` flag with `kubectl hns config
 set-resource` to add a resource directly in the `Propagate` mode. You can also
 edit the `config` object directly, which will bypass this protection.
+
+<a name="admin-managed-labels"/>
+
+### Ask HNC to manage certain labels and annotations
+
+***Managed labels and annotations are planned for HNC v1.0+***
+
+See [here](concepts.md#admin-managed-labels) for the background on managed
+labels and annotations. In order to get HNC to manage a label or annotation, use
+the following [command-line arguments](#admin-cli-args):
+
+* `--managed-namespace-label` for labels
+* `--managed-namespace-annotation` for annotations
+
+Both of these options may be specified multiple times, and both of them are
+regular expressions, but automaticaly have `^...$` surrounding them. For
+example, to ask HNC to manage any label with the prefix `hier.mycorp.com`, set
+the parameter `--managed-namespace-label hier.mycorp.com/.*`.
+
+When you ask HNC to start managing a label or annotation, all _existing_
+namespace labels/annotations that match the pattern will immediately be deleted
+(unless they are specified in the `HierarchyConfiguration`), so use this feature
+with care.
+
+See [here](#use-managed-labels) for more information on how to use managed
+labels and annotations once they've been enabled.
 
 <a name="admin-metrics"/>
 

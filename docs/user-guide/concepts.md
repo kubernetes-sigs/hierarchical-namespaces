@@ -14,12 +14,13 @@ namespaces are, and _why_ they behave the way they do.
   * [Parents, children, trees and forests](#basic-trees)
   * [Full namespaces and subnamespaces](#basic-subns)
   * [Policy inheritance and object propagation](#basic-propagation)
-  * [Namespace labels and non-propagated policies](#basic-labels)
+  * [Tree labels and non-propagated policies](#basic-labels)
   * [Exceptions and propagation control](#basic-exceptions)
 * [Administration](#admin)
   * [Hierarchical Configuration](#admin-hc)
   * [Namespaces administrators](#admin-admin)
   * [Conditions](#admin-conditions)
+  * [Namespace label and annotation propagation](#admin-managed-labels)
   * [Labels and annotations read by HNC](#admin-labels-read)
   * [Labels and annotations set by HNC](#admin-labels-set)
 
@@ -291,7 +292,7 @@ following three labels applied to it:
 * `team-a.tree.hnc.x-k8s.io/depth: 1`
 * `division-x.tree.hnc.x-k8s.io/depth: 2`
 
-Due to their suffixes, these are known as **_tree labels_**.
+Due to their suffixes, these are known as ***tree labels***.
 
 Tree labels can be used in two ways. Firstly, any policy that uses namespace
 label selectors may use them directly - even if those policies are not
@@ -313,6 +314,9 @@ purposes, because anyone who can edit a Kubernetes object can also apply
 whichever labels they like. However, HNC will overwrite any changes made to
 these labels, so other applications can trust these labels for policy
 application.
+
+*Note: in HNC v1.0, [managed labels](#admin-managed-labels) may also be trusted
+for policy purposes.*
 
 <a name="basic-exceptions"/>
 
@@ -353,21 +357,12 @@ be replaced.
 There are some built-in exceptions to prevent certain known (auto-generated)
 objects from being propagated by HNC.
 
-If ConfigMaps propagation is enabled, any ConfigMaps named `istio-ca-root-cert`
-or `kube-root-ca.crt` will not be propagated. These are auto-created in new
-namespaces by Istio and Kubernetes respectively. As they are auto-generated,
-adding annotations is not possible and HNC will by default exclude them.
-
-Similarly, Kubernetes ServiceAccount Secrets will also by default be excluded
-from propagation.
-
-In addition, propagation exclusions are also used for Rancher-managed Kubernetes
-clusters. Rancher uses a "project" concept that bundles namespaces and thus sets
-roles, rolebindings, etc. for all namespaces of a project. This leads to
-conflicts with HNC, so all resources created by Rancher (which are automatically
-labeled with `"cattle.io/creator": "norman"` by Rancher, cf. [their
-docs](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove)) are
-excluded from propagation.
+* Kubernetes Service Account Secrets
+* ConfigMaps named `istio-ca-root-cert` or `kube-root-ca.crt`, which are
+  auto-created in new namespaces by Istio and Kubernetes respectively
+* *Planned for HNC v1.0+:* Any objects with the label
+  `cattle.io/creator:norman`, which are [inserted by Rancher to support
+  Projects](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove))
 
 <a name="admin"/>
 
@@ -505,6 +500,40 @@ can either query such objects directly, or via `kubectl hns describe NAMESPACE`.
 The event will include machine-readable and human-readable information about the
 problem, and will generally require human intervention to resolve.
 
+<a name="admin-managed-labels"/>
+
+### Managed labels and annotations
+
+***Managed labels and annotations are planned for HNC v1.0+***
+
+Just as certain objects can be propagated from parent namespaces to their
+descendants, so can certain labels and annotations on namespaces. For example,
+an admin may define a `mycorp.com/environment:prod` label on a parent namespace,
+and ensure that it will be automatically propagated to all descendants of that
+namespace.
+
+However, managed labels (and annotations - the remainder of this section applies
+to both) cannot be used simply by putting a label on a parent namespace, for
+several reasons:
+
+* Users may not intend HNC to overwrite their existing labels simply because one
+  of their ancestors has a conflicting label.
+* When a namespace's ancestors change, it's unclear which labels should be
+  removed because they were propagated from an ancestor, and which were
+  intended to be applied to the namespace itself.
+
+Therefore, by default, HNC will _not_ propagate any labels on namespaces; the
+HNC admin must define which labels are _managed_ by modifying the command-line
+options of HNC and restarting HNC.
+
+In addition, managed labels may _never_ be set simply by adding them to a
+namespace, as it would be impossible to distinguish between a "source" label and
+a "propagated" label (unlike propagated objects, which are annotated by
+`hnc.x-k8s.io/inherited-from`). Instead, they must be added in the
+`HierarchyConfiguration` object.
+
+See [here](how-to.md#admin-managed-labels) for more details.
+
 <a name="admin-labels-read">
 
 ### Labels and annotations read by HNC
@@ -514,8 +543,8 @@ objects, in addition to using the custom resources it defines.
 
 #### propagate.hnc.x-k8s.io/TYPE (annotation on objects)
 
-These annotations may be added to any namespaced object to define exceptions to
-propagation rules. More information to come.
+These annotations may be added to any namespaced object to define
+[exceptions](#basic-exceptions) to propagation rules.
 
 #### hnc.x-k8s.io/managed-by (annotation on namespaces)
 
@@ -566,6 +595,9 @@ HNC](how-to.md#admin-excluded-namespaces) for more information.
 HNC annotates and labels objects in several circumstances. Typically, most users
 (or admins) will never need to care about these, but occasionally they may cause
 some odd changes in behaviour that you need to be aware of.
+
+See also [managed labels and annotations](#admin-managed-labels), which are
+defined by admins, not by HNC itself.
 
 #### app.kubernetes.io/managed-by (label on objects)
 

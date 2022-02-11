@@ -54,15 +54,16 @@ const (
 	ConditionActivitiesHalted string = "ActivitiesHalted"
 	ConditionBadConfiguration string = "BadConfiguration"
 
-	// Condition reasons.
+	// Condition reasons. Please keep this list in alphabetical order. IF ADDING ANYTHING HERE, PLEASE
+	// ALSO ADD THEM TO AllConditions, BELOW.
 	ReasonAncestor                 string = "AncestorHaltActivities"
+	ReasonAnchorMissing            string = "SubnamespaceAnchorMissing"
 	ReasonDeletingCRD              string = "DeletingCRD"
+	ReasonIllegalManagedAnnotation string = "IllegalManagedAnnotation"
+	ReasonIllegalManagedLabel      string = "IllegalManagedLabel"
+	ReasonIllegalParent            string = "IllegalParent"
 	ReasonInCycle                  string = "InCycle"
 	ReasonParentMissing            string = "ParentMissing"
-	ReasonIllegalParent            string = "IllegalParent"
-	ReasonAnchorMissing            string = "SubnamespaceAnchorMissing"
-	ReasonIllegalManagedLabel      string = "IllegalManagedLabel"
-	ReasonIllegalManagedAnnotation string = "IllegalManagedAnnotation"
 )
 
 // AllConditions have all the conditions by type and reason. Please keep this
@@ -72,9 +73,11 @@ var AllConditions = map[string][]string{
 	ConditionActivitiesHalted: {
 		ReasonAncestor,
 		ReasonDeletingCRD,
+		ReasonIllegalManagedAnnotation,
+		ReasonIllegalManagedLabel,
+		ReasonIllegalParent,
 		ReasonInCycle,
 		ReasonParentMissing,
-		ReasonIllegalParent,
 	},
 	ConditionBadConfiguration: {
 		ReasonAnchorMissing,
