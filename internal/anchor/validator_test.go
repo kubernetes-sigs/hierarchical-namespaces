@@ -55,6 +55,76 @@ func TestCreateSubnamespaces(t *testing.T) {
 	}
 }
 
+func TestManagedMeta(t *testing.T) {
+	f := foresttest.Create("-") // a
+	v := &Validator{Forest: f}
+	config.SetNamespaces("", "kube-system")
+	// For this test we accept any label or annotation not starting with 'h',
+	// to allow almost any meta - except the hnc.x-k8s.io labels/annotations,
+	// which cannot be managed anyway. And allows us to use that for testing.
+	if err := config.SetManagedMeta([]string{"[^h].*"}, []string{"[^h].*"}); err != nil {
+		t.Fatal(err)
+	}
+	defer config.SetManagedMeta(nil, nil)
+
+	tests := []struct {
+		name        string
+		labels      []api.MetaKVP
+		annotations []api.MetaKVP
+		allowed     bool
+	}{
+		{name: "ok: managed label", labels: []api.MetaKVP{{Key: "label.com/team"}}, allowed: true},
+		{name: "invalid: unmanaged label", labels: []api.MetaKVP{{Key: api.LabelIncludedNamespace}}},
+		{name: "ok: managed annotation", annotations: []api.MetaKVP{{Key: "annot.com/log-index"}}, allowed: true},
+		{name: "invalid: unmanaged annotation", annotations: []api.MetaKVP{{Key: api.AnnotationManagedBy}}},
+
+		{name: "ok: prefixed label key", labels: []api.MetaKVP{{Key: "foo.bar/team", Value: "v"}}, allowed: true},
+		{name: "ok: bare label key", labels: []api.MetaKVP{{Key: "team", Value: "v"}}, allowed: true},
+		{name: "invalid: label prefix key", labels: []api.MetaKVP{{Key: "foo;bar/team", Value: "v"}}},
+		{name: "invalid: label name key", labels: []api.MetaKVP{{Key: "foo.bar/-team", Value: "v"}}},
+		{name: "invalid: empty label key", labels: []api.MetaKVP{{Key: "", Value: "v"}}},
+
+		{name: "ok: label value", labels: []api.MetaKVP{{Key: "k", Value: "foo"}}, allowed: true},
+		{name: "ok: empty label value", labels: []api.MetaKVP{{Key: "k", Value: ""}}, allowed: true},
+		{name: "ok: label value special char", labels: []api.MetaKVP{{Key: "k", Value: "f-oo"}}, allowed: true},
+		{name: "invalid: label value", labels: []api.MetaKVP{{Key: "k", Value: "-foo"}}},
+
+		{name: "ok: prefixed annotation key", annotations: []api.MetaKVP{{Key: "foo.bar/team", Value: "v"}}, allowed: true},
+		{name: "ok: bare annotation key", annotations: []api.MetaKVP{{Key: "team", Value: "v"}}, allowed: true},
+		{name: "invalid: annotation prefix key", annotations: []api.MetaKVP{{Key: "foo;bar/team", Value: "v"}}},
+		{name: "invalid: annotation name key", annotations: []api.MetaKVP{{Key: "foo.bar/-team", Value: "v"}}},
+		{name: "invalid: empty annotation key", annotations: []api.MetaKVP{{Key: "", Value: "v"}}},
+
+		{name: "ok: annotation value", annotations: []api.MetaKVP{{Key: "k", Value: "foo"}}, allowed: true},
+		{name: "ok: empty annotation value", annotations: []api.MetaKVP{{Key: "k", Value: ""}}, allowed: true},
+		{name: "ok: special annotation value", annotations: []api.MetaKVP{{Key: "k", Value: ";$+:;/*'\""}}, allowed: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewWithT(t)
+
+			anchor := &api.SubnamespaceAnchor{}
+			anchor.ObjectMeta.Namespace = "a"
+			anchor.ObjectMeta.Name = "brumpf"
+			anchor.Spec.Labels = tc.labels
+			anchor.Spec.Annotations = tc.annotations
+
+			req := &anchorRequest{
+				anchor: anchor,
+				op:     k8sadm.Create,
+			}
+
+			// Test
+			got := v.handle(req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).Should(Equal(tc.allowed))
+		})
+	}
+}
+
 func TestAllowCascadingDeleteSubnamespaces(t *testing.T) {
 	// Create a chain of namespaces from "a" to "e", with "a" as the root. Among them,
 	// "b", "d" and "e" are subnamespaces. This is set up in a long chain to test that

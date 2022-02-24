@@ -71,7 +71,6 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 func (v *Validator) handle(req *anchorRequest) admission.Response {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
-
 	pnm := req.anchor.Namespace
 	cnm := req.anchor.Name
 	cns := v.Forest.Get(cnm)
@@ -84,6 +83,13 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 			field.Invalid(fldPath, cnm, msg),
 		}
 		return webhooks.DenyInvalid(api.SubnamespaceAnchorGK, cnm, allErrs)
+	}
+
+	labelErrs := config.ValidateManagedLabels(req.anchor.Spec.Labels)
+	annotationErrs := config.ValidateManagedAnnotations(req.anchor.Spec.Annotations)
+	allErrs := append(labelErrs, annotationErrs...)
+	if len(allErrs) > 0 {
+		return webhooks.DenyInvalid(api.SubnamespaceAnchorGK, req.anchor.Name, allErrs)
 	}
 
 	switch req.op {
