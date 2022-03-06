@@ -37,6 +37,7 @@ import (
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/setup"
 )
@@ -96,6 +97,7 @@ func HNCBeforeSuite() {
 
 	By("creating manager")
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
+		NewClient:          config.NewCachingClient,
 		MetricsBindAddress: "0", // disable metrics serving since 'go test' runs multiple suites in parallel processes
 		Scheme:             scheme.Scheme,
 	})
@@ -106,7 +108,8 @@ func HNCBeforeSuite() {
 	Expect(err).ToNot(HaveOccurred())
 
 	By("Creating clients")
-	K8sClient = k8sManager.GetClient()
+	K8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	Expect(err).NotTo(HaveOccurred())
 	Expect(K8sClient).ToNot(BeNil())
 
 	go func() {
