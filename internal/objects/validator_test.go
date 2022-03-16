@@ -2,7 +2,6 @@ package objects
 
 import (
 	"context"
-	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"testing"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/foresttest"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/metadata"
 )
@@ -135,7 +135,12 @@ func TestInheritedFromLabel(t *testing.T) {
 			metadata.SetLabel(inst, tc.newLabel, tc.newValue)
 
 			// Test
-			got := v.handle(context.Background(), k8sadm.Update, inst, oldInst)
+			req := &request{
+				obj:    inst,
+				oldObj: oldInst,
+				op:     k8sadm.Update,
+			}
+			got := v.handle(context.Background(), req)
 
 			// Report
 			code := got.AdmissionResponse.Result.Code
@@ -616,19 +621,23 @@ func TestUserChanges(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
 			g := NewWithT(t)
-			op := k8sadm.Update
+			req := &request{
+				obj:    tc.inst,
+				oldObj: tc.oldInst,
+				op:     k8sadm.Update,
+			}
 			if tc.inst == nil {
-				op = k8sadm.Delete
-				tc.inst = &unstructured.Unstructured{}
+				req.op = k8sadm.Delete
+				req.obj = &unstructured.Unstructured{}
 			} else if tc.oldInst == nil {
-				op = k8sadm.Create
-				tc.oldInst = &unstructured.Unstructured{}
+				req.op = k8sadm.Create
+				req.oldObj = &unstructured.Unstructured{}
 			}
 
 			c := fakeNSClient{isDeleting: tc.isDeleting}
 			v.client = c
 			// Test
-			got := v.handle(context.Background(), op, tc.inst, tc.oldInst)
+			got := v.handle(context.Background(), req)
 			// Report
 			code := got.AdmissionResponse.Result.Code
 			reason := got.AdmissionResponse.Result.Reason
@@ -754,7 +763,12 @@ func TestCreatingConflictSource(t *testing.T) {
 			inst.SetGroupVersionKind(schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"})
 			inst.SetAnnotations(tc.newInstAnnotation)
 			// Test
-			got := v.handle(context.Background(), op, inst, &unstructured.Unstructured{})
+			req := &request{
+				obj:    inst,
+				oldObj: &unstructured.Unstructured{},
+				op:     op,
+			}
+			got := v.handle(context.Background(), req)
 			// Report
 			code := got.AdmissionResponse.Result.Code
 			reason := got.AdmissionResponse.Result.Reason

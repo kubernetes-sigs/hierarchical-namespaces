@@ -49,6 +49,12 @@ type Validator struct {
 	decoder *admission.Decoder
 }
 
+type request struct {
+	obj    *unstructured.Unstructured
+	oldObj *unstructured.Unstructured
+	op     k8sadm.Operation
+}
+
 func (v *Validator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	log := v.Log.WithValues("resource", req.Resource, "ns", req.Namespace, "nm", req.Name, "op", req.Operation, "user", req.UserInfo.Username)
 
@@ -74,29 +80,13 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 		return webhooks.Allow("HNC SA")
 	}
 
-	// Decode the old and new object, if we expect them to exist ("old" won't exist for creations,
-	// while "new" won't exist for deletions).
-	inst := &unstructured.Unstructured{}
-	oldInst := &unstructured.Unstructured{}
-	if req.Operation != k8sadm.Delete {
-		if err := v.decoder.Decode(req, inst); err != nil {
-			log.Error(err, "Couldn't decode req.Object", "raw", req.Object)
-			return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
-		}
-	}
-	if req.Operation != k8sadm.Create {
-		// See issue #688 and #889
-		if req.Operation == k8sadm.Delete && req.OldObject.Raw == nil {
-			return webhooks.Allow("cannot validate deletions in K8s 1.14")
-		}
-		if err := v.decoder.DecodeRaw(req.OldObject, oldInst); err != nil {
-			log.Error(err, "Couldn't decode req.OldObject", "raw", req.OldObject)
-			return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
-		}
+	decoded, err := v.decodeRequest(log, req)
+	if err != nil {
+		return webhooks.Deny(metav1.StatusReasonBadRequest, err.Error())
 	}
 
 	// Run the actual logic.
-	resp := v.handle(ctx, req.Operation, inst, oldInst)
+	resp := v.handle(ctx, decoded)
 	if !resp.Allowed {
 		log.Info("Denied", "code", resp.Result.Code, "reason", resp.Result.Reason, "message", resp.Result.Message)
 	} else {
@@ -115,7 +105,10 @@ func (v *Validator) isPropagateType(gvk metav1.GroupVersionKind) bool {
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
 // easily unit tested (ie without constructing an admission.Request, setting up user infos, etc).
-func (v *Validator) handle(ctx context.Context, op k8sadm.Operation, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (v *Validator) handle(ctx context.Context, req *request) admission.Response {
+	inst := req.obj
+	oldInst := req.oldObj
+
 	// Find out if the object was/is inherited, and where it's inherited from.
 	oldSource, oldInherited := metadata.GetLabel(oldInst, api.LabelInheritedFrom)
 	newSource, newInherited := metadata.GetLabel(inst, api.LabelInheritedFrom)
@@ -152,7 +145,7 @@ func (v *Validator) handle(ctx context.Context, op k8sadm.Operation, inst, oldIn
 		return webhooks.Allow("source object")
 	}
 	// This is a propagated object.
-	return v.handleInherited(ctx, op, newSource, oldSource, inst, oldInst)
+	return v.handleInherited(ctx, req, newSource, oldSource)
 }
 
 func validateSelectorAnnot(inst *unstructured.Unstructured) string {
@@ -242,7 +235,11 @@ func validateNoneSelectorChange(inst, oldInst *unstructured.Unstructured) error 
 	return err
 }
 
-func (v *Validator) handleInherited(ctx context.Context, op k8sadm.Operation, newSource, oldSource string, inst, oldInst *unstructured.Unstructured) admission.Response {
+func (v *Validator) handleInherited(ctx context.Context, req *request, newSource, oldSource string) admission.Response {
+	op := req.op
+	inst := req.obj
+	oldInst := req.oldObj
+
 	// Propagated objects cannot be created or deleted (except by the HNC SA, but the HNC SA
 	// never gets this far in the validation). They *can* have their statuses updated, so
 	// if this is an update, make sure that the canonical form of the object hasn't changed.
@@ -345,6 +342,31 @@ func (v *Validator) hasConflict(inst *unstructured.Unstructured) (bool, []string
 	}
 
 	return len(conflicts) != 0, conflicts
+}
+
+func (v *Validator) decodeRequest(log logr.Logger, req admission.Request) (*request, error) {
+	// Decode the old and new object, if we expect them to exist ("old" won't exist for creations,
+	// while "new" won't exist for deletions).
+	inst := &unstructured.Unstructured{}
+	oldInst := &unstructured.Unstructured{}
+	if req.Operation != k8sadm.Delete {
+		if err := v.decoder.Decode(req, inst); err != nil {
+			log.Error(err, "Couldn't decode req.Object", "raw", req.Object)
+			return nil, fmt.Errorf("while decoding object: %w", err)
+		}
+	}
+	if req.Operation != k8sadm.Create {
+		if err := v.decoder.DecodeRaw(req.OldObject, oldInst); err != nil {
+			log.Error(err, "Couldn't decode req.OldObject", "raw", req.OldObject)
+			return nil, fmt.Errorf("while decoding old object: %w", err)
+		}
+	}
+
+	return &request{
+		obj:    inst,
+		oldObj: oldInst,
+		op:     req.Operation,
+	}, nil
 }
 
 func (v *Validator) InjectClient(c client.Client) error {
