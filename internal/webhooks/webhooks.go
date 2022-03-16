@@ -8,6 +8,8 @@ import (
 	authnv1 "k8s.io/api/authentication/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
@@ -43,16 +45,44 @@ func Allow(msg string) admission.Response {
 	}}
 }
 
+func DenyBadRequest(err error) admission.Response {
+	return denyFromAPIError(apierrors.NewBadRequest(err.Error()))
+}
+
+func DenyConflict(qualifiedResource schema.GroupResource, name string, err error) admission.Response {
+	return denyFromAPIError(apierrors.NewConflict(qualifiedResource, name, err))
+}
+
+func DenyForbidden(qualifiedResource schema.GroupResource, name string, err error) admission.Response {
+	return denyFromAPIError(apierrors.NewForbidden(qualifiedResource, name, err))
+}
+
+func DenyInternalError(err error) admission.Response {
+	return denyFromAPIError(apierrors.NewInternalError(err))
+}
+
+func DenyInvalid(qualifiedKind schema.GroupKind, name string, errs field.ErrorList) admission.Response {
+	err := apierrors.NewInvalid(qualifiedKind, name, errs)
+	return denyFromAPIError(err)
+}
+
+func DenyServiceUnavailable(reason string) admission.Response {
+	return denyFromAPIError(apierrors.NewServiceUnavailable(reason))
+}
+
+func DenyUnauthorized(reason string) admission.Response {
+	return denyFromAPIError(apierrors.NewUnauthorized(reason))
+}
+
 // Deny is a replacement for controller-runtime's admission.Denied() that allows you to set _both_ a
 // human-readable message _and_ a machine-readable reason, and also sets the code correctly instead
 // of hardcoding it to 403 Forbidden.
 //
 // NOTE: When manipulating the HNC configuration object via kubectl directly, kubectl
 // ignores the Message field and displays the Details field if an error is
-// StatusReasonInvalid. For this reason DenyFromAPIError is preferred for denying
-// a request due to invalid data.
+// StatusReasonInvalid.
 //
-// Deprecated: Use DenyFromAPIError instead; please don't add new callers.
+// Deprecated: Use one of the explicit deny reason funcs instead; please don't add new callers.
 func Deny(reason metav1.StatusReason, msg string) admission.Response {
 	err := &apierrors.StatusError{
 		ErrStatus: metav1.Status{
@@ -61,11 +91,11 @@ func Deny(reason metav1.StatusReason, msg string) admission.Response {
 			Reason:  reason,
 		},
 	}
-	return DenyFromAPIError(err)
+	return denyFromAPIError(err)
 }
 
-// DenyFromAPIError returns a response for denying a request with provided status error object.
-func DenyFromAPIError(apiStatus apierrors.APIStatus) admission.Response {
+// denyFromAPIError returns a response for denying a request with provided status error object.
+func denyFromAPIError(apiStatus apierrors.APIStatus) admission.Response {
 	status := apiStatus.Status()
 	return admission.Response{
 		AdmissionResponse: k8sadm.AdmissionResponse{

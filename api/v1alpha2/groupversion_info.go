@@ -32,4 +32,11 @@ var (
 
 	// AddToScheme adds the types in this group-version to the given scheme.
 	AddToScheme = SchemeBuilder.AddToScheme
+
+	HNCConfigurationGR       = schema.GroupResource{Group: GroupVersion.Group, Resource: "hncconfigurations"}
+	HierarchyConfigurationGR = schema.GroupResource{Group: GroupVersion.Group, Resource: "hierarchyconfigurations"}
+	SubnamespaceAnchorGR     = schema.GroupResource{Group: GroupVersion.Group, Resource: "subnamespaceanchors"}
+	HNCConfigurationGK       = schema.GroupKind{Group: GroupVersion.Group, Kind: "HNCConfiguration"}
+	HierarchyConfigurationGK = schema.GroupKind{Group: GroupVersion.Group, Kind: "HierarchyConfiguration"}
+	SubnamespaceAnchorGK     = schema.GroupKind{Group: GroupVersion.Group, Kind: "SubnamespaceAnchor"}
 )
