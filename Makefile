@@ -169,7 +169,7 @@ fmt:
 # check-fmt: Checks gofmt/go fmt has been ran. gofmt -l lists files whose formatting differs from gofmt's, so it fails if there are unformatted go code.
 check-fmt:
 	@if [ $(shell gofmt -l ${GOFMT_DIRS} | wc -l ) != 0 ]; then \
-		echo "Error: there are unformatted go code, please run 'gofmt' before committing" && exit 1; \
+		echo "Error: there are unformatted go code, please run 'make fmt' before committing" && exit 1; \
 	fi
 
 # Run go vet against code
