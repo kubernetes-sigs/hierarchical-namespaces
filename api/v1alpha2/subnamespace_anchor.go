@@ -21,10 +21,8 @@ import (
 
 // Constants for the subnamespace anchor resource type and namespace annotation.
 const (
-	Anchors          = "subnamespaceanchors"
-	AnchorKind       = "SubnamespaceAnchor"
-	AnchorAPIVersion = MetaGroup + "/v1alpha2"
-	SubnamespaceOf   = MetaGroup + "/subnamespace-of"
+	Anchors        = "subnamespaceanchors"
+	SubnamespaceOf = MetaGroup + "/subnamespace-of"
 )
 
 // SubnamespaceAnchorState describes the state of the subnamespace. The state could be

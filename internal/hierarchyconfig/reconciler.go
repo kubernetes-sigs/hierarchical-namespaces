@@ -26,7 +26,6 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -811,10 +810,8 @@ func (r *Reconciler) getAnchorNames(ctx context.Context, nm string) ([]string, e
 	var anms []string
 
 	// List all the anchor in the namespace.
-	ul := &unstructured.UnstructuredList{}
-	ul.SetKind(api.AnchorKind)
-	ul.SetAPIVersion(api.AnchorAPIVersion)
-	if err := r.List(ctx, ul, client.InNamespace(nm)); err != nil {
+	anchorList := &api.SubnamespaceAnchorList{}
+	if err := r.List(ctx, anchorList, client.InNamespace(nm)); err != nil {
 		if !apierrors.IsNotFound(err) {
 			return nil, err
 		}
@@ -822,7 +819,7 @@ func (r *Reconciler) getAnchorNames(ctx context.Context, nm string) ([]string, e
 	}
 
 	// Create a list of strings of the anchor names.
-	for _, inst := range ul.Items {
+	for _, inst := range anchorList.Items {
 		anms = append(anms, inst.GetName())
 	}
 

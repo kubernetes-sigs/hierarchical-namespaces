@@ -496,6 +496,7 @@ func (r *Reconciler) enqueueDescendants(log logr.Logger, src *unstructured.Unstr
 func (r *Reconciler) enqueueLocalObjects(ctx context.Context, log logr.Logger, ns string) error {
 	ul := &unstructured.UnstructuredList{}
 	ul.SetGroupVersionKind(r.GVK)
+	ul.SetKind(ul.GetKind() + "List")
 	if err := r.List(ctx, ul, client.InNamespace(ns)); err != nil {
 		log.Error(err, "Couldn't list objects")
 		return err
