@@ -54,6 +54,16 @@ type request struct {
 	obj    *unstructured.Unstructured
 	oldObj *unstructured.Unstructured
 	op     k8sadm.Operation
+	gvr    metav1.GroupVersionResource
+}
+
+func (req request) gr() schema.GroupResource {
+	return schema.GroupResource{Group: req.gvr.Group, Resource: req.gvr.Resource}
+}
+
+func (req request) name() string {
+	name := types.NamespacedName{Namespace: req.obj.GetNamespace(), Name: req.obj.GetName()}
+	return name.String()
 }
 
 func (v *Validator) Handle(ctx context.Context, req admission.Request) admission.Response {
@@ -137,9 +147,9 @@ func (v *Validator) handle(ctx context.Context, req *request) admission.Response
 		}
 
 		if yes, dnses := v.hasConflict(inst); yes {
-			dnsesStr := strings.Join(dnses, "\n  * ")
-			msg := fmt.Sprintf("\nCannot create %q (%s) in namespace %q because it would overwrite objects in the following descendant namespace(s):\n  * %s\nTo fix this, choose a different name for the object, or remove the conflicting objects from the above namespaces.", inst.GetName(), inst.GroupVersionKind(), inst.GetNamespace(), dnsesStr)
-			return webhooks.Deny(metav1.StatusReasonConflict, msg)
+			dnsesStr := strings.Join(dnses, ",")
+			err := fmt.Errorf("would overwrite objects in the following descendant namespace(s): %s. To fix this, choose a different name for the object, or remove the conflicting objects from the listed namespaces", dnsesStr)
+			return webhooks.DenyConflict(req.gr(), req.name(), err)
 		}
 		return webhooks.Allow("source object")
 	}
@@ -244,7 +254,8 @@ func (v *Validator) handleInherited(ctx context.Context, req *request, newSource
 	// if this is an update, make sure that the canonical form of the object hasn't changed.
 	switch op {
 	case k8sadm.Create:
-		return webhooks.Deny(metav1.StatusReasonForbidden, "Cannot create objects with the label \""+api.LabelInheritedFrom+"\"")
+		err := fmt.Errorf("cannot create objects with the label \"%s\"", api.LabelInheritedFrom)
+		return webhooks.DenyForbidden(req.gr(), req.name(), err)
 
 	case k8sadm.Delete:
 		// There are few things more irritating in (K8s) life than having some stupid controller stop
@@ -256,7 +267,8 @@ func (v *Validator) handleInherited(ctx context.Context, req *request, newSource
 		}
 
 		if !isDeleting {
-			return webhooks.Deny(metav1.StatusReasonForbidden, "Cannot delete object propagated from namespace \""+oldSource+"\"")
+			err := fmt.Errorf("cannot delete object propagated from namespace \"%s\"", oldSource)
+			return webhooks.DenyForbidden(req.gr(), req.name(), err)
 		}
 
 		return webhooks.Allow("allowing deletion of propagated object since namespace is being deleted")
@@ -266,21 +278,22 @@ func (v *Validator) handleInherited(ctx context.Context, req *request, newSource
 		// added or deleted. Note that this label is *not* included in canonical(), below, so we
 		// need to check it manually.
 		if newSource != oldSource {
-			return webhooks.Deny(metav1.StatusReasonForbidden, "Cannot modify the label \""+api.LabelInheritedFrom+"\"")
+			err := fmt.Errorf("cannot modify the label \"%s\"", api.LabelInheritedFrom)
+			return webhooks.DenyForbidden(req.gr(), req.name(), err)
 		}
 
 		// If the existing object has an inheritedFrom label, it's a propagated object. Any user changes
 		// should be rejected. Note that canonical does *not* compare any HNC labels or
 		// annotations.
 		if !reflect.DeepEqual(canonical(inst), canonical(oldInst)) {
-			return webhooks.Deny(metav1.StatusReasonForbidden,
-				"Cannot modify object propagated from namespace \""+oldSource+"\"")
+			err := fmt.Errorf("cannot modify object propagated from namespace \"%s\"", oldSource)
+			return webhooks.DenyForbidden(req.gr(), req.name(), err)
 		}
 
 		// Check for all the labels and annotations (including HNC and non HNC)
 		if !reflect.DeepEqual(oldInst.GetLabels(), inst.GetLabels()) || !reflect.DeepEqual(oldInst.GetAnnotations(), inst.GetAnnotations()) {
-			return webhooks.Deny(metav1.StatusReasonForbidden,
-				"Cannot modify object propagated from namespace \""+oldSource+"\"")
+			err := fmt.Errorf("cannot modify object propagated from namespace \"%s\"", oldSource)
+			return webhooks.DenyForbidden(req.gr(), req.name(), err)
 		}
 
 		return webhooks.Allow("no illegal updates to propagated object")
@@ -365,6 +378,7 @@ func (v *Validator) decodeRequest(log logr.Logger, req admission.Request) (*requ
 		obj:    inst,
 		oldObj: oldInst,
 		op:     req.Operation,
+		gvr:    req.Resource,
 	}, nil
 }
 
