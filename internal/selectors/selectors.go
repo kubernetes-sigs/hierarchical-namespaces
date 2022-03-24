@@ -174,6 +174,18 @@ var exclusionByLabels = []ExclusionByLabelsSpec{
 	{Key: "cattle.io/creator", Value: "norman"},
 }
 
+// A annotation as a key, value pair, used to exclude resources matching this annotation
+type ExclusionByAnnotationsSpec struct {
+	Key   string
+	Value string
+}
+
+// ExclusionByAnnotationsSpec are known annotation key which are excluded from propagation. Right
+// now only used to exclude resources created by Openshift
+var exclusionByAnnotations = []ExclusionByAnnotationsSpec{
+	{Key: "openshift.io/description"},
+}
+
 // isExcluded returns true to indicate that this object is excluded from being propagated
 func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 	name := inst.GetName()
@@ -193,6 +205,16 @@ func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 		// nonexisting key in the `labels` map will also return an empty string ("") - potentially
 		// causing false matches if `ok` is not checked
 		if ok && gotLabelValue == res.Value {
+			return true, nil
+		}
+	}
+
+	// exclusion by annotations
+	for _, res := range exclusionByAnnotations {
+		gotAnnotationValue, ok := inst.GetAnnotations()[res.Key]
+		// we check also if res.Value is an empty string (""),
+		// this is for excluding resources that contain defined keys.
+		if ok && (gotAnnotationValue == res.Value || res.Value == "") {
 			return true, nil
 		}
 	}
