@@ -16,7 +16,9 @@ limitations under the License.
 package main
 
 import (
+	"errors"
 	"flag"
+	"net/http"
 	"os"
 	"strings"
 
@@ -90,7 +92,6 @@ func main() {
 	metricsCleanupFn := enableMetrics()
 	defer metricsCleanupFn()
 	mgr := createManager()
-	setupChecks(mgr)
 
 	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
 	setupLog.Info("Starting certificate generation")
@@ -100,9 +101,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	setupProbeEndpoints(mgr, certsReady)
+
 	// The call to mgr.Start will never return, but the certs won't be ready until the manager starts
-	// and we can't set up the webhooks without them. So start a goroutine which will wait until the
-	// certs are ready, and then create the rest of the HNC controllers.
+	// and we can't set up the webhooks without them (the webhook server runnable will try to read the
+	// certs, and if those certs don't exist, the entire process will exit). So start a goroutine
+	// which will wait until the certs are ready, and then create the rest of the HNC controllers.
 	go startControllers(mgr, certsReady)
 
 	setupLog.Info("Starting manager")
@@ -234,15 +238,29 @@ func createManager() ctrl.Manager {
 	return mgr
 }
 
-func setupChecks(mgr ctrl.Manager) {
-	if err := mgr.AddHealthzCheck("healthz", mgr.GetWebhookServer().StartedChecker()); err != nil {
+// setupProbeEndpoints registers the health endpoints
+func setupProbeEndpoints(mgr ctrl.Manager, certsReady chan struct{}) {
+	// We can't use the default checker directly, since the checker assumes that the webhook server
+	// has been started, and it will error out (and crash HNC) if the certs don't exist yet.
+	// Therefore, this thin wrapper checks whether the certs are ready, and if so, bypasses the
+	// controller-manager checker.
+	checker := func(req *http.Request) error {
+		select {
+		case <-certsReady:
+			return mgr.GetWebhookServer().StartedChecker()(req)
+		default:
+			return errors.New("HNC internal certs are not yet ready")
+		}
+	}
+	if err := mgr.AddHealthzCheck("healthz", checker); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", mgr.GetWebhookServer().StartedChecker()); err != nil {
+	if err := mgr.AddReadyzCheck("readyz", checker); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
+	setupLog.Info("Probe endpoints are configured on healthz and readyz")
 }
 
 func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
