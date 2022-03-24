@@ -33,7 +33,7 @@ echo "Starting script at $(date +%Y-%m-%d\ %H:%M:%S)"
 # as of Go 1.15, GO111MODULE=on *is* required.
 echo
 echo Installing and starting Kind...
-(cd && GO111MODULE=on go get sigs.k8s.io/kind@v0.9.0)
+go install sigs.k8s.io/kind@v0.12.0
 kind create cluster
 
 echo
