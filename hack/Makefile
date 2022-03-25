@@ -1,3 +1,5 @@
+# This makefile is used to test the prow scripts locally
+
 # This is a temp directory where we check out the repo.
 #
 # Note that this makefile does *not* attempt to clean up the temp dirs created
@@ -8,32 +10,39 @@ PROW_TMP := $(shell mktemp -d)
 
 # The KRTE image to use (see prow-run-e2e.sh for information about why we use krte).
 #
-# The current version (20210129) includes Go 1.15.7 and kubectl 1.17. UPGRADE
-# TO A NEW VERSION WHEN WE STOP SUPPORTING K8s 1.17 as that seems like a
-# reasonable time. At that point, I'd just upgrade to the latest image that
-# works; we don't have to increment one by one. Honestly I doubt the *exact*
-# version matters too much; look at the version in
-# https://github.com/kubernetes/test-infra/blob/master/config/jobs/kubernetes-sigs/kind/kind-postsubmits.yaml
-# and that's probably good enough for us.
-#
 # Please keep this in sync with
-# https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/hierarchical-namespaces/hnc-e2e.yaml.
+# https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/hierarchical-namespaces/hnc-e2e.yaml,
+# which is kept up-to-date automatically by K8s build automation.
+#
 # Also, when you do this, please also upgrade the version of Kind we download
 # in prow-run-e2e.sh in this directory.
-PROW_IMG ?= gcr.io/k8s-testimages/krte:v20210129-3799a64-master
+KRTE_IMG ?= gcr.io/k8s-staging-test-infra/krte:v20220322-c5eee43783-master
 
-# This is for debugging prow-run-e2e.sh; see that script for more information.
-#
+# The variant of HNC to test; this can be default, ha, or omitted (defaults to
+# "default"). See prow-run-e2e.sh for details.
+HNC_VARIANT ?= ""
+
+# The branch to check out of the HNC repo once it's been cloned. Note that
+# changes to prow-run-e2e.sh do not need to be checked in (the prow-test
+# target, below, copies it from this directory) but anything else does.
+HNC_BRANCH ?= "master"
+
+# The org hosting the repo. By default, pulls from the official repo, but changing this allows you to push your local
+# changes to your own Github repo and then pull from that.
+HNC_ORG ?= "kubernetes-sigs"
+
 # The entire repo is cloned and checked out at the master branch, except for
-# prow-run-e2e.sh which is copied from this directory.
+# prow-run-e2e.sh which is copied from this directory so you can test local
+# changes.
 #
 # The '-it' arg is needed to allow you to hit ctrl-c while the tests are still
 # running.
-prow-test:
+prow-test: prow-clean
 	@echo ~~~ Preparing to test prow-run-e2e.sh ~~~
 	@echo
 	@echo Cloning the repo
-	git clone https://github.com/kubernetes-sigs/hierarchical-namespaces ${PROW_TMP}
+	git clone https://github.com/${HNC_ORG}/hierarchical-namespaces ${PROW_TMP}
+	cd ${PROW_TMP} && git checkout ${HNC_BRANCH}
 	@echo
 	@echo Copying run-e2e-tests in this directory to the synced directory
 	cp -p ./prow-run-e2e.sh ${PROW_TMP}/hack
@@ -47,11 +56,11 @@ prow-test:
 		-w /local-test-start-dir \
 		--network="host" \
 		-it \
-		${PROW_IMG} \
-		/local-test-start-dir/hack/prow-run-e2e.sh
+		${KRTE_IMG} \
+		/local-test-start-dir/hack/prow-run-e2e.sh ${HNC_VARIANT}
 
-# After calling 'make prow-test', the Kind cluster might still be present on the
-# *host* even though the Docker container has exited. Run this to find and
-# delete any Kind cluster starting with 'hnc-postsubmit-'
+# After calling 'make prow-test', the Kind cluster might still be present on
+# the *host* even though the Docker container has exited. This name is defined
+# in prow-run-e2e.sh.
 prow-clean:
-	kind get clusters | grep hnc-postsubmit- | xargs kind delete clusters
+	-kind delete cluster --name hnc-e2e

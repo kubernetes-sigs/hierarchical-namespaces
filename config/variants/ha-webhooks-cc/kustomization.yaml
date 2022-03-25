@@ -1,0 +1,55 @@
+namespace: hnc-system
+namePrefix: hnc-
+bases:
+- ../../manager
+- ../../webhook
+
+patches:
+- patch: |-
+    # Give it a new name to differentiate from the main controller
+    - op: replace
+      path: /metadata/name
+      value: controller-manager-ha
+    # Disable the reconciler writebacks
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --webhooks-only
+    # Use multiple replicas
+    - op: replace
+      path: /spec/replicas
+      value: 3
+    # Give it different labels so it doesn't interfere with the main controller
+    - op: replace
+      path: /spec/selector/matchLabels/control-plane
+      value: controller-manager-ha
+    - op: replace
+      path: /spec/template/metadata/labels/control-plane
+      value: controller-manager-ha
+    # Since we don't include the Secret in this kustomization, we need to
+    # manually tell Kustomize to add the hnc- prefix
+    - op: replace
+      path: /spec/template/spec/volumes/0/secret/secretName
+      value: hnc-webhook-server-cert
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: controller-manager
+- patch: |-
+    # Point the service to the webhook deployment, not the main controller
+    - op: replace
+      path: /spec/selector/control-plane
+      value: controller-manager-ha
+  target:
+    version: v1
+    kind: Service
+    name: webhook-service
+
+# We don't want the namespace from the manager manifest
+patchesStrategicMerge:
+- |-
+  $patch: delete
+  apiVersion: v1
+  kind: Namespace
+  metadata:
+    name: system

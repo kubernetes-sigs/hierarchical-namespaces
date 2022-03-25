@@ -1,0 +1,7 @@
+This directory is the default configuration of HNC, except that it's configured
+to use cert-manager ("cm" = "Cert Manager") instead of the internal
+cert-controller. It's published as "default_cm.yaml" when
+building the manifests ("made manifests" in the root directory).
+
+As of March 2022, I (aludwin@google.com) have not actually tested this to see if
+it works.

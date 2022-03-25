@@ -2,7 +2,19 @@
 .PHONY: release
 
 # If CONFIG is `kind`, various defaults will be optimized for deploying locally to Kind
-CONFIG ?= "default"
+CONFIG ?= default
+
+# Set the Kind name (by default, it's "kind"). If you set this explicitly,
+# CONFIG is automatically set to "kind" as well, overriding any existing
+# setting.
+ifeq ($(CONFIG),kind)
+  KIND ?= "kind"
+else
+  KIND ?= ""
+endif
+ifneq ($(KIND),"")
+  CONFIG = kind
+endif
 
 # The GCP project ID useful to have when performing operations that require one
 # (e.g. release). If you don't have gcloud, all other operations in this
@@ -157,14 +169,21 @@ manifests: controller-gen
 	cd manifests && \
 		touch kustomization.yaml && \
 		${KUSTOMIZE} edit add resource ../config/crd
-	${KUSTOMIZE} build manifests/ -o manifests/hnc-crds.yaml
-	@echo "Building full manifest"
-	rm manifests/kustomization.yaml
-	cd manifests && \
-		touch kustomization.yaml && \
-		${KUSTOMIZE} edit add resource ../config/default && \
-		${KUSTOMIZE} edit set image controller=${HNC_IMG}
-	${KUSTOMIZE} build manifests/ -o manifests/${HNC_IMG_NAME}.yaml
+	${KUSTOMIZE} build manifests/ -o manifests/crds.yaml
+	@cd manifests && \
+		for variant in default-cc default-cm nowebhooks-cc ha-webhooks-cc ; do \
+			echo "Building $${variant} manifest"; \
+			rm kustomization.yaml; \
+			touch kustomization.yaml && \
+			${KUSTOMIZE} edit add resource ../config/variants/$${variant} && \
+			${KUSTOMIZE} edit set image controller=${HNC_IMG}; \
+			${KUSTOMIZE} build . -o ./$${variant}.yaml; \
+		done
+	@echo "Creating alias and summary manifests"
+	@cp manifests/default-cc.yaml manifests/default.yaml
+	@cat manifests/nowebhooks-cc.yaml > manifests/ha.yaml
+	@echo "---" >> manifests/ha.yaml
+	@cat manifests/ha-webhooks-cc.yaml >> manifests/ha.yaml
 
 # Run go fmt against code
 fmt:
@@ -200,14 +219,25 @@ controller-gen:
 #
 # We only delete the deployment if it exists before applying the manifest, because
 # a) deleting the CRDs will cause all the existing CRs to be wiped away;
-# b) if not deleting the deployment, a new image won't be pulled unless the tag changes.
+# b) if we don't delete the deployment, a new image won't be pulled unless the
+#    tag changes, which it frequently won't since we use the "latest" tag during
+#    development.
 deploy: docker-push kubectl manifests
-	-kubectl -n hnc-system delete deployment hnc-controller-manager
-	kubectl apply -f manifests/${HNC_IMG_NAME}.yaml
+	-kubectl -n hnc-system delete deployment --all
+	kubectl apply -f manifests/default.yaml
 
 deploy-watch:
 	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager manager
 
+deploy-ha: docker-push kubectl manifests
+	-kubectl -n hnc-system delete deployment --all
+	kubectl apply -f manifests/ha.yaml
+
+ha-deploy-watch-ha:
+	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager-ha manager
+
+# No need to delete the HA configuration here - everything "extra" that it
+# installs is in hnc-system, which gets deleted by the default manifest.
 undeploy: manifests
 	@echo "********************************************************************************"
 	@echo "********************************************************************************"
@@ -220,15 +250,16 @@ undeploy: manifests
 	@echo "********************************************************************************"
 	@sleep 5
 	@echo "Deleting all CRDs to ensure all finalizers are removed"
-	-kubectl delete -f manifests/hnc-crds.yaml
+	-kubectl delete -f manifests/crds.yaml
 	@echo "Deleting the rest of HNC"
-	-kubectl delete -f manifests/hnc-manager.yaml
+	-kubectl delete -f manifests/default.yaml
+	@echo Please ignore any \'not found\' errors, these are expected.
 
 # Push the docker image
 docker-push: docker-build
 	@echo "Pushing ${HNC_IMG}"
 ifeq ($(CONFIG),kind)
-	kind load docker-image ${HNC_IMG}
+	kind load docker-image ${HNC_IMG} --name ${KIND}
 else
 	docker push ${HNC_IMG}
 endif
@@ -260,7 +291,7 @@ docker-push-multi: buildx-setup generate fmt vet
 kind-reboot:
 	@echo "Warning: the 'kind' command must be in your path for this to work"
 	-kind delete cluster
-	kind create cluster
+	kind create cluster --name ${KIND}
 
 # Creates a local kind cluster, destroying the old one if necessary. It's not
 # *necessary* to call this wih CONFIG=kind but it's not a bad idea either so
@@ -375,7 +406,7 @@ endif
 	@echo "Starting build."
 	@echo "*********************************************"
 	@echo "*********************************************"
-	gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=${HNC_GCB_SUBS} --timeout=30m
+	gcloud builds submit --config cloudbuild.yaml --no-source --substitutions=${HNC_GCB_SUBS} --timeout=60m
 	@echo "*********************************************"
 	@echo "*********************************************"
 	@echo "Pushing ${HNC_IMG} to ${HNC_RELEASE_IMG}"

@@ -1,0 +1,4 @@
+This directory is the default configuration of HNC, including internal cert
+management ("cc" = "Cert Controller"). It's published as "default_cc.yaml" when
+building the manifests ("made manifests" in the root directory) and aliased as
+"default.yaml." In versions of HNC prior to v1.0, this was hnc_manager.yaml.
