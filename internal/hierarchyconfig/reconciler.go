@@ -78,6 +78,8 @@ type Reconciler struct {
 	// These are interfaces to the other reconcilers
 	AnchorReconciler    AnchorReconcilerType
 	HNCConfigReconciler HNCConfigReconcilerType
+
+	ReadOnly bool
 }
 
 type AnchorReconcilerType interface {
@@ -704,6 +706,10 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, 
 	if reflect.DeepEqual(orig, inst) {
 		return false, nil
 	}
+	if r.ReadOnly {
+		// We *wanted* to change something, so assume that we need to re-reconcile other objects as well
+		return true, nil
+	}
 	exists := !inst.CreationTimestamp.IsZero()
 	if !exists && isDeletingNS {
 		log.Info("Will not create hierarchyconfiguration since namespace is being deleted")
@@ -731,6 +737,10 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, 
 func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {
 	if reflect.DeepEqual(orig, inst) {
 		return false, nil
+	}
+	if r.ReadOnly {
+		// We *wanted* to change something, so assume that we need to re-reconcile other objects as well
+		return true, nil
 	}
 
 	// NB: HCR can't create namespaces, that's only in anchor reconciler

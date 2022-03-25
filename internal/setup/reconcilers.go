@@ -17,7 +17,7 @@ import (
 // CreateReconcilers creates all reconcilers.
 //
 // This function is called both from main.go as well as from the integ tests.
-func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, useFakeClient bool) error {
+func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, readOnly, useFakeClient bool) error {
 	if err := crd.Setup(mgr, useFakeClient); err != nil {
 		return err
 	}
@@ -31,6 +31,7 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, us
 		Log:      ctrl.Log.WithName("anchor").WithName("reconcile"),
 		Forest:   f,
 		Affected: anchorChan,
+		ReadOnly: readOnly,
 	}
 	if err := ar.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create anchor reconciler: %s", err.Error())
@@ -50,6 +51,7 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, us
 		Forest:                 f,
 		Trigger:                make(chan event.GenericEvent),
 		HierarchyConfigUpdates: hcChan,
+		ReadOnly:               readOnly,
 	}
 	if err := hnccfgr.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create Config reconciler: %s", err.Error())
@@ -63,6 +65,7 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, maxReconciles int, us
 		AnchorReconciler:    ar,
 		HNCConfigReconciler: hnccfgr,
 		Affected:            hcChan,
+		ReadOnly:            readOnly,
 	}
 	if err := hcr.SetupWithManager(mgr, maxReconciles); err != nil {
 		return fmt.Errorf("cannot create Hierarchy reconciler: %s", err.Error())

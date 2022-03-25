@@ -35,6 +35,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -59,7 +60,7 @@ var (
 	maxReconciles           int
 	enableLeaderElection    bool
 	leaderElectionId        string
-	novalidation            bool
+	noWebhooks              bool
 	debugLogs               bool
 	testLog                 bool
 	internalCert            bool
@@ -71,6 +72,7 @@ var (
 	managedNamespaceLabels  arrayArg
 	managedNamespaceAnnots  arrayArg
 	includedNamespacesRegex string
+	webhooksOnly            bool
 )
 
 // init preloads some global vars before main() starts. Since this is the top-level module, I'm not
@@ -93,12 +95,19 @@ func main() {
 	defer metricsCleanupFn()
 	mgr := createManager()
 
-	// Make sure certs are generated and valid if webhooks are enabled and internal certs are used.
-	setupLog.Info("Starting certificate generation")
-	certsReady, err := setup.CreateCertsIfNeeded(mgr, novalidation, internalCert, restartOnSecretRefresh)
-	if err != nil {
-		setupLog.Error(err, "unable to set up cert rotation")
-		os.Exit(1)
+	// Make sure certs are managed if requested. In webhooks-only mode, we don't run the manager, and
+	// rely on either a controller running in a different HNC deployment, or an external tool such as
+	// cert-manager.
+	certsReady := make(chan struct{})
+	if internalCert && !webhooksOnly {
+		setupLog.Info("Starting certificate generation")
+		err := setup.ManageCerts(mgr, certsReady, restartOnSecretRefresh)
+		if err != nil {
+			setupLog.Error(err, "unable to set up cert rotation")
+			os.Exit(1)
+		}
+	} else {
+		close(certsReady)
 	}
 
 	setupProbeEndpoints(mgr, certsReady)
@@ -125,7 +134,7 @@ func parseFlags() {
 		"Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionId, "leader-election-id", "controller-leader-election-helper",
 		"Leader election id determines the name of the configmap that leader election will use for holding the leader lock.")
-	flag.BoolVar(&novalidation, "novalidation", false, "Disables validating webhook")
+	flag.BoolVar(&noWebhooks, "no-webhooks", false, "Disables webhooks")
 	flag.BoolVar(&debugLogs, "debug-logs", false, "Shows verbose logs.")
 	flag.BoolVar(&testLog, "enable-test-log", false, "Enables test log.")
 	flag.BoolVar(&internalCert, "enable-internal-cert-management", false, "Enables internal cert management. See the user guide for more information.")
@@ -139,6 +148,7 @@ func parseFlags() {
 	flag.BoolVar(&restartOnSecretRefresh, "cert-restart-on-secret-refresh", false, "Kills the process when secrets are refreshed so that the pod can be restarted (secrets take up to 60s to be updated by running pods)")
 	flag.Var(&managedNamespaceLabels, "managed-namespace-label", "A regex indicating the labels on namespaces that are managed by HNC. These labels may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
 	flag.Var(&managedNamespaceAnnots, "managed-namespace-annotation", "A regex indicating the annotations on namespaces that are managed by HNC. These annotations may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
+	flag.BoolVar(&webhooksOnly, "webhooks-only", false, "Disables the controllers so HNC can be run in HA webhook mode")
 	flag.Parse()
 
 	// Assign the array args to the configuration variables after the args are parsed.
@@ -146,6 +156,12 @@ func parseFlags() {
 	config.SetNamespaces(includedNamespacesRegex, excludedNamespaces...)
 	if err := config.SetManagedMeta(managedNamespaceLabels, managedNamespaceAnnots); err != nil {
 		setupLog.Error(err, "Illegal flag values")
+		os.Exit(1)
+	}
+
+	// Basic legality checks
+	if webhooksOnly && noWebhooks {
+		setupLog.Info("Cannot set both --webhooks-only and --no-webhooks")
 		os.Exit(1)
 	}
 }
@@ -252,6 +268,10 @@ func setupProbeEndpoints(mgr ctrl.Manager, certsReady chan struct{}) {
 			return errors.New("HNC internal certs are not yet ready")
 		}
 	}
+	// If we're not running the webhooks, no point checking to see if they're up.
+	if noWebhooks {
+		checker = healthz.Ping
+	}
 	if err := mgr.AddHealthzCheck("healthz", checker); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
@@ -278,14 +298,14 @@ func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
 	f := forest.NewForest()
 
 	// Create all validating and mutating admission controllers.
-	if !novalidation {
-		setupLog.Info("Registering validating webhook (won't work when running locally; use --novalidation)")
+	if !noWebhooks {
+		setupLog.Info("Registering validating webhook (won't work when running locally; use --no-webhooks)")
 		setup.CreateWebhooks(mgr, f)
 	}
 
 	// Create all reconciling controllers
 	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := setup.CreateReconcilers(mgr, f, maxReconciles, false); err != nil {
+	if err := setup.CreateReconcilers(mgr, f, maxReconciles, webhooksOnly, false); err != nil {
 		setupLog.Error(err, "cannot create controllers")
 		os.Exit(1)
 	}

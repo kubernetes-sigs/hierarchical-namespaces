@@ -51,6 +51,9 @@ type Reconciler struct {
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional objects that need updating.
 	Affected chan event.GenericEvent
+
+	// ReadOnly disables writebacks
+	ReadOnly bool
 }
 
 // Reconcile sets up some basic variables and then calls the business logic. It currently
@@ -339,6 +342,10 @@ func (r *Reconciler) getInstance(ctx context.Context, pnm, nm string) (*api.Subn
 }
 
 func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor) error {
+	if r.ReadOnly {
+		return nil
+	}
+
 	if inst.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
@@ -356,6 +363,10 @@ func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *a
 // deleteInstance deletes the anchor instance. Note: Make sure there's no
 // finalizers on the instance before calling this function.
 func (r *Reconciler) deleteInstance(ctx context.Context, inst *api.SubnamespaceAnchor) error {
+	if r.ReadOnly {
+		return nil
+	}
+
 	if err := r.Delete(ctx, inst); err != nil {
 		return fmt.Errorf("while deleting on apiserver: %w", err)
 	}
@@ -378,6 +389,10 @@ func (r *Reconciler) getNamespace(ctx context.Context, nm string) (*corev1.Names
 }
 
 func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pnm string) error {
+	if r.ReadOnly {
+		return nil
+	}
+
 	inst := &corev1.Namespace{}
 	inst.ObjectMeta.Name = nm
 	metadata.SetAnnotation(inst, api.SubnamespaceOf, pnm)
@@ -395,6 +410,10 @@ func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, nm, pn
 }
 
 func (r *Reconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
+	if r.ReadOnly {
+		return nil
+	}
+
 	if err := r.Delete(ctx, inst); err != nil {
 		log.Error(err, "While deleting subnamespace")
 		return err
