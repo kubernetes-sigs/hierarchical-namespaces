@@ -184,11 +184,16 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 		return err
 	}
 
+	parentAnchor, err := r.getSubnamespaceAnchorInstance(ctx, nsInst.Annotations[api.SubnamespaceOf], nm)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return err
+	}
+
 	// Update whether the HC is deletable.
 	r.updateFinalizers(log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	needUpdateObjects := r.syncWithForest(log, nsInst, inst, deletingCRD, anms)
+	needUpdateObjects := r.syncWithForest(log, nsInst, inst, deletingCRD, anms, parentAnchor)
 
 	// Write back if anything's changed. Early-exit if we just write back exactly what we had and this
 	// isn't the first time we're syncing.
@@ -284,7 +289,7 @@ func (r *Reconciler) updateFinalizers(log logr.Logger, inst *api.HierarchyConfig
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine. Return true, if the namespace is just synced or the
 // namespace labels are changed that requires updating all objects in the namespaces.
-func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string) bool {
+func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string, parentAnchor *api.SubnamespaceAnchor) bool {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
@@ -305,7 +310,7 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	// If this is a subnamespace, make sure .spec.parent is set correctly. Then sync the parent to the
 	// forest, and finally notify any relatives (including the parent) that might have been waiting
 	// for this namespace to be synced.
-	r.syncSubnamespaceParent(log, inst, nsInst, ns)
+	r.syncSubnamespaceParent(log, inst, nsInst, ns, parentAnchor)
 	r.syncParent(log, inst, ns)
 	initial := r.markExisting(log, ns)
 
@@ -354,7 +359,7 @@ func (r *Reconciler) syncExternalNamespace(log logr.Logger, nsInst *corev1.Names
 // condition if the anchor is missing in the parent namespace according to the forest. The
 // subnamespace-of annotation is the source of truth of the ownership (e.g. being a subnamespace),
 // since modifying a namespace has higher privilege than what HNC users can do.
-func (r *Reconciler) syncSubnamespaceParent(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
+func (r *Reconciler) syncSubnamespaceParent(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace, parentAnchor *api.SubnamespaceAnchor) {
 	if ns.IsExternal() {
 		ns.IsSub = false
 		return
@@ -394,17 +399,11 @@ func (r *Reconciler) syncSubnamespaceParent(log logr.Logger, inst *api.Hierarchy
 		inst.Spec.Parent = pnm
 	}
 
-	// Look up the Anchors in the parent namespace. Set SubnamespaceAnchorMissing condition if it's
-	// not there.
-	found := false
-	for _, anm := range r.Forest.Get(pnm).Anchors {
-		if anm == ns.Name() {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if parentAnchor == nil {
 		ns.SetCondition(api.ConditionBadConfiguration, api.ReasonAnchorMissing, "The anchor is missing in the parent namespace")
+	} else {
+		inst.Spec.Labels = parentAnchor.Spec.Labels
+		inst.Spec.Annotations = parentAnchor.Spec.Annotations
 	}
 }
 
@@ -837,11 +836,18 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 		}
 	}
 	// Maps a subnamespace anchor to the parent singleton.
+	// Also maps a subnamespace anchor to the child singleton.
+	// Required as the anchor needs to be reconciled to add or remove finalizers
+	// The subnamespace created by the anchor needs to be reconciled in case managed labels or annotations have changed
 	anchorMapFn := func(obj client.Object) []reconcile.Request {
 		return []reconcile.Request{
 			{NamespacedName: types.NamespacedName{
 				Name:      api.Singleton,
 				Namespace: obj.GetNamespace(),
+			}},
+			{NamespacedName: types.NamespacedName{
+				Name:      api.Singleton,
+				Namespace: obj.GetName(),
 			}},
 		}
 	}
@@ -855,4 +861,13 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 		Watches(&source.Kind{Type: &api.SubnamespaceAnchor{}}, handler.EnqueueRequestsFromMapFunc(anchorMapFn)).
 		WithOptions(opts).
 		Complete(r)
+}
+
+func (r *Reconciler) getSubnamespaceAnchorInstance(ctx context.Context, pnm, nm string) (*api.SubnamespaceAnchor, error) {
+	nsn := types.NamespacedName{Namespace: pnm, Name: nm}
+	inst := &api.SubnamespaceAnchor{}
+	if err := r.Get(ctx, nsn, inst); err != nil {
+		return nil, err
+	}
+	return inst, nil
 }

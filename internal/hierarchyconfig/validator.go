@@ -16,8 +16,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -134,7 +132,9 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
-	allErrs := validateManagedMeta(req.hc)
+	labelErrs := config.ValidateManagedLabels(req.hc.Spec.Labels)
+	annotationErrs := config.ValidateManagedAnnotations(req.hc.Spec.Annotations)
+	allErrs := append(labelErrs, annotationErrs...)
 	if len(allErrs) > 0 {
 		return webhooks.DenyInvalid(api.HierarchyConfigurationGK, req.hc.Name, allErrs)
 	}
@@ -531,49 +531,6 @@ func (r *realClient) IsAdmin(ctx context.Context, ui *authnv1.UserInfo, nnm stri
 
 	// Extract the interesting result
 	return sar.Status.Allowed, err
-}
-
-func validateManagedMeta(hc *api.HierarchyConfiguration) field.ErrorList {
-	allErrs := field.ErrorList{}
-
-	fldPath := field.NewPath("spec", "labels")
-	for _, l := range hc.Spec.Labels {
-		if fldErr := validateMetaKey(l.Key, fldPath); fldErr != nil {
-			allErrs = append(allErrs, fldErr)
-		} else if !config.IsManagedLabel(l.Key) { // Only validate managed if key is valid
-			fldErr := field.Invalid(fldPath, l.Key, "not a managed label and cannot be configured")
-			allErrs = append(allErrs, fldErr)
-		}
-		if fldErr := validateLabelValue(l.Key, l.Value, fldPath); fldErr != nil {
-			allErrs = append(allErrs, fldErr)
-		}
-	}
-
-	fldPath = field.NewPath("spec", "annotations")
-	for _, a := range hc.Spec.Annotations {
-		if fldErr := validateMetaKey(a.Key, fldPath); fldErr != nil {
-			allErrs = append(allErrs, fldErr)
-		} else if !config.IsManagedAnnotation(a.Key) { // Only validate managed if key is valid
-			fldErr := field.Invalid(fldPath, a.Key, "not a managed annotation and cannot be configured")
-			allErrs = append(allErrs, fldErr)
-		}
-		// No validation of annotation values; only limitation seems to be the total length (256Kb) of all annotations
-	}
-	return allErrs
-}
-
-func validateMetaKey(k string, path *field.Path) *field.Error {
-	if errs := validation.IsQualifiedName(k); len(errs) != 0 {
-		return field.Invalid(path, k, strings.Join(errs, "; "))
-	}
-	return nil
-}
-
-func validateLabelValue(k, v string, path *field.Path) *field.Error {
-	if errs := validation.IsValidLabelValue(v); len(errs) != 0 {
-		return field.Invalid(path.Key(k), v, strings.Join(errs, "; "))
-	}
-	return nil
 }
 
 // allow is a replacement for controller-runtime's admission.Allowed() that allows you to set the

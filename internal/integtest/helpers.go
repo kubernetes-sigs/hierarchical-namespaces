@@ -27,7 +27,8 @@ var GVKs = map[string]schema.GroupVersionKind{
 	"limitranges":           {Group: "", Version: "v1", Kind: "LimitRange"},
 	"configmaps":            {Group: "", Version: "v1", Kind: "ConfigMap"},
 	// crontabs is a custom resource.
-	"crontabs": {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
+	"crontabs":            {Group: "stable.example.com", Version: "v1", Kind: "CronTab"},
+	"subnamespaceanchors": {Group: "hnc.x-k8s.io", Version: "v1alpha2", Kind: "SubnamespaceAnchor"},
 }
 
 // createdObjects keeps track of objects created out of the MakeObject function.

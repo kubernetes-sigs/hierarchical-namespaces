@@ -66,7 +66,22 @@ type SubnamespaceAnchor struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	Spec   SubnamespaceAnchorSpec   `json:"spec,omitempty"`
 	Status SubnamespaceAnchorStatus `json:"status,omitempty"`
+}
+
+type SubnamespaceAnchorSpec struct {
+	// Labels is a list of labels and values to apply to the current subnamespace and all of its
+	// descendants. All label keys must match a regex specified on the command line by
+	// --managed-namespace-label.
+	// All label keys must be managed labels (see HNC docs) and must match a regex
+	Labels []MetaKVP `json:"labels,omitempty"`
+
+	// Annotations is a list of annotations and values to apply to the current subnamespace and all of
+	// its descendants. All annotation keys must match a regex specified on the command line by
+	// --managed-namespace-annotation.
+	// All annotation keys must be managed annotations (see HNC docs) and must match a regex
+	Annotations []MetaKVP `json:"annotations,omitempty"`
 }
 
 // +kubebuilder:object:root=true

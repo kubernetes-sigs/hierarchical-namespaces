@@ -26,11 +26,13 @@ var _ = Describe("Anchor", func() {
 	var (
 		fooName string
 		barName string
+		bazName string
 	)
 
 	BeforeEach(func() {
 		fooName = CreateNS(ctx, "foo")
 		barName = CreateNSName("bar")
+		bazName = CreateNSName("baz")
 		config.SetNamespaces("")
 	})
 
@@ -110,6 +112,122 @@ var _ = Describe("Anchor", func() {
 			barHier := GetHierarchy(ctx, barName)
 			return barHier.Spec.Parent
 		}).Should(Equal(fooName))
+	})
+
+	It("should propagate managed labels and not unmanaged labels", func() {
+		Expect(config.SetManagedMeta([]string{"legal-.*"}, nil)).Should(Succeed())
+
+		// Set the managed label and confirm that it only exists on one namespace
+		foo_anchor_bar := newAnchor(barName, fooName)
+		foo_anchor_bar.Spec.Labels = []api.MetaKVP{
+			{Key: "legal-label", Value: "val-1"},
+			{Key: "unpropagated-label", Value: "not-allowed"},
+		}
+		updateAnchor(ctx, foo_anchor_bar)
+		Eventually(GetLabel(ctx, barName, "legal-label")).Should(Equal("val-1"))
+
+		// Add 'baz' as a child and verify the right labels are propagated
+		bar_anchor_baz := newAnchor(bazName, barName)
+		updateAnchor(ctx, bar_anchor_baz)
+		Eventually(HasChild(ctx, barName, bazName)).Should(Equal(true))
+		Eventually(GetLabel(ctx, bazName, "legal-label")).Should(Equal("val-1"))
+
+		// Verify that the bad label isn't propagated and that a condition is set
+		Eventually(GetLabel(ctx, barName, "unpropagated-label")).Should(Equal(""))
+		Eventually(GetLabel(ctx, bazName, "unpropagated-label")).Should(Equal(""))
+		Eventually(HasCondition(ctx, barName, api.ConditionBadConfiguration, api.ReasonIllegalManagedLabel)).Should(Equal(true))
+
+		// Remove the bad config and verify that the condition is removed
+		foo_anchor_bar = getAnchor(ctx, fooName, barName)
+		foo_anchor_bar.Spec.Labels = foo_anchor_bar.Spec.Labels[0:1]
+		updateAnchor(ctx, foo_anchor_bar)
+		Eventually(HasCondition(ctx, barName, api.ConditionBadConfiguration, api.ReasonIllegalManagedLabel)).Should(Equal(false))
+
+		// Change the value of the label and verify that it's propagated
+		foo_anchor_bar = getAnchor(ctx, fooName, barName)
+		foo_anchor_bar.Spec.Labels[0].Value = "second-value"
+		updateAnchor(ctx, foo_anchor_bar)
+		Eventually(GetLabel(ctx, barName, "legal-label")).Should(Equal("second-value"))
+
+		//Remove label from hierarchyconfiguration and verify that the label is NOT removed
+		barHier := GetHierarchy(ctx, barName)
+		barHier.Spec.Labels = []api.MetaKVP{}
+		UpdateHierarchy(ctx, barHier)
+		Consistently(GetLabel(ctx, barName, "legal-label")).Should(Equal("second-value"))
+
+		//Remove subnamespace-of annotation from child namespace and verify anchor is in conflict
+		barNs := GetNamespace(ctx, barName)
+		delete(barNs.GetAnnotations(), api.SubnamespaceOf)
+		UpdateNamespace(ctx, barNs)
+		Eventually(getAnchorState(ctx, fooName, barName)).Should(Equal(api.Conflict))
+
+		//Delete parent anchor with labels and verify that label is not removed
+		DeleteObject(ctx, "subnamespaceanchors", fooName, barName)
+		Consistently(GetLabel(ctx, barName, "legal-label")).Should(Equal("second-value"))
+
+		//Remove label from hierarchyconfiguration and verify that label is removed
+		barHier = GetHierarchy(ctx, barName)
+		barHier.Spec.Labels = []api.MetaKVP{}
+		UpdateHierarchy(ctx, barHier)
+		Eventually(GetLabel(ctx, barName, "legal-label")).Should(Equal(""))
+	})
+
+	It("should propagate managed annotations and not unmanaged annotations", func() {
+		Expect(config.SetManagedMeta(nil, []string{"legal-.*"})).Should(Succeed())
+
+		// Set the managed annotation and confirm that it only exists on one namespace
+		foo_anchor_bar := newAnchor(barName, fooName)
+		foo_anchor_bar.Spec.Annotations = []api.MetaKVP{
+			{Key: "legal-annotation", Value: "val-1"},
+			{Key: "unpropagated-annotation", Value: "not-allowed"},
+		}
+		updateAnchor(ctx, foo_anchor_bar)
+		Eventually(GetAnnotation(ctx, barName, "legal-annotation")).Should(Equal("val-1"))
+
+		// Add 'baz' as a child and verify the right annotations are propagated
+		bar_anchor_baz := newAnchor(bazName, barName)
+		updateAnchor(ctx, bar_anchor_baz)
+		Eventually(HasChild(ctx, barName, bazName)).Should(Equal(true))
+		Eventually(GetAnnotation(ctx, bazName, "legal-annotation")).Should(Equal("val-1"))
+
+		// Verify that the bad annotation isn't propagated and that a condition is set
+		Eventually(GetAnnotation(ctx, barName, "unpropagated-annotation")).Should(Equal(""))
+		Eventually(GetAnnotation(ctx, bazName, "unpropagated-annotation")).Should(Equal(""))
+		Eventually(HasCondition(ctx, barName, api.ConditionBadConfiguration, api.ReasonIllegalManagedAnnotation)).Should(Equal(true))
+
+		// Remove the bad config and verify that the condition is removed
+		foo_anchor_bar = getAnchor(ctx, fooName, barName)
+		foo_anchor_bar.Spec.Annotations = foo_anchor_bar.Spec.Annotations[0:1]
+		updateAnchor(ctx, foo_anchor_bar)
+		Eventually(HasCondition(ctx, barName, api.ConditionBadConfiguration, api.ReasonIllegalManagedAnnotation)).Should(Equal(false))
+
+		// Change the value of the annotation and verify that it's propagated
+		foo_anchor_bar = getAnchor(ctx, fooName, barName)
+		foo_anchor_bar.Spec.Annotations[0].Value = "second-value"
+		updateAnchor(ctx, foo_anchor_bar)
+		Eventually(GetAnnotation(ctx, barName, "legal-annotation")).Should(Equal("second-value"))
+
+		//Remove annotation from hierarchyconfiguration and verify that the annotation is NOT removed
+		barHier := GetHierarchy(ctx, barName)
+		barHier.Spec.Annotations = []api.MetaKVP{}
+		UpdateHierarchy(ctx, barHier)
+		Consistently(GetAnnotation(ctx, barName, "legal-annotation")).Should(Equal("second-value"))
+
+		//Remove subnamespace-of annotation from child namespace and verify anchor is in conflict
+		barNs := GetNamespace(ctx, barName)
+		delete(barNs.GetAnnotations(), api.SubnamespaceOf)
+		UpdateNamespace(ctx, barNs)
+		Eventually(getAnchorState(ctx, fooName, barName)).Should(Equal(api.Conflict))
+
+		//Delete parent anchor with annotations and verify that annotation is not removed
+		DeleteObject(ctx, "subnamespaceanchors", fooName, barName)
+		Consistently(GetAnnotation(ctx, barName, "legal-annotation")).Should(Equal("second-value"))
+
+		//Remove label from hierarchyconfiguration and verify that annotation is removed
+		barHier = GetHierarchy(ctx, barName)
+		barHier.Spec.Annotations = []api.MetaKVP{}
+		UpdateHierarchy(ctx, barHier)
+		Eventually(GetAnnotation(ctx, barName, "legal-annotation")).Should(Equal(""))
 	})
 })
 

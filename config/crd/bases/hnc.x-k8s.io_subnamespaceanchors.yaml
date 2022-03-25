@@ -35,6 +35,59 @@ spec:
             type: string
           metadata:
             type: object
+          spec:
+            properties:
+              annotations:
+                description: Annotations is a list of annotations and values to apply
+                  to the current subnamespace and all of its descendants. All annotation
+                  keys must match a regex specified on the command line by --managed-namespace-annotation.
+                  All annotation keys must be managed annotations (see HNC docs) and
+                  must match a regex
+                items:
+                  description: MetaKVP represents a label or annotation
+                  properties:
+                    key:
+                      description: Key is the name of the label or annotation. It
+                        must conform to the normal rules for Kubernetes label/annotation
+                        keys.
+                      type: string
+                    value:
+                      description: Value is the value of the label or annotation.
+                        It must confirm to the normal rules for Kubernetes label or
+                        annoation values, which are far more restrictive for labels
+                        than for anntations.
+                      type: string
+                  required:
+                  - key
+                  - value
+                  type: object
+                type: array
+              labels:
+                description: Labels is a list of labels and values to apply to the
+                  current subnamespace and all of its descendants. All label keys
+                  must match a regex specified on the command line by --managed-namespace-label.
+                  All label keys must be managed labels (see HNC docs) and must match
+                  a regex
+                items:
+                  description: MetaKVP represents a label or annotation
+                  properties:
+                    key:
+                      description: Key is the name of the label or annotation. It
+                        must conform to the normal rules for Kubernetes label/annotation
+                        keys.
+                      type: string
+                    value:
+                      description: Value is the value of the label or annotation.
+                        It must confirm to the normal rules for Kubernetes label or
+                        annoation values, which are far more restrictive for labels
+                        than for anntations.
+                      type: string
+                  required:
+                  - key
+                  - value
+                  type: object
+                type: array
+            type: object
           status:
             description: SubnamespaceAnchorStatus defines the observed state of SubnamespaceAnchor.
             properties:
