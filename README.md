@@ -30,14 +30,6 @@ pages](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/).
 Note that versions of HNC prior to HNC v0.9 are available from our [old
 repo](https://github.com/kubernetes-sigs/multi-tenancy/releases/).
 
-HNC is also supported by the following vendors:
-
-* GCP: as a part of Hierarchy Controller. [Install via Config
-  Sync](https://cloud.google.com/kubernetes-engine/docs/add-on/config-sync/how-to/installing-hierarchy-controller)
-  on GKE or [via
-  ACM](https://cloud.google.com/anthos-config-management/docs/how-to/installing-hierarchy-controller)
-  on Anthos.
-
 Once HNC is installed, you can try out the [HNC
 quickstart](docs/user-guide/quickstart.md)
 to get an idea of what HNC can do. Or, feel free to dive right into the [user
@@ -48,14 +40,15 @@ guide](docs/user-guide) instead.
 Please file issues - the more the merrier! Bugs will be investigated ASAP, while
 feature requests will be prioritized and assigned to a milestone or backlog.
 
-HNC is not yet GA, so please be cautious about using it on clusters with config
-objects you can't afford to lose (e.g. that aren't stored in a Git repository).
+Versions of HNC prior to v1.0 are not GA, so please be cautious about using it
+on clusters with config objects you can't afford to lose (e.g. that aren't
+stored in a Git repository).
 
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
 * [v1.0](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/2):
-  HNC recommended for production use (ETA late 2021)
+  HNC recommended for production use (ETA April 2022)
 * [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/1):
   move HNC to its own repo; continued stability improvements.
 * [v0.1-v0.8](https://github.com/kubernetes-sigs/multi-tenancy/milestones):
@@ -66,6 +59,11 @@ milestones are defined or planned:
 HNC is overseen by the Working Group on Multi-Tenancy (wg-multitenancy). Please
 join us on Slack, mailing lists, and at our meeting at our [community
 page](https://github.com/kubernetes/community/blob/master/wg-multitenancy/README.md).
+
+If you use HNC, we recommend joining the
+[kubernetes-hnc-announce](https://groups.google.com/g/kubernetes-hnc-announce)
+mailing list, a low-volume list to receive updates such as new version of HNC
+and proposed changes or new features.
 
 This project is goverened by
 [wg-multitenancy](https://github.com/kubernetes-sigs/multi-tenancy), and was

@@ -8,11 +8,16 @@ Please feel free to suggest additional questions.
 You can contact us on:
 
 * [Github issues](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues)
-* [Google Groups mailing list](https://groups.google.com/forum/#!forum/kubernetes-wg-multitenancy)
+* [Google Groups mailing list](https://groups.google.com/g/kubernetes-wg-multitenancy)
 * [#wg-multitenancy on Slack](https://kubernetes.slack.com/messages/wg-multitenancy)
 
 Of these, Github and the mailing list will often get you the fastest response
 we're not constantly on Slack.
+
+If you use HNC, we recommend joining the
+[kubernetes-hnc-announce](https://groups.google.com/g/kubernetes-hnc-announce)
+mailing list, a low-volume list to receive updates such as new version of HNC
+and proposed changes or new features.
 
 ## What are HNC's minimum requirements?
 
