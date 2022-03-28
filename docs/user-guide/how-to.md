@@ -405,15 +405,15 @@ EOF
 
 <a name="use-managed-labels"/>
 
-### Add a label or annotation to all namespaces in a subtree
+### (Beta) Add a label or annotation to all namespaces in a subtree
 
-***Managed labels and annotations are planned for HNC v1.0+***
+***Managed labels and annotations are new in HNC v1.0; please use with caution.***
 
 If your administrator has [created managed labels or
-annotations](#admin-managed-labels), you may set them on any namespace where you
-have permission to edit the `hierarchyconfigurations/hierarchy` object. For
-example, if your admin has set `env` as a managed label, you may set it on your
-namespace as follows:
+annotations](#admin-managed-labels), you may set them on any _full_ namespace
+where you have permission to edit the `hierarchyconfigurations/hierarchy`
+object. For example, if your admin has set `env` as a managed label, you may set
+it on your namespace as follows:
 
 ```
 apiVersion: hnc.x-k8s.io/v1alpha2
@@ -421,18 +421,36 @@ kind: HierarchyConfiguration
 metadata:
   name: hierarchy
   namespace: child
-  … < other stuff > …
+  ... < other stuff > ...
 spec:
   labels:          # add
   - key: env       # add
     value: prod    # add
 ```
 
-You may similarly set managed annotations via the `.spec.annotations` list. Note
-that any label or annotation that conflicts with one set in an ancestor
-namespace will be silently ignored (this will eventually
+You may similarly set managed annotations via the `.spec.annotations` list.
+
+For subnamespaces, you must set managed labels/annotations on the anchor in the
+parent namespace; any changes you make to the `HierarchyConfiguration` will be
+ignored and overwritten. The format on the anchors is the same as on the config:
+
+```
+apiVersion: hnc.x-k8s.io/v1alpha2
+kind: SubnamespaceAnchor
+metadata:
+  name: subns-name
+  namespace: subns-parent
+  ... < other stuff > ...
+spec:
+  labels:          # add
+  - key: env       # add
+    value: prod    # add
+```
+
+Note that any label or annotation that conflicts with one set in an ancestor
+namespace will be silently ignored. This will eventually
 [be](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/143)
-[improved](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/144)).
+[improved](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/144).
 
 <a name="admin"/>
 
@@ -448,23 +466,13 @@ and webhooks) that were only introduced in v1.16.
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
+_Note: HNC has **experimental** support for HA deployments in v1.0. Please
+contact us on Slack to discuss if you want to try it out._
+
 #### Prerequisites
 
 Ensure `kube-system`, `kube-public` and `kube-node-lease` namespaces are listed
 in the [argument list](#admin-cli-args) with the option `--excluded-namespace`.
-
-**In HNC v0.8 (not applicable in HNC v0.9 and later)**, prior to installing HNC,
-add the `hnc.x-k8s.io/excluded-namespaces` label to your critical system
-namespaces:
-
-```
-kubectl label ns kube-system hnc.x-k8s.io/excluded-namespace=true
-kubectl label ns kube-public hnc.x-k8s.io/excluded-namespace=true
-kubectl label ns kube-node-lease hnc.x-k8s.io/excluded-namespace=true
-```
-
-Failure to do so may result in HNC being unable to start, and your cluster's
-operations being degraded until you delete HNC or apply the labels.
 
 If you wish, you may also [exclude additional namespaces from
 HNC](#admin-excluded-namespaces), but be aware that only the three namespaces
@@ -505,7 +513,7 @@ make deploy
 To temporarily disable HNC, simply delete its deployment and webhooks:
 
 ```bash
-kubectl -n hnc-system delete deployment hnc-controller-manager
+kubectl -n hnc-system delete deployment --all
 kubectl delete validatingwebhookconfiguration.admissionregistration.k8s.io hnc-validating-webhook-configuration
 ```
 
@@ -534,15 +542,15 @@ relationships and configuration settings:
 # the finalizers first.
 kubectl get crds | grep .hnc.x-k8s.io | awk '{print $1}' | xargs kubectl delete crd
 
-# Delete the rest of HNC.
+# Delete the rest of HNC. For HNC v1.0 and later:
+kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-${HNC_VERSION}/default.yaml
+# For versions earlier than HNC v1.0:
 kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
 
 <a name="admin-excluded-namespaces"/>
 
 ### Including and excluding namespaces from HNC
-
-***Included namespaces are only available in HNC v0.9 and higher.***
 
 HNC installs a validating webhook on _all_ objects in your cluster. If HNC
 itself is damaged or inaccessible, this could result in all changes to all
@@ -560,7 +568,7 @@ protecting your cluster's stability.
 HNC supports two methods of specifying which namespaces should be managed, both
 of which are accessed from the HNC [argument list](#admin-cli-args):
 
-* **Included namespace regex (HNC v0.9+ only):** If set, this will limit HNC to
+* **Included namespace regex:** If set, this will limit HNC to
   only cover the namespaces included in this regex. For example, setting this
   parameter to `test-.*` will ensure that HNC only manages namespaces that begin
   with the prefix `test-` (HNC adds an implied `^...$` to the regex). If
@@ -574,14 +582,6 @@ of which are accessed from the HNC [argument list](#admin-cli-args):
    any namespace you like. Excluded namespaces are specified using the
    `--excluded-namespace` option, which can be specified multiple times, one
    namespace per option.
-
-**In HNC v0.8 only (not applicable in HNC v0.9 and later):** In addition to
-specifying excluded namespaces on the command line, you must _also_ add the
-`hnc.x-k8s.io/excluded-namespace=true` label to all excluded namespaces, _after_
-you have restarted HNC with the correct parameter. If you attempt to apply this
-label to any namespace that is not _also_ listed in the command line args, HNC
-will not allow the change, or will remove the label when it is started. This
-label has no effect in HNC v0.9 or later.
 
 
 <a name="admin-backup-restore"/>
@@ -759,9 +759,10 @@ edit the `config` object directly, which will bypass this protection.
 
 <a name="admin-managed-labels"/>
 
-### Ask HNC to manage certain labels and annotations
+### (Beta) Ask HNC to manage certain labels and annotations
 
-***Managed labels and annotations are planned for HNC v1.0+***
+***Managed labels and annotations are new in HNC v1.0; please use with
+caution.***
 
 See [here](concepts.md#admin-managed-labels) for the background on managed
 labels and annotations. In order to get HNC to manage a label or annotation, use
@@ -881,9 +882,10 @@ gcloud auth list
 ## Modify command-line arguments
 
 HNC's default manifest file (available as part of each release with the name
-`hnc-manager.yaml`) includes a set of reasonable default command-line arguments
-for HNC. These parameters are part of the `hnc-controller-manager` Deployment
-object in the `hnc-system` namespace.
+`hnc-manager.yaml` prior to HNC v1.0, and `default.yaml` after HNC v1.0)
+includes a set of reasonable default command-line arguments for HNC. These
+parameters are part of the `hnc-controller-manager` Deployment object in the
+`hnc-system` namespace.
 
 To modify these parameters, you may:
 
@@ -897,12 +899,14 @@ with significant caution.
 
 Interesting parameters include:
 
-* `--included-namespace-regex=<pattern>` (HNC v0.9+ only): limits which
+* `--included-namespace-regex=<pattern>`: limits which
   namespaces are [managed by HNC](#admin-excluded-namespaces). Defaults to `.*`,
   and may only be specified once.
 * `--excluded-namespace=<namespace>`: allows you to
   [exclude a namespace](#admin-excluded-namespaces) from HNC. May be specified
   multiple times, one namespace per option.
+* `--managed-namespace-label` and `--managed-namespace-annotation`: see [managed
+  labels and annotations](#admin-managed-labels).
 * `--unpropagated-annotation=<string>`: empty by default, this argument
   can be specified multiple times, with each parameter representing an
   annotation name, such as `example.com/foo`. When HNC propagates objects from

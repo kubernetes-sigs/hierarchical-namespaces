@@ -502,9 +502,9 @@ problem, and will generally require human intervention to resolve.
 
 <a name="admin-managed-labels"/>
 
-### Managed labels and annotations
+### (Beta) Managed labels and annotations
 
-***Managed labels and annotations are planned for HNC v1.0+***
+***Managed labels and annotations are new in HNC v1.0; please use with caution.***
 
 Just as certain objects can be propagated from parent namespaces to their
 descendants, so can certain labels and annotations on namespaces. For example,
@@ -576,17 +576,6 @@ namespace if this annotation already exists. The two are mutually exclusive.
 
 We are considering replacing this with the standard
 `app.kubernetes.io/managed-by` label in the future.
-
-<a name="excluded-namespace-label">
-
-#### hnc.x-k8s.io/excluded-namespace (label on namespaces)
-
-***This label is only used in HNC v0.8 (not applicable in HNC v0.9 and later)***
-
-This label should be added to namespaces such as `kube-system` and `kube-public`
-so that HNC's validating webhook cannot accidentally prevent operations in these
-namespaces and block critical cluster operations. See [Excluding namespaces from
-HNC](how-to.md#admin-excluded-namespaces) for more information.
 
 <a name="admin-labels-set">
 
@@ -663,8 +652,6 @@ anyone other than HNC.
 <a name="included-namespace-label">
 
 #### hnc.x-k8s.io/included-namespace (label on namespaces)
-
-***This label is only available in HNC v0.9 and later***
 
 HNC's mutating webhook sets this label on non-excluded namespaces by default.
 HNC also rejects any illegal changes on this label, e.g. adding the label to an
