@@ -53,6 +53,9 @@ type Reconciler struct {
 	// not use it.
 	HierarchyConfigUpdates chan event.GenericEvent
 
+	// ReadOnly disables writebacks
+	ReadOnly bool
+
 	// activeGVKMode contains GRs that are configured in the Spec and their mapping
 	// GVKs and configured modes.
 	activeGVKMode gr2gvkMode
@@ -233,6 +236,10 @@ func (r *Reconciler) validateSingleton(inst *api.HNCConfiguration) {
 // We will write the singleton to apiserver even it is not changed because we assume this
 // reconciler is called very infrequently and is not performance critical.
 func (r *Reconciler) writeSingleton(ctx context.Context, inst *api.HNCConfiguration) error {
+	if r.ReadOnly {
+		return nil
+	}
+
 	if inst.CreationTimestamp.IsZero() {
 		// No point creating it if the CRD's being deleted
 		if isDeleted, err := crd.IsDeletingCRD(ctx, api.HNCConfigSingletons); isDeleted || err != nil {

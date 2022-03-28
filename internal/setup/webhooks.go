@@ -30,15 +30,9 @@ const (
 // DNSName is <service name>.<namespace>.svc
 var dnsName = fmt.Sprintf("%s.%s.svc", serviceName, secretNamespace)
 
-// CreateCertsIfNeeded creates all certs for webhooks. This function is called from main.go.
-func CreateCertsIfNeeded(mgr ctrl.Manager, novalidation, internalCert, restartOnSecretRefresh bool) (chan struct{}, error) {
-	setupFinished := make(chan struct{})
-	if novalidation || !internalCert {
-		close(setupFinished)
-		return setupFinished, nil
-	}
-
-	return setupFinished, cert.AddRotator(mgr, &cert.CertRotator{
+// ManageCerts creates all certs for webhooks. This function is called from main.go.
+func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretRefresh bool) error {
+	return cert.AddRotator(mgr, &cert.CertRotator{
 		SecretKey: types.NamespacedName{
 			Namespace: secretNamespace,
 			Name:      secretName,

@@ -102,7 +102,7 @@ func HNCBeforeSuite() {
 	Expect(err).ToNot(HaveOccurred())
 
 	By("creating reconcilers")
-	err = setup.CreateReconcilers(k8sManager, forest.NewForest(), 100, true)
+	err = setup.CreateReconcilers(k8sManager, forest.NewForest(), 100, false, true)
 	Expect(err).ToNot(HaveOccurred())
 
 	By("Creating clients")
