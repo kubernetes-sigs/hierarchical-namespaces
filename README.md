@@ -98,4 +98,9 @@ For more information about Prow jobs (e.g. a reference for the configs), see
 These config files should be inspected periodically (e.g. about once a release)
 to make sure they're fully up-to-date.
 
+HNC uses [Google Cloud Build](https://cloud.google.com/build) for building some artifacts.
+We intend to fully automate our release process using this method over time.
+See [docs/automated-builds.md](docs/automated-builds.md) for more information.
+
+
 To release HNC, follow [this guide](docs/releasing.md).
