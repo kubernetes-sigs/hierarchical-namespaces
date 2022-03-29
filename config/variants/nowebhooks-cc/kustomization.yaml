@@ -1,0 +1,32 @@
+# Adds namespace to all resources.
+namespace: hnc-system
+
+# Value of this field is prepended to the
+# names of all resources, e.g. a deployment named
+# "wordpress" becomes "alices-wordpress".
+# Note that it should also match with the prefix (text before '-') of the namespace
+# field above.
+namePrefix: hnc-
+
+bases:
+- ../../crd
+- ../../internalcert
+- ../../manager
+- ../../rbac
+
+patches:
+- patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --enable-internal-cert-management
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --cert-restart-on-secret-refresh
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --no-webhooks
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: controller-manager

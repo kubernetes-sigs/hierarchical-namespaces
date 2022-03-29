@@ -15,12 +15,36 @@
 # * The Prow configs in test-infra (see README for links).
 # * The 'prow-test' target in the Makefile in this directory.
 #
-# The Makefile contains more information about the most recent version of krte
-# we're using. Please keep it in sync with the version checked into the Prow
-# config. Also, when you do that, please upgrade to the latest version of Kind
-# in this file too! Look down a few lines to see/update the Kind version.
+# The test-infra directory is automatically updated to always use the most
+# recent version of krte we're using. Please keep the Makefile in this direcotry
+# in sync with the version checked into the Prow config. Also, when you do that,
+# please upgrade to the latest version of Kind in this file too! Look down a few
+# lines to see/update the Kind version.
 
 set -euf -o pipefail
+
+# Configure some vars differently depending on whether we want the HA version of
+# HNC or not.
+deploy_target="deploy"
+repair_manifest="default.yaml"
+variant="${1:-default}"
+case $variant in
+
+  default)
+    echo "Using default variant"
+    ;;
+
+  ha)
+    echo "Using HA variant"
+    deploy_target="deploy-ha"
+    repair_manifest="ha.yaml"
+    ;;
+
+  *)
+    echo "Unknown variant \"${variant}\""
+    exit 1
+    ;;
+esac
 
 start_time="$(date -u +%s)"
 echo
@@ -28,22 +52,19 @@ echo "Starting script at $(date +%Y-%m-%d\ %H:%M:%S)"
 
 # Install and start Kind. It seems like krte cleans this up when the test is
 # done.
-#
-# For the 'cd' thing, see https://maelvls.dev/go111module-everywhere/. Note that
-# as of Go 1.15, GO111MODULE=on *is* required.
 echo
 echo Installing and starting Kind...
 go install sigs.k8s.io/kind@v0.12.0
-kind create cluster
+kind create cluster --name hnc-e2e
 
 echo
-echo "Building and deploying HNC"
+echo "Building and deploying HNC via \'make ${deploy_target}\'"
 export HNC_REGISTRY=
-CONFIG=kind make deploy
+KIND=hnc-e2e make ${deploy_target}
 
 echo
 echo "Building kubectl-hns"
-CONFIG=kind make kubectl
+KIND=hnc-e2e make kubectl
 
 # The webhooks take about 30 load
 echo
@@ -58,7 +79,7 @@ echo "... waited 20s..."
 sleep 10
 echo "... done."
 
-export HNC_REPAIR="${PWD}/manifests/hnc-manager.yaml"
+export HNC_REPAIR="${PWD}/manifests/${repair_manifest}"
 echo
 echo "Starting the tests at $(date +%Y-%m-%d\ %H:%M:%S) with HNC_REPAIR=${HNC_REPAIR}"
 make test-e2e

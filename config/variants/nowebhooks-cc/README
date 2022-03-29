@@ -1,0 +1,7 @@
+This directory contains the controller-only version of HNC; that is, it doesn't
+install or configure any webhooks. It does, however, run cert-controller (hence
+the "cc" suffix) to inject certs on any HNC webhooks that _are_ installed -
+e.g., by using the ha-webhooks-cc variant.
+
+"make manifests" builds this directory into manifests/nowebhooks-cc.yaml, which
+is further processed into ha.yaml along with ha-webhooks-cc.

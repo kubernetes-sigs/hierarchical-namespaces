@@ -1,0 +1,8 @@
+This directory contains the replicated webhooks version of HNC; that is, this
+deployement won't actually make any changes to your cluster. It relies on a
+separate deployment of the nowebhooks-cc variant to both reconcile the cluster
+in the way that the webhooks expect, as well as inject the certs using
+cert-controller (hence the "-cc" suffix).
+
+"make manifests" builds this directory into manifests/ha-webhooks-cc.yaml, which
+is further processed into ha.yaml along with nowebhooks-cc.
