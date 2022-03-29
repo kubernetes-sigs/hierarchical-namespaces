@@ -67,6 +67,11 @@ spec:
             port: 8081
           failureThreshold: 1
           periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          periodSeconds: 5
         startupProbe:
           httpGet:
             path: /readyz
