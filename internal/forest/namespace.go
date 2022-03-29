@@ -148,7 +148,7 @@ func (ns *Namespace) UpdateAllowCascadingDeletion(acd bool) bool {
 // AllowsCascadingDeletion returns true if the namespace's or any of the ancestors'
 // allowCascadingDeletion field is set to true.
 func (ns *Namespace) AllowsCascadingDeletion() bool {
-	if ns.allowCascadingDeletion == true {
+	if ns.allowCascadingDeletion {
 		return true
 	}
 	if ns.parent == nil || ns.CycleNames() != nil {

@@ -136,6 +136,7 @@ func StartLoggingActivity() {
 	go logging(log, total, lastTotal, lastCur, false)
 }
 
+//lint:ignore SA4009 Todo: remove total as it's unused
 func logging(log logr.Logger, total, lastTotal, lastCur counter, working bool) {
 	// run forever
 	for {
@@ -145,7 +146,7 @@ func logging(log logr.Logger, total, lastTotal, lastCur counter, working bool) {
 		// If lastCur is not 0 yet, still generate a log for the past 0.5s.
 		if total != lastTotal || lastCur != 0 {
 			// If the controller was previously idle, change its status and log it's started.
-			if working == false {
+			if !working {
 				working = true
 				logActivity(log, "start")
 			} else {
@@ -153,7 +154,7 @@ func logging(log logr.Logger, total, lastTotal, lastCur counter, working bool) {
 			}
 		} else {
 			// If the controller was previously working, change its status and log it's finished.
-			if working == true {
+			if working {
 				working = false
 				logActivity(log, "finish")
 				stats.actionID++

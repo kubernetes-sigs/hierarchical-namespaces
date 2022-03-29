@@ -7,5 +7,6 @@
 package hack
 
 import (
+	_ "honnef.co/go/tools/cmd/staticcheck"
 	_ "sigs.k8s.io/controller-tools/cmd/controller-gen"
 )

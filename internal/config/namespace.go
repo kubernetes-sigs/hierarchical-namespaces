@@ -98,10 +98,10 @@ func setManagedMeta(patterns []string, option string, regexes *[]*regexp.Regexp)
 	for _, p := range patterns {
 		r, err := regexp.Compile("^" + p + "$")
 		if err != nil {
-			return fmt.Errorf("Illegal value for %s %q: %w", option, p, err)
+			return fmt.Errorf("illegal value for %s %q: %w", option, p, err)
 		}
 		if r.MatchString(api.MetaGroup) {
-			return fmt.Errorf("Illegal value for %s %q: cannot specify a pattern that matches %q", option, p, api.MetaGroup)
+			return fmt.Errorf("illegal value for %s %q: cannot specify a pattern that matches %q", option, p, api.MetaGroup)
 		}
 		*regexes = append(*regexes, r)
 	}

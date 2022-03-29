@@ -80,6 +80,8 @@ endif
 
 CONTROLLER_GEN ?= ${CURDIR}/bin/controller-gen
 
+STATICCHECK ?= ${CURDIR}/bin/staticcheck
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
@@ -106,7 +108,7 @@ test-only:
 	go test ${DIRS} -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
-build: generate fmt vet manifests
+build: generate fmt vet staticcheck manifests
 	go build -o bin/manager ./cmd/manager/main.go
 	GOOS=linux GOARCH=amd64 go build \
 	     -o bin/kubectl/kubectl-hns_linux_amd64 \
@@ -199,6 +201,13 @@ check-fmt:
 vet:
 	go vet ${DIRS}
 
+# Run staticcheck against code
+staticcheck: build-staticcheck
+	$(STATICCHECK) ${DIRS}
+
+build-staticcheck:
+	go build -o $(STATICCHECK) honnef.co/go/tools/cmd/staticcheck
+
 # Generate code
 generate: controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
@@ -265,21 +274,21 @@ else
 endif
 
 # Build the docker image
-docker-build: generate fmt vet
+docker-build: generate fmt vet staticcheck
 	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
 	docker build . -t ${HNC_IMG}
 
 
 buildx-setup:
 	## This script needs to be run to start the emulator for multiarch builds
-	# This driver translates the instruction set to different platforms 
+	# This driver translates the instruction set to different platforms
 	docker run --rm --privileged linuxkit/binfmt:v0.8
 	docker buildx create --use --name=qemu
 	docker buildx inspect --bootstrap
 
 
 # Build and push multi-arch image
-docker-push-multi: buildx-setup generate fmt vet
+docker-push-multi: buildx-setup generate fmt vet staticcheck
 	@echo "Warning: this does not run tests. Run 'make test' to ensure tests are passing."
 	docker buildx build \
 	--push \
@@ -466,4 +475,3 @@ krew-install: krew-build
 # Uninstall kubectl plugin locally using krew.
 krew-uninstall:
 	-kubectl krew uninstall hns
-

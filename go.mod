@@ -14,6 +14,7 @@ require (
 	github.com/spf13/cobra v1.2.1
 	go.opencensus.io v0.23.0
 	go.uber.org/zap v1.19.1
+	honnef.co/go/tools v0.2.2
 	k8s.io/api v0.23.2
 	k8s.io/apiextensions-apiserver v0.23.2
 	k8s.io/apimachinery v0.23.2
@@ -31,6 +32,7 @@ require (
 	github.com/Azure/go-autorest/autorest/date v0.3.0 // indirect
 	github.com/Azure/go-autorest/logger v0.2.1 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.0 // indirect
+	github.com/BurntSushi/toml v0.3.1 // indirect
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/aws/aws-sdk-go v1.23.20 // indirect

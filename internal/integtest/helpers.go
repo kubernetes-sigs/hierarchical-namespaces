@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/ginkgo" //lint:ignore ST1001 Ignoring this for now
+	. "github.com/onsi/gomega" //lint:ignore ST1001 Ignoring this for now
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -82,7 +82,7 @@ func TryUpdateHierarchy(ctx context.Context, h *api.HierarchyConfiguration) erro
 func GetLabel(ctx context.Context, from, label string) func() string {
 	return func() string {
 		ns := GetNamespace(ctx, from)
-		val, _ := ns.GetLabels()[label]
+		val := ns.GetLabels()[label]
 		return val
 	}
 }
@@ -90,7 +90,7 @@ func GetLabel(ctx context.Context, from, label string) func() string {
 func GetAnnotation(ctx context.Context, from, key string) func() string {
 	return func() string {
 		ns := GetNamespace(ctx, from)
-		val, _ := ns.GetAnnotations()[key]
+		val := ns.GetAnnotations()[key]
 		return val
 	}
 }
@@ -378,7 +378,7 @@ func ObjectInheritedFrom(ctx context.Context, resource string, nsName, name stri
 	if inst.GetLabels() == nil {
 		return ""
 	}
-	lif, _ := inst.GetLabels()[api.LabelInheritedFrom]
+	lif := inst.GetLabels()[api.LabelInheritedFrom]
 	return lif
 }
 
