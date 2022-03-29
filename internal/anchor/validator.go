@@ -27,7 +27,7 @@ const (
 // Note: the validating webhook FAILS CLOSE. This means that if the webhook goes down, all further
 // changes are forbidden.
 //
-// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-hnc-x-k8s-io-v1alpha2-subnamespaceanchors,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=subnamespaceanchors,sideEffects=None,verbs=create;delete,versions=v1alpha2,name=subnamespaceanchors.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-hnc-x-k8s-io-v1alpha2-subnamespaceanchors,mutating=false,failurePolicy=fail,groups="hnc.x-k8s.io",resources=subnamespaceanchors,sideEffects=None,verbs=create;update;delete,versions=v1alpha2,name=subnamespaceanchors.hnc.x-k8s.io
 
 type Validator struct {
 	Log     logr.Logger
