@@ -240,6 +240,7 @@ func createManager() ctrl.Manager {
 	// it turns out to be harmful.
 	cfg.Burst = int(cfg.QPS * 1.5)
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		NewClient:              config.NewCachingClient,
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		HealthProbeBindAddress: probeAddr,
