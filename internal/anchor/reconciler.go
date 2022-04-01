@@ -245,7 +245,7 @@ func (r *Reconciler) shouldDeleteSubns(log logr.Logger, inst *api.SubnamespaceAn
 		return false
 
 	default:
-		log.Error(errors.New("Bad anchor state"), "state", inst.Status.State)
+		log.Error(errors.New("bad anchor state"), "state", inst.Status.State)
 		// Stay on the safe side - don't delete
 		return false
 	}
@@ -295,7 +295,7 @@ func (r *Reconciler) shouldFinalizeAnchor(log logr.Logger, inst *api.Subnamespac
 
 	default:
 		// Should never happen, so log an error and let it be deleted.
-		log.Error(errors.New("Illegal state"), "Unknown state", "state", inst.Status.State)
+		log.Error(errors.New("illegal state"), "Unknown state", "state", inst.Status.State)
 		return true
 	}
 }
@@ -362,6 +362,7 @@ func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *a
 
 // deleteInstance deletes the anchor instance. Note: Make sure there's no
 // finalizers on the instance before calling this function.
+//lint:ignore U1000 Ignore for now, as it may be used again in the future
 func (r *Reconciler) deleteInstance(ctx context.Context, inst *api.SubnamespaceAnchor) error {
 	if r.ReadOnly {
 		return nil

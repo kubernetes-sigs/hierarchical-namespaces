@@ -30,6 +30,9 @@ github.com/Azure/go-autorest/logger
 # github.com/Azure/go-autorest/tracing v0.6.0
 ## explicit; go 1.12
 github.com/Azure/go-autorest/tracing
+# github.com/BurntSushi/toml v0.3.1
+## explicit
+github.com/BurntSushi/toml
 # github.com/PuerkitoBio/purell v1.1.1
 ## explicit
 github.com/PuerkitoBio/purell
@@ -413,16 +416,28 @@ golang.org/x/text/width
 golang.org/x/time/rate
 # golang.org/x/tools v0.1.6-0.20210820212750-d4cc65f0b2ff
 ## explicit; go 1.17
+golang.org/x/tools/go/analysis
+golang.org/x/tools/go/analysis/passes/inspect
+golang.org/x/tools/go/ast/astutil
+golang.org/x/tools/go/ast/inspector
+golang.org/x/tools/go/buildutil
 golang.org/x/tools/go/gcexportdata
+golang.org/x/tools/go/internal/cgo
 golang.org/x/tools/go/internal/gcimporter
 golang.org/x/tools/go/internal/packagesdriver
+golang.org/x/tools/go/loader
 golang.org/x/tools/go/packages
+golang.org/x/tools/go/types/objectpath
+golang.org/x/tools/go/types/typeutil
+golang.org/x/tools/internal/analysisinternal
 golang.org/x/tools/internal/event
 golang.org/x/tools/internal/event/core
 golang.org/x/tools/internal/event/keys
 golang.org/x/tools/internal/event/label
 golang.org/x/tools/internal/gocommand
+golang.org/x/tools/internal/lsp/fuzzy
 golang.org/x/tools/internal/packagesinternal
+golang.org/x/tools/internal/typeparams
 golang.org/x/tools/internal/typesinternal
 # golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1
 ## explicit; go 1.11
@@ -578,6 +593,45 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 ## explicit
 gopkg.in/yaml.v3
+# honnef.co/go/tools v0.2.2
+## explicit; go 1.14
+honnef.co/go/tools/analysis/code
+honnef.co/go/tools/analysis/edit
+honnef.co/go/tools/analysis/facts
+honnef.co/go/tools/analysis/facts/nilness
+honnef.co/go/tools/analysis/facts/typedness
+honnef.co/go/tools/analysis/lint
+honnef.co/go/tools/analysis/report
+honnef.co/go/tools/cmd/staticcheck
+honnef.co/go/tools/config
+honnef.co/go/tools/go/ast/astutil
+honnef.co/go/tools/go/ir
+honnef.co/go/tools/go/ir/irutil
+honnef.co/go/tools/go/loader
+honnef.co/go/tools/go/types/typeutil
+honnef.co/go/tools/internal/cache
+honnef.co/go/tools/internal/go/gcimporter
+honnef.co/go/tools/internal/passes/buildir
+honnef.co/go/tools/internal/renameio
+honnef.co/go/tools/internal/robustio
+honnef.co/go/tools/internal/sharedcheck
+honnef.co/go/tools/internal/sync
+honnef.co/go/tools/knowledge
+honnef.co/go/tools/lintcmd
+honnef.co/go/tools/lintcmd/runner
+honnef.co/go/tools/lintcmd/version
+honnef.co/go/tools/pattern
+honnef.co/go/tools/printf
+honnef.co/go/tools/quickfix
+honnef.co/go/tools/sarif
+honnef.co/go/tools/simple
+honnef.co/go/tools/staticcheck
+honnef.co/go/tools/staticcheck/fakejson
+honnef.co/go/tools/staticcheck/fakereflect
+honnef.co/go/tools/staticcheck/fakexml
+honnef.co/go/tools/stylecheck
+honnef.co/go/tools/unused
+honnef.co/go/tools/unused/typemap
 # k8s.io/api v0.23.2
 ## explicit; go 1.16
 k8s.io/api/admission/v1

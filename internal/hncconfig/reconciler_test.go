@@ -2,7 +2,6 @@ package hncconfig_test
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -454,6 +453,7 @@ func setTypeConfig(ctx context.Context, group, resource string, mode api.Synchro
 
 // updateTypeConfig is like setTypeConfig but it doesn't wait to confirm that the change was
 // successful.
+//lint:ignore U1000 Ignore for now, as it may be used again in the future
 func updateTypeConfig(ctx context.Context, group, resource string, mode api.SynchronizationMode) {
 	updateTypeConfigWithOffset(ctx, 1, group, resource, mode)
 }
@@ -483,6 +483,7 @@ func updateTypeConfigWithOffset(ctx context.Context, offset int, group, resource
 	}).Should(Succeed(), "While updating type config for %s/%s to %s", group, resource, mode)
 }
 
+//lint:ignore U1000 Ignore for now, as it may be used again in the future
 func unsetTypeConfig(ctx context.Context, group, resource string) {
 	removeTypeConfigWithOffset(1, ctx, group, resource)
 	Eventually(typeStatusMode(ctx, group, resource)).Should(Equal(testModeMisssing))
@@ -580,11 +581,11 @@ func getNumPropagatedObjects(ctx context.Context, group, resource string) func()
 				if t.NumPropagatedObjects != nil {
 					return *t.NumPropagatedObjects, nil
 				}
-				return -1, errors.New(fmt.Sprintf("NumPropagatedObjects field is not set for "+
-					"group %s, resource %s", group, resource))
+				return -1, fmt.Errorf("NumPropagatedObjects field is not set for "+
+					"group %s, resource %s", group, resource)
 			}
 		}
-		return -1, errors.New(fmt.Sprintf("group %s, resource %s is not found in status", group, resource))
+		return -1, fmt.Errorf("group %s, resource %s is not found in status", group, resource)
 	}
 }
 
@@ -601,7 +602,7 @@ func hasNumSourceObjects(ctx context.Context, group, resource string) func() (bo
 				return t.NumSourceObjects != nil, nil
 			}
 		}
-		return false, errors.New(fmt.Sprintf("group %s, resource %s is not found in status", group, resource))
+		return false, fmt.Errorf("group %s, resource %s is not found in status", group, resource)
 	}
 }
 
@@ -618,10 +619,10 @@ func getNumSourceObjects(ctx context.Context, group, resource string) func() (in
 				if t.NumSourceObjects != nil {
 					return *t.NumSourceObjects, nil
 				}
-				return -1, errors.New(fmt.Sprintf("NumSourceObjects field is not set for "+
-					"group %s, resource %s", group, resource))
+				return -1, fmt.Errorf("NumSourceObjects field is not set for "+
+					"group %s, resource %s", group, resource)
 			}
 		}
-		return -1, errors.New(fmt.Sprintf("group %s, resource %s is not found in status", group, resource))
+		return -1, fmt.Errorf("group %s, resource %s is not found in status", group, resource)
 	}
 }
