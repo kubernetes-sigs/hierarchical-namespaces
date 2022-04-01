@@ -40,15 +40,13 @@ guide](docs/user-guide) instead.
 Please file issues - the more the merrier! Bugs will be investigated ASAP, while
 feature requests will be prioritized and assigned to a milestone or backlog.
 
-Versions of HNC prior to v1.0 are not GA, so please be cautious about using it
-on clusters with config objects you can't afford to lose (e.g. that aren't
-stored in a Git repository).
-
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
+* [v1.1](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/3):
+  Improved UX for managed labels; performance improvements.
 * [v1.0](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/2):
-  HNC recommended for production use (ETA April 2022)
+  HNC recommended for production use (released March 31 2022)
 * [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/1):
   move HNC to its own repo; continued stability improvements.
 * [v0.1-v0.8](https://github.com/kubernetes-sigs/multi-tenancy/milestones):
