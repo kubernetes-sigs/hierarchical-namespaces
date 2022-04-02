@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,8 +17,9 @@ import (
 
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/config"
+	"honnef.co/go/tools/go/buildid"
 	"honnef.co/go/tools/go/loader"
-	"honnef.co/go/tools/internal/cache"
+	"honnef.co/go/tools/lintcmd/cache"
 	"honnef.co/go/tools/lintcmd/runner"
 	"honnef.co/go/tools/unused"
 
@@ -29,9 +29,8 @@ import (
 
 // A linter lints Go source code.
 type linter struct {
-	Checkers []*lint.Analyzer
-	Config   config.Config
-	Runner   *runner.Runner
+	Analyzers map[string]*lint.Analyzer
+	Runner    *runner.Runner
 }
 
 func computeSalt() ([]byte, error) {
@@ -39,16 +38,23 @@ func computeSalt() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	f, err := os.Open(p)
-	if err != nil {
-		return nil, err
+
+	if id, err := buildid.ReadFile(p); err == nil {
+		return []byte(id), nil
+	} else {
+		// For some reason we couldn't read the build id from the executable.
+		// Fall back to hashing the entire executable.
+		f, err := os.Open(p)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			return nil, err
+		}
+		return h.Sum(nil), nil
 	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return nil, err
-	}
-	return h.Sum(nil), nil
 }
 
 func newLinter(cfg config.Config) (*linter, error) {
@@ -67,22 +73,29 @@ func newLinter(cfg config.Config) (*linter, error) {
 	}
 	r.FallbackGoVersion = defaultGoVersion()
 	return &linter{
-		Config: cfg,
 		Runner: r,
 	}, nil
 }
 
-func (l *linter) Lint(cfg *packages.Config, patterns []string) (problems []problem, warnings []string, err error) {
-	cs := make([]*analysis.Analyzer, len(l.Checkers))
-	for i, a := range l.Checkers {
-		cs[i] = a.Analyzer
+type LintResult struct {
+	CheckedFiles []string
+	Diagnostics  []diagnostic
+	Warnings     []string
+}
+
+func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, error) {
+	var out LintResult
+
+	as := make([]*analysis.Analyzer, 0, len(l.Analyzers))
+	for _, a := range l.Analyzers {
+		as = append(as, a.Analyzer)
 	}
-	results, err := l.Runner.Run(cfg, cs, patterns)
+	results, err := l.Runner.Run(cfg, as, patterns)
 	if err != nil {
-		return nil, nil, err
+		return out, err
 	}
 
-	if len(results) == 0 && err == nil {
+	if len(results) == 0 {
 		// TODO(dh): emulate Go's behavior more closely once we have
 		// access to go list's Match field.
 		for _, pattern := range patterns {
@@ -90,11 +103,10 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (problems []probl
 		}
 	}
 
-	analyzerNames := make([]string, len(l.Checkers))
-	for i, a := range l.Checkers {
-		analyzerNames[i] = a.Analyzer.Name
+	analyzerNames := make([]string, 0, len(l.Analyzers))
+	for name := range l.Analyzers {
+		analyzerNames = append(analyzerNames, name)
 	}
-
 	used := map[unusedKey]bool{}
 	var unuseds []unusedPair
 	for _, res := range results {
@@ -102,10 +114,10 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (problems []probl
 			panic("package has errors but isn't marked as failed")
 		}
 		if res.Failed {
-			problems = append(problems, failed(res)...)
+			out.Diagnostics = append(out.Diagnostics, failed(res)...)
 		} else {
 			if res.Skipped {
-				warnings = append(warnings, fmt.Sprintf("skipped package %s because it is too large", res.Package))
+				out.Warnings = append(out.Warnings, fmt.Sprintf("skipped package %s because it is too large", res.Package))
 				continue
 			}
 
@@ -113,17 +125,26 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (problems []probl
 				continue
 			}
 
+			out.CheckedFiles = append(out.CheckedFiles, res.Package.GoFiles...)
 			allowedAnalyzers := filterAnalyzerNames(analyzerNames, res.Config.Checks)
 			resd, err := res.Load()
 			if err != nil {
-				return nil, nil, err
+				return out, err
 			}
 			ps := success(allowedAnalyzers, resd)
 			filtered, err := filterIgnored(ps, resd, allowedAnalyzers)
 			if err != nil {
-				return nil, nil, err
+				return out, err
 			}
-			problems = append(problems, filtered...)
+			// OPT move this code into the 'success' function.
+			for i, diag := range filtered {
+				a := l.Analyzers[diag.Category]
+				// Some diag.Category don't map to analyzers, such as "staticcheck"
+				if a != nil {
+					filtered[i].MergeIf = a.Doc.MergeIf
+				}
+			}
+			out.Diagnostics = append(out.Diagnostics, filtered...)
 
 			for _, obj := range resd.Unused.Used {
 				// FIXME(dh): pick the object whose filename does not include $GOROOT
@@ -154,55 +175,31 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (problems []probl
 	}
 
 	for _, uo := range unuseds {
+		if uo.obj.Kind == "type param" {
+			// We don't currently flag unused type parameters on used objects, and flagging them on unused objects isn't
+			// useful.
+			continue
+		}
 		if used[uo.key] {
 			continue
 		}
 		if uo.obj.InGenerated {
 			continue
 		}
-		problems = append(problems, problem{
+		out.Diagnostics = append(out.Diagnostics, diagnostic{
 			Diagnostic: runner.Diagnostic{
 				Position: uo.obj.DisplayPosition,
 				Message:  fmt.Sprintf("%s %s is unused", uo.obj.Kind, uo.obj.Name),
 				Category: "U1000",
 			},
+			MergeIf: lint.MergeIfAll,
 		})
 	}
 
-	if len(problems) == 0 {
-		return nil, warnings, nil
-	}
-
-	sort.Slice(problems, func(i, j int) bool {
-		pi := problems[i].Position
-		pj := problems[j].Position
-
-		if pi.Filename != pj.Filename {
-			return pi.Filename < pj.Filename
-		}
-		if pi.Line != pj.Line {
-			return pi.Line < pj.Line
-		}
-		if pi.Column != pj.Column {
-			return pi.Column < pj.Column
-		}
-
-		return problems[i].Message < problems[j].Message
-	})
-
-	var out []problem
-	out = append(out, problems[0])
-	for i, p := range problems[1:] {
-		// We may encounter duplicate problems because one file
-		// can be part of many packages.
-		if !problems[i].equal(p) {
-			out = append(out, p)
-		}
-	}
-	return out, warnings, nil
+	return out, nil
 }
 
-func filterIgnored(problems []problem, res runner.ResultData, allowedAnalyzers map[string]bool) ([]problem, error) {
+func filterIgnored(diagnostics []diagnostic, res runner.ResultData, allowedAnalyzers map[string]bool) ([]diagnostic, error) {
 	couldHaveMatched := func(ig *lineIgnore) bool {
 		for _, c := range ig.Checks {
 			if c == "U1000" {
@@ -229,33 +226,33 @@ func filterIgnored(problems []problem, res runner.ResultData, allowedAnalyzers m
 		return false
 	}
 
-	ignores, moreProblems := parseDirectives(res.Directives)
+	ignores, moreDiagnostics := parseDirectives(res.Directives)
 
 	for _, ig := range ignores {
-		for i := range problems {
-			p := &problems[i]
-			if ig.Match(*p) {
-				p.Severity = severityIgnored
+		for i := range diagnostics {
+			diag := &diagnostics[i]
+			if ig.Match(*diag) {
+				diag.Severity = severityIgnored
 			}
 		}
 
 		if ig, ok := ig.(*lineIgnore); ok && !ig.Matched && couldHaveMatched(ig) {
-			p := problem{
+			diag := diagnostic{
 				Diagnostic: runner.Diagnostic{
 					Position: ig.Pos,
 					Message:  "this linter directive didn't match anything; should it be removed?",
 					Category: "staticcheck",
 				},
 			}
-			moreProblems = append(moreProblems, p)
+			moreDiagnostics = append(moreDiagnostics, diag)
 		}
 	}
 
-	return append(problems, moreProblems...), nil
+	return append(diagnostics, moreDiagnostics...), nil
 }
 
 type ignore interface {
-	Match(p problem) bool
+	Match(diag diagnostic) bool
 }
 
 type lineIgnore struct {
@@ -266,7 +263,7 @@ type lineIgnore struct {
 	Pos     token.Position
 }
 
-func (li *lineIgnore) Match(p problem) bool {
+func (li *lineIgnore) Match(p diagnostic) bool {
 	pos := p.Position
 	if pos.Filename != li.File || pos.Line != li.Line {
 		return false
@@ -293,7 +290,7 @@ type fileIgnore struct {
 	Checks []string
 }
 
-func (fi *fileIgnore) Match(p problem) bool {
+func (fi *fileIgnore) Match(p diagnostic) bool {
 	if p.Position.Filename != fi.File {
 		return false
 	}
@@ -326,26 +323,34 @@ func (s severity) String() string {
 	}
 }
 
-// problem represents a problem in some source code.
-type problem struct {
+// diagnostic represents a diagnostic in some source code.
+type diagnostic struct {
 	runner.Diagnostic
-	Severity severity
+	Severity  severity
+	MergeIf   lint.MergeStrategy
+	BuildName string
 }
 
-func (p problem) equal(o problem) bool {
+func (p diagnostic) equal(o diagnostic) bool {
 	return p.Position == o.Position &&
 		p.End == o.End &&
 		p.Message == o.Message &&
 		p.Category == o.Category &&
-		p.Severity == o.Severity
+		p.Severity == o.Severity &&
+		p.MergeIf == o.MergeIf &&
+		p.BuildName == o.BuildName
 }
 
-func (p *problem) String() string {
-	return fmt.Sprintf("%s (%s)", p.Message, p.Category)
+func (p *diagnostic) String() string {
+	if p.BuildName != "" {
+		return fmt.Sprintf("%s [%s] (%s)", p.Message, p.BuildName, p.Category)
+	} else {
+		return fmt.Sprintf("%s (%s)", p.Message, p.Category)
+	}
 }
 
-func failed(res runner.Result) []problem {
-	var problems []problem
+func failed(res runner.Result) []diagnostic {
+	var diagnostics []diagnostic
 
 	for _, e := range res.Errors {
 		switch e := e.(type) {
@@ -379,7 +384,7 @@ func failed(res runner.Result) []problem {
 					panic(fmt.Sprintf("internal error: %s", e))
 				}
 			}
-			p := problem{
+			diag := diagnostic{
 				Diagnostic: runner.Diagnostic{
 					Position: posn,
 					Message:  msg,
@@ -387,9 +392,9 @@ func failed(res runner.Result) []problem {
 				},
 				Severity: severityError,
 			}
-			problems = append(problems, p)
+			diagnostics = append(diagnostics, diag)
 		case error:
-			p := problem{
+			diag := diagnostic{
 				Diagnostic: runner.Diagnostic{
 					Position: token.Position{},
 					Message:  e.Error(),
@@ -397,11 +402,11 @@ func failed(res runner.Result) []problem {
 				},
 				Severity: severityError,
 			}
-			problems = append(problems, p)
+			diagnostics = append(diagnostics, diag)
 		}
 	}
 
-	return problems
+	return diagnostics
 }
 
 type unusedKey struct {
@@ -416,16 +421,16 @@ type unusedPair struct {
 	obj unused.SerializedObject
 }
 
-func success(allowedChecks map[string]bool, res runner.ResultData) []problem {
+func success(allowedAnalyzers map[string]bool, res runner.ResultData) []diagnostic {
 	diags := res.Diagnostics
-	var problems []problem
+	var diagnostics []diagnostic
 	for _, diag := range diags {
-		if !allowedChecks[diag.Category] {
+		if !allowedAnalyzers[diag.Category] {
 			continue
 		}
-		problems = append(problems, problem{Diagnostic: diag})
+		diagnostics = append(diagnostics, diagnostic{Diagnostic: diag})
 	}
-	return problems
+	return diagnostics
 }
 
 func defaultGoVersion() string {
@@ -497,24 +502,28 @@ func parsePos(pos string) (token.Position, int, error) {
 }
 
 type options struct {
-	Config config.Config
+	Config      config.Config
+	BuildConfig BuildConfig
 
-	Tags                     string
 	LintTests                bool
 	GoVersion                string
 	PrintAnalyzerMeasurement func(analysis *analysis.Analyzer, pkg *loader.PackageSpec, d time.Duration)
 }
 
-func doLint(cs []*lint.Analyzer, paths []string, opt *options) ([]problem, []string, error) {
+func doLint(as []*lint.Analyzer, paths []string, opt *options) (LintResult, error) {
 	if opt == nil {
 		opt = &options{}
 	}
 
 	l, err := newLinter(opt.Config)
 	if err != nil {
-		return nil, nil, err
+		return LintResult{}, err
 	}
-	l.Checkers = cs
+	analyzers := make(map[string]*lint.Analyzer, len(as))
+	for _, a := range as {
+		analyzers[a.Analyzer.Name] = a
+	}
+	l.Analyzers = analyzers
 	l.Runner.GoVersion = opt.GoVersion
 	l.Runner.Stats.PrintAnalyzerMeasurement = opt.PrintAnalyzerMeasurement
 
@@ -522,9 +531,9 @@ func doLint(cs []*lint.Analyzer, paths []string, opt *options) ([]problem, []str
 	if opt.LintTests {
 		cfg.Tests = true
 	}
-	if opt.Tags != "" {
-		cfg.BuildFlags = append(cfg.BuildFlags, "-tags", opt.Tags)
-	}
+
+	cfg.BuildFlags = opt.BuildConfig.Flags
+	cfg.Env = append(os.Environ(), opt.BuildConfig.Envs...)
 
 	printStats := func() {
 		// Individual stats are read atomically, but overall there
@@ -560,5 +569,9 @@ func doLint(cs []*lint.Analyzer, paths []string, opt *options) ([]problem, []str
 			}
 		}()
 	}
-	return l.Lint(cfg, paths)
+	res, err := l.Lint(cfg, paths)
+	for i := range res.Diagnostics {
+		res.Diagnostics[i].BuildName = opt.BuildConfig.Name
+	}
+	return res, err
 }

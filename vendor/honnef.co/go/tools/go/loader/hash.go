@@ -6,7 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"honnef.co/go/tools/internal/cache"
+	"honnef.co/go/tools/go/buildid"
+	"honnef.co/go/tools/lintcmd/cache"
 )
 
 // computeHash computes a package's hash. The hash is based on all Go
@@ -74,7 +75,7 @@ func getBuildid(f string) (string, error) {
 	if h, ok := buildidCache[f]; ok {
 		return h, nil
 	}
-	h, err := ReadFile(f)
+	h, err := buildid.ReadFile(f)
 	if err != nil {
 		return "", err
 	}
