@@ -1,0 +1,2 @@
+This is identical to default_cc (and should probably use that as a base in the
+future) except that it enables hierarchical resource quotas (HRQ).

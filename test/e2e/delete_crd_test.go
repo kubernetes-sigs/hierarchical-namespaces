@@ -69,6 +69,7 @@ var _ = Describe("When deleting CRDs", func() {
 		time.Sleep(1 * time.Second)
 		MustRun("kubectl delete crd subnamespaceanchors.hnc.x-k8s.io")
 		MustRun("kubectl delete crd hncconfigurations.hnc.x-k8s.io")
+		MustRun("kubectl delete crd hierarchicalresourcequotas.hnc.x-k8s.io")
 		// Give HNC 10s to have the chance to fully delete everything (5s wasn't enough).
 		// Verify that the HNC CRDs are gone (if nothing's printed, then they are).
 		RunShouldNotContain("hnc", cleanupTimeout, "kubectl get crd")

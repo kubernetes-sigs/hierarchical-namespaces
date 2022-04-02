@@ -5,6 +5,7 @@ resources:
 - bases/hnc.x-k8s.io_hierarchyconfigurations.yaml
 - bases/hnc.x-k8s.io_hncconfigurations.yaml
 - bases/hnc.x-k8s.io_subnamespaceanchors.yaml
+- bases/hnc.x-k8s.io_hierarchicalresourcequotas.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patchesStrategicMerge:
@@ -15,11 +16,6 @@ patchesStrategicMerge:
 # - patches/webhook_in_hncconfigurations.yaml
 # - patches/webhook_in_subnamespaceanchors.yaml
 # +kubebuilder:scaffold:crdkustomizewebhookpatch
-
-# [CERTMANAGER] To enable webhook, uncomment all the sections with [CERTMANAGER] prefix.
-# patches here are for enabling the CA injection for each CRD
-#- patches/cainjection_in_hierarchies.yaml
-# +kubebuilder:scaffold:crdkustomizecainjectionpatch
 
 # the following config is for teaching kustomize how to do kustomization for CRDs.
 configurations:

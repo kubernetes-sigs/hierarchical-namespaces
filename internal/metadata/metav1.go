@@ -22,6 +22,15 @@ func SetLabel(inst metav1.Object, label string, value string) {
 	inst.SetLabels(labels)
 }
 
+func GetAnnotation(inst metav1.Object, annot string) (string, bool) {
+	annots := inst.GetAnnotations()
+	if annots == nil {
+		return "", false
+	}
+	value, ok := annots[annot]
+	return value, ok
+}
+
 func SetAnnotation(inst metav1.Object, annotation string, value string) {
 	annotations := inst.GetAnnotations()
 	if annotations == nil {

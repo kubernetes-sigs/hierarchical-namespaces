@@ -173,7 +173,7 @@ manifests: controller-gen
 		${KUSTOMIZE} edit add resource ../config/crd
 	${KUSTOMIZE} build manifests/ -o manifests/crds.yaml
 	@cd manifests && \
-		for variant in default-cc default-cm nowebhooks-cc ha-webhooks-cc ; do \
+		for variant in default-cc default-cm nowebhooks-cc ha-webhooks-cc hrq ; do \
 			echo "Building $${variant} manifest"; \
 			rm kustomization.yaml; \
 			touch kustomization.yaml && \
@@ -242,8 +242,12 @@ deploy-ha: docker-push kubectl manifests
 	-kubectl -n hnc-system delete deployment --all
 	kubectl apply -f manifests/ha.yaml
 
-ha-deploy-watch-ha:
+deploy-watch-ha:
 	kubectl logs -n hnc-system --follow deployment/hnc-controller-manager-ha manager
+
+deploy-hrq: docker-push kubectl manifests
+	-kubectl -n hnc-system delete deployment --all
+	kubectl apply -f manifests/hrq.yaml
 
 # No need to delete the HA configuration here - everything "extra" that it
 # installs is in hnc-system, which gets deleted by the default manifest.

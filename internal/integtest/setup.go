@@ -48,6 +48,11 @@ var (
 	K8sClient          client.Client
 	testEnv            *envtest.Environment
 	k8sManagerCancelFn context.CancelFunc
+	TestForest         *forest.Forest
+)
+
+const (
+	HRQSyncInterval = 5 * time.Second
 )
 
 func HNCRun(t *testing.T, title string) {
@@ -102,12 +107,14 @@ func HNCBeforeSuite() {
 
 	By("creating reconcilers")
 	opts := setup.Options{
-		MaxReconciles: 100,
-		UseFakeClient: true,
-		HNCCfgRefresh: 1 * time.Second, // so we don't have to wait as long
+		MaxReconciles:   100,
+		UseFakeClient:   true,
+		HNCCfgRefresh:   1 * time.Second, // so we don't have to wait as long
+		HRQ:             true,
+		HRQSyncInterval: HRQSyncInterval,
 	}
-
-	err = setup.CreateReconcilers(k8sManager, forest.NewForest(), opts)
+	TestForest = forest.NewForest()
+	err = setup.CreateReconcilers(k8sManager, TestForest, opts)
 	Expect(err).ToNot(HaveOccurred())
 
 	By("Creating clients")
@@ -127,6 +134,7 @@ func HNCAfterSuite() {
 	if k8sManagerCancelFn != nil {
 		k8sManagerCancelFn()
 	}
+	k8sManagerCancelFn = nil
 	By("tearing down the test environment")
 	Expect(testEnv).ToNot(BeNil())
 	err := testEnv.Stop()
