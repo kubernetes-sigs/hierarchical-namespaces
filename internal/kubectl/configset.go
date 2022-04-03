@@ -18,9 +18,10 @@ package kubectl
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
@@ -39,7 +40,7 @@ var setResourceCmd = &cobra.Command{
 		flags := cmd.Flags()
 		group, _ := flags.GetString("group")
 		modeStr, _ := flags.GetString("mode")
-		mode := api.SynchronizationMode(normalizeModeString(modeStr))
+		mode := api.SynchronizationMode(cases.Title(language.English).String(modeStr))
 		force, _ := flags.GetBool("force")
 		config := client.getHNCConfig()
 
@@ -73,12 +74,6 @@ var setResourceCmd = &cobra.Command{
 
 		client.updateHNCConfig(config)
 	},
-}
-
-// normalizeModeString corrects format of input Synchronization Mode string
-func normalizeModeString(modeStr string) string {
-	low := strings.ToLower(modeStr)
-	return strings.Title(low)
 }
 
 func newSetResourceCmd() *cobra.Command {
