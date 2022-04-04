@@ -269,11 +269,12 @@ func (v *Validator) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	// Get all the source objects in the new ancestors that would be propagated
 	// into the descendants.
 	newAnsSrcObjs := make(map[string]bool)
-	for _, o := range newParent.GetAncestorSourceObjects(gvk, "") {
+	for _, nnm := range newParent.GetAncestorSourceNames(gvk, "") {
 		// If the user has chosen not to propagate the object to this descendant,
 		// then it should not be included in conflict checks
+		o := v.Forest.Get(nnm.Namespace).GetSourceObject(gvk, nnm.Name)
 		if ok, _ := selectors.ShouldPropagate(o, o.GetLabels()); ok {
-			newAnsSrcObjs[o.GetName()] = true
+			newAnsSrcObjs[nnm.Name] = true
 		}
 	}
 
@@ -281,9 +282,9 @@ func (v *Validator) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 	cos := []string{}
 	dnses := append(ns.DescendantNames(), ns.Name())
 	for _, dns := range dnses {
-		for _, o := range v.Forest.Get(dns).GetSourceObjects(gvk) {
-			if newAnsSrcObjs[o.GetName()] {
-				co := fmt.Sprintf("Namespace %q: %s (%v)", dns, o.GetName(), gvk)
+		for _, nnm := range v.Forest.Get(dns).GetSourceNames(gvk) {
+			if newAnsSrcObjs[nnm.Name] {
+				co := fmt.Sprintf("Namespace %q: %s (%v)", dns, nnm.Name, gvk)
 				cos = append(cos, co)
 			}
 		}

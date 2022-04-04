@@ -640,7 +640,7 @@ var _ = Describe("Basic propagation", func() {
 		Expect(ObjectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
 
 		// Verify there's no CannotPropagate event before introducing the error.
-		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(false))
+		Eventually(eventFor(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(""))
 
 		// Make the secret unpropagateable and verify that it disappears.
 		setFinalizer(ctx, fooName, "foo-role", true)
@@ -648,7 +648,7 @@ var _ = Describe("Basic propagation", func() {
 		Eventually(HasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeFalse())
 
 		// Verify the CannotPropagate event from source object.
-		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
+		Eventually(eventFor(ctx, fooName, "foo-role", api.EventCannotPropagate)).ShouldNot(Equal(""))
 
 		// Fix the problem and verify that the role is propagated again. Please note
 		// that events are removed one hour after the last occurrence. Therefore, we
@@ -658,7 +658,7 @@ var _ = Describe("Basic propagation", func() {
 		Expect(ObjectInheritedFrom(ctx, api.RoleResource, barName, "foo-role")).Should(Equal(fooName))
 		Eventually(HasObject(ctx, api.RoleResource, bazName, "foo-role")).Should(BeTrue())
 		Expect(ObjectInheritedFrom(ctx, api.RoleResource, bazName, "foo-role")).Should(Equal(fooName))
-		Eventually(hasEvent(ctx, fooName, "foo-role", api.EventCannotPropagate)).Should(Equal(true))
+		Eventually(eventFor(ctx, fooName, "foo-role", api.EventCannotPropagate)).ShouldNot(Equal(""))
 	})
 
 	It("shouldn't delete a descendant source object with the same name if the sync mode is 'Remove'", func() {
@@ -777,9 +777,8 @@ func removeRole(ctx context.Context, nsName, roleName string) {
 	ExpectWithOffset(1, K8sClient.Delete(ctx, role)).Should(Succeed())
 }
 
-func hasEvent(ctx context.Context, nsName, objName, reason string) func() bool {
-	// `Eventually` only works with a fn that doesn't take any args.
-	return func() bool {
+func eventFor(ctx context.Context, nsName, objName, reason string) func() string {
+	return func() string {
 		eventList := &corev1.EventList{}
 		EventuallyWithOffset(1, func() error {
 			return K8sClient.List(ctx, eventList, &client.ListOptions{Namespace: nsName})
@@ -787,9 +786,9 @@ func hasEvent(ctx context.Context, nsName, objName, reason string) func() bool {
 
 		for _, event := range eventList.Items {
 			if event.InvolvedObject.Name == objName && event.Reason == reason {
-				return true
+				return fmt.Sprintf("%+v", event)
 			}
 		}
-		return false
+		return ""
 	}
 }

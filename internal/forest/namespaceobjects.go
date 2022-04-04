@@ -3,6 +3,7 @@ package forest
 import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // SetSourceObject updates or creates the source object in forest.namespace.
@@ -35,11 +36,11 @@ func (ns *Namespace) DeleteSourceObject(gvk schema.GroupVersionKind, nm string) 
 	}
 }
 
-// GetSourceObjects returns all source objects in the namespace.
-func (ns *Namespace) GetSourceObjects(gvk schema.GroupVersionKind) []*unstructured.Unstructured {
-	o := []*unstructured.Unstructured{}
+// GetSourceNames returns all source objects in the namespace.
+func (ns *Namespace) GetSourceNames(gvk schema.GroupVersionKind) []types.NamespacedName {
+	o := []types.NamespacedName{}
 	for _, obj := range ns.sourceObjects[gvk] {
-		o = append(o, obj)
+		o = append(o, types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()})
 	}
 	return o
 }
@@ -50,10 +51,10 @@ func (ns *Namespace) GetNumSourceObjects(gvk schema.GroupVersionKind) int {
 	return len(ns.sourceObjects[gvk])
 }
 
-// GetAncestorSourceObjects returns all source objects with the specified name
+// GetAncestorSourceNames returns all source objects with the specified name
 // in the ancestors (including itself) from top down. If the name is not
 // specified, all the source objects in the ancestors will be returned.
-func (ns *Namespace) GetAncestorSourceObjects(gvk schema.GroupVersionKind, name string) []*unstructured.Unstructured {
+func (ns *Namespace) GetAncestorSourceNames(gvk schema.GroupVersionKind, name string) []types.NamespacedName {
 	// The namespace could be nil when we use this function on "ns.Parent()" to
 	// get the source objects of the ancestors excluding itself without caring if
 	// the "ns.Parent()" is nil.
@@ -62,22 +63,22 @@ func (ns *Namespace) GetAncestorSourceObjects(gvk schema.GroupVersionKind, name 
 	}
 
 	// Get the source objects in the ancestors from top down.
-	objs := []*unstructured.Unstructured{}
-	ans := ns.AncestryNames()
-	for _, n := range ans {
-		nsObjs := ns.forest.Get(n).GetSourceObjects(gvk)
+	allNNMs := []types.NamespacedName{}
+	ancs := ns.AncestryNames()
+	for _, anc := range ancs {
+		nnms := ns.forest.Get(anc).GetSourceNames(gvk)
 		if name == "" {
 			// Get all the source objects if the name is not specified.
-			objs = append(objs, ns.forest.Get(n).GetSourceObjects(gvk)...)
+			allNNMs = append(allNNMs, nnms...)
 		} else {
 			// If a name is specified, return the matching objects.
-			for _, o := range nsObjs {
-				if o.GetName() == name {
-					objs = append(objs, o)
+			for _, o := range nnms {
+				if o.Name == name {
+					allNNMs = append(allNNMs, o)
 				}
 			}
 		}
 	}
 
-	return objs
+	return allNNMs
 }

@@ -71,6 +71,9 @@ func (ns *Namespace) Name() string {
 
 // Parent returns a pointer to the parent namespace.
 func (ns *Namespace) Parent() *Namespace {
+	if ns == nil {
+		return nil
+	}
 	return ns.parent
 }
 

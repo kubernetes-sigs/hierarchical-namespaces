@@ -289,6 +289,7 @@ func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
 	// certs are all in place.
 	setupLog.Info("Waiting for certificate generation to complete")
 	<-certsReady
+	setupLog.Info("Certs ready")
 
 	if testLog {
 		stats.StartLoggingActivity()
@@ -298,18 +299,12 @@ func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
 	// other components.
 	f := forest.NewForest()
 
-	// Create all validating and mutating admission controllers.
-	if !noWebhooks {
-		setupLog.Info("Registering validating webhook (won't work when running locally; use --no-webhooks)")
-		setup.CreateWebhooks(mgr, f)
+	opts := setup.Options{
+		NoWebhooks:    noWebhooks,
+		MaxReconciles: maxReconciles,
+		ReadOnly:      webhooksOnly,
 	}
-
-	// Create all reconciling controllers
-	setupLog.Info("Creating controllers", "maxReconciles", maxReconciles)
-	if err := setup.CreateReconcilers(mgr, f, maxReconciles, webhooksOnly, false); err != nil {
-		setupLog.Error(err, "cannot create controllers")
-		os.Exit(1)
-	}
+	setup.Create(setupLog, mgr, f, opts)
 
 	setupLog.Info("All controllers started; setup complete")
 }

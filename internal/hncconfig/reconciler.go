@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -37,24 +36,22 @@ type Reconciler struct {
 	Log     logr.Logger
 	Manager ctrl.Manager
 
-	// ResourceMapper allows the reconciler to map resources to kinds
-	ResourceMapper resourceMapper
+	// resourceMapper allows the reconciler to map resources to kinds
+	resourceMapper resourceMapper
 
 	// Forest is the in-memory data structure that is shared with all other reconcilers.
 	Forest *forest.Forest
 
-	// Trigger is a channel of event.GenericEvent (see "Watching Channels" in
+	// trigger is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html)
 	// that is used to enqueue the singleton to trigger reconciliation.
-	Trigger chan event.GenericEvent
-
-	// HierarchyConfigUpdates is a channel of events used to update hierarchy configuration changes performed by
-	// ObjectReconcilers. It is passed on to ObjectReconcilers for the updates. The Reconciler itself does
-	// not use it.
-	HierarchyConfigUpdates chan event.GenericEvent
+	trigger chan event.GenericEvent
 
 	// ReadOnly disables writebacks
 	ReadOnly bool
+
+	// RefreshDuration is the maximum amount of time between refreshes
+	RefreshDuration time.Duration
 
 	// activeGVKMode contains GRs that are configured in the Spec and their mapping
 	// GVKs and configured modes.
@@ -62,11 +59,6 @@ type Reconciler struct {
 
 	// activeGR contains the mapped GVKs of the GRs configured in the Spec.
 	activeGR gvk2gr
-
-	// enqueueReasons maintains the list of reasons we've been asked to update ourselves. Functionally,
-	// it's just a boolean (nil or non-nil), everything else is just for logging.
-	enqueueReasons     map[string]int
-	enqueueReasonsLock sync.Mutex
 }
 
 type gvkMode struct {
@@ -79,25 +71,6 @@ type gr2gvkMode map[schema.GroupResource]gvkMode
 
 // gvk2gr keeps track of a group of unique GVKs with the mapping GRs.
 type gvk2gr map[schema.GroupVersionKind]schema.GroupResource
-
-// checkPeriod is the period that the config reconciler checks if it needs to reconcile the
-// `config` singleton.
-const checkPeriod = 3 * time.Second
-
-// Enqueue reinvokes the reconciler
-func (r *Reconciler) Enqueue(reason string) {
-	if r == nil { // for unit testing
-		return
-	}
-
-	r.enqueueReasonsLock.Lock()
-	defer r.enqueueReasonsLock.Unlock()
-
-	if r.enqueueReasons == nil {
-		r.enqueueReasons = map[string]int{}
-	}
-	r.enqueueReasons[reason]++
-}
 
 // Reconcile is the entrypoint to the reconciler.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -156,7 +129,7 @@ func (r *Reconciler) ensureEnforcedTypes(inst *api.HNCConfiguration) error {
 		gr := schema.GroupResource{Group: t.Group, Resource: t.Resource}
 
 		// Look if the resource exists in the API server.
-		gvk, err := r.ResourceMapper.NamespacedKindFor(gr)
+		gvk, err := r.resourceMapper.NamespacedKindFor(gr)
 		if err != nil {
 			// Error looking up enforced types. Log error, write conditions and return the error for a retry.
 			r.Log.Error(err, "while trying to reconcile the enforced resource", "resource", gr)
@@ -195,7 +168,7 @@ func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration) {
 		}
 
 		// Look if the resource exists in the API server.
-		gvk, err := r.ResourceMapper.NamespacedKindFor(gr)
+		gvk, err := r.resourceMapper.NamespacedKindFor(gr)
 		if err != nil {
 			// Log error and write conditions, but don't early exit since the other types can still be reconciled.
 			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
@@ -362,15 +335,14 @@ func (r *Reconciler) createObjectReconciler(gvk schema.GroupVersionKind, mode ap
 	or := &objects.Reconciler{
 		Client: r.Client,
 		// This field will be shown as source.component=hnc.x-k8s.io in events.
-		EventRecorder:       r.Manager.GetEventRecorderFor(api.MetaGroup),
-		Log:                 ctrl.Log.WithName(gvk.Kind).WithName("reconcile"),
-		Forest:              r.Forest,
-		GVK:                 gvk,
-		Mode:                objects.GetValidateMode(mode, r.Log),
-		Affected:            make(chan event.GenericEvent),
-		AffectedNamespace:   r.HierarchyConfigUpdates,
-		HNCConfigReconciler: r,
+		EventRecorder: r.Manager.GetEventRecorderFor(api.MetaGroup),
+		Log:           ctrl.Log.WithName(gvk.Kind).WithName("reconcile"),
+		Forest:        r.Forest,
+		GVK:           gvk,
+		Mode:          objects.GetValidateMode(mode, r.Log),
+		Affected:      make(chan event.GenericEvent),
 	}
+	r.Forest.AddListener(or)
 
 	// TODO: figure out MaxConcurrentReconciles option - https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/291
 	if err := or.SetupWithManager(r.Manager, 10); err != nil {
@@ -497,40 +469,32 @@ func (r *Reconciler) loadNamespaceConditions(inst *api.HNCConfiguration) {
 	}
 }
 
-// periodicTrigger periodically checks if the `config` singleton needs to be reconciled and
-// enqueues the `config` singleton for reconciliation, if needed.
-func (r *Reconciler) periodicTrigger() {
+// periodicRefresh periodically checks if the `config` singleton needs to be reconciled and
+// enqueues the `config` singleton for reconciliation, if needed. We start the initial refresh right
+// away so that the singleton gets created ASAP on the cluster if it doesn't already exist.
+func (r *Reconciler) periodicRefresh() {
 	// run forever
 	for {
-		time.Sleep(checkPeriod)
-		r.triggerReconcileIfNeeded()
-	}
-}
-
-func (r *Reconciler) triggerReconcileIfNeeded() {
-	r.enqueueReasonsLock.Lock()
-	defer r.enqueueReasonsLock.Unlock()
-
-	if r.enqueueReasons == nil {
-		return
-	}
-
-	// Log all reasons
-	for reason, count := range r.enqueueReasons {
-		r.Log.V(1).Info("Updating HNCConfig", "reason", reason, "count", count)
-	}
-
-	// Clear the flag and actually trigger the reconcile.
-	r.enqueueReasons = nil
-	go func() {
 		inst := &api.HNCConfiguration{}
 		inst.ObjectMeta.Name = api.HNCConfigSingleton
-		r.Trigger <- event.GenericEvent{Object: inst}
-	}()
+		r.trigger <- event.GenericEvent{Object: inst}
+		time.Sleep(r.RefreshDuration)
+	}
 }
 
 // SetupWithManager builds a controller with the reconciler.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if r.RefreshDuration == 0 {
+		r.RefreshDuration = 10 * time.Second
+	}
+	r.trigger = make(chan event.GenericEvent)
+
+	mapper, err := apimeta.NewGroupKindMapper(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("cannot create API mapper: %w", err)
+	}
+	r.resourceMapper = mapper
+
 	// Whenever a CRD is created/updated, we will send a request to reconcile the singleton again, in
 	// case the singleton has configuration for the custom resource type.
 	crdMapFn := func(_ client.Object) []reconcile.Request {
@@ -540,9 +504,9 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	// Register the reconciler
-	err := ctrl.NewControllerManagedBy(mgr).
+	err = ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
-		Watches(&source.Channel{Source: r.Trigger}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &apiextensions.CustomResourceDefinition{}},
 			handler.EnqueueRequestsFromMapFunc(crdMapFn)).
 		Complete(r)
@@ -550,22 +514,10 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 		return err
 	}
 
-	// Create a default singleton if there is no singleton in the cluster by forcing
-	// reconciliation to start.
-	//
-	// The cache used by the client to retrieve objects might not be populated
-	// at this point. As a result, we cannot use r.Get() to determine the existence
-	// of the singleton and then use r.Create() to create the singleton if
-	// it does not exist. As a workaround, we decide to enforce reconciliation. The
-	// cache is populated at the reconciliation stage. A default singleton will be
-	// created during the reconciliation if there is no singleton in the cluster.
-	r.Enqueue("force initial reconcile")
-
-	// Periodically checks if the config reconciler needs to reconcile and trigger the
-	// reconciliation if needed, in case the status needs to be updated. This occurs
+	// Periodically forces the singleton to be refreshed so it has the latest stats. This occurs
 	// in a goroutine so the caller doesn't block; since the reconciler is never
 	// garbage-collected, this is safe.
-	go r.periodicTrigger()
+	go r.periodicRefresh()
 
 	return nil
 }

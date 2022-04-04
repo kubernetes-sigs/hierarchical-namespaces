@@ -85,11 +85,6 @@ type Reconciler struct {
 	// enqueue additional objects that need updating.
 	Affected chan event.GenericEvent
 
-	// AffectedNamespace is a channel of events used to update namespaces.
-	AffectedNamespace chan event.GenericEvent
-
-	HNCConfigReconciler HNCConfigReconcilerType
-
 	// propagatedObjectsLock is used to prevent the race condition between concurrent reconciliation threads
 	// trying to update propagatedObjects at the same time.
 	propagatedObjectsLock sync.Mutex
@@ -108,21 +103,50 @@ type HNCConfigReconcilerType interface {
 //
 // +kubebuilder:rbac:groups=*,resources=*,verbs=*
 
-// SyncNamespace can be called manually by the HierarchyConfigReconciler when the hierarchy changes.
-// It enqueues all the current objects in the namespace and local copies of the original objects
-// in the ancestors.
-func (r *Reconciler) SyncNamespace(ctx context.Context, log logr.Logger, ns string) error {
+// OnChangeNamespace is called whenever a namespace is changed (according to
+// HierarchyConfigReconciler). It enqueues all the current objects in the namespace and local copies
+// of the original objects in the ancestors.
+func (r *Reconciler) OnChangeNamespace(log logr.Logger, ns *forest.Namespace) {
 	log = log.WithValues("gvk", r.GVK)
+	// Copy all information from the forest, as the lock will be released before the goroutines
+	// finish.
+	nsnm := ns.Name()
+	srcnms := ns.Parent().GetAncestorSourceNames(r.GVK, "")
 
 	// Enqueue all the current objects in the namespace because some of them may have been deleted.
-	if err := r.enqueueLocalObjects(ctx, log, ns); err != nil {
-		return err
-	}
+	go func() {
+		// Usually, if we hit an error, we just return it and let controller-runtime worry about it. But
+		// since this is in a goroutine, we can't return it. Try for a minute and then give up - this
+		// will generate a lot of errors in the log if there's a problem.
+		//
+		// TODO(#182): look into fixing this holistically
+		attempts := 0
+		for {
+			attempts++
+			err := r.enqueueExistingObjects(context.Background(), log, nsnm)
+			if err == nil {
+				break
+			}
+			if attempts == 6 {
+				log.Error(err, "Couldn't list objects for 60s, giving up. OBJECTS MAY BE IN A BAD STATE.")
+				break
+			}
+			log.Error(err, "Couldn't list objects")
+			time.Sleep(10 * time.Second)
+		}
+	}()
 
 	// Enqueue local copies of the originals in the ancestors to catch any new or changed objects.
-	r.enqueuePropagatedObjects(log, ns)
-
-	return nil
+	go func() {
+		for _, nnm := range srcnms {
+			inst := &unstructured.Unstructured{}
+			inst.SetGroupVersionKind(r.GVK)
+			inst.SetName(nnm.Name)
+			inst.SetNamespace(nnm.Namespace)
+			log.V(1).Info("Enqueuing local copy of the ancestor original for reconciliation", "affected", inst.GetName())
+			r.Affected <- event.GenericEvent{Object: inst}
+		}
+	}()
 }
 
 // GetGVK provides GVK that is handled by this reconciler.
@@ -187,7 +211,7 @@ func (r *Reconciler) enqueueAllObjects(ctx context.Context, log logr.Logger) err
 	keys := r.Forest.GetNamespaceNames()
 	for _, ns := range keys {
 		// Enqueue all the current objects in the namespace.
-		if err := r.enqueueLocalObjects(ctx, log, ns); err != nil {
+		if err := r.enqueueExistingObjects(ctx, log, ns); err != nil {
 			log.Error(err, "Error while trying to enqueue local objects", "namespace", ns)
 			return err
 		}
@@ -221,6 +245,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			return resp, err
 		}
 	}
+	log.V(1).Info("Reconciling")
 
 	// Sync with the forest and perform any required actions.
 	actions, srcInst := r.syncWithForest(log, inst)
@@ -294,7 +319,7 @@ func (r *Reconciler) syncMissingObject(log logr.Logger, inst *unstructured.Unstr
 	// descendants, but there's nothing else to do.
 	if ns.HasSourceObject(r.GVK, inst.GetName()) {
 		ns.DeleteSourceObject(r.GVK, inst.GetName())
-		r.syncPropagation(log, inst)
+		r.enqueueDescendants(log, inst, "source object is missing and must have been deleted")
 		return actionNop
 	}
 
@@ -379,12 +404,13 @@ func (r *Reconciler) getTopSourceToPropagate(log logr.Logger, inst *unstructured
 	ns := r.Forest.Get(inst.GetNamespace())
 	// Get all the source objects with the same name in the ancestors excluding
 	// itself from top down.
-	objs := ns.Parent().GetAncestorSourceObjects(r.GVK, inst.GetName())
-	for _, obj := range objs {
+	nnms := ns.Parent().GetAncestorSourceNames(r.GVK, inst.GetName())
+	for _, nnm := range nnms {
 		// If the source cannot propagate, ignore it.
 		// TODO: add a webhook rule to prevent e.g. removing a source finalizer that
 		//  would cause overwriting the source objects in the descendents.
 		//  See https://github.com/kubernetes-sigs/multi-tenancy/issues/1120
+		obj := r.Forest.Get(nnm.Namespace).GetSourceObject(r.GVK, nnm.Name)
 		if !r.shouldPropagateSource(log, obj, inst.GetNamespace()) {
 			continue
 		}
@@ -444,7 +470,7 @@ func (r *Reconciler) syncSource(log logr.Logger, src *unstructured.Unstructured)
 	ns.SetSourceObject(cleanSource(src))
 
 	// Enqueue propagated copies for this possibly deleted source
-	r.syncPropagation(log, src)
+	r.enqueueDescendants(log, src, "modified source object")
 }
 
 // cleanSource creates a sanitized version of the object to store in the forest. In particular, it
@@ -492,15 +518,26 @@ func (r *Reconciler) enqueueDescendants(log logr.Logger, src *unstructured.Unstr
 	}
 }
 
-// enqueueLocalObjects enqueues all the objects (with the same GVK) in the namespace.
-func (r *Reconciler) enqueueLocalObjects(ctx context.Context, log logr.Logger, ns string) error {
+// enqueueExistingObjects enqueues all the objects (with the same GVK) in the namespace.
+//
+// This method actually does an apiserver (or cache) List operation on all objects in the namespace.
+// This will result in a lot of overlap with enqueueSourcesAndPotentialCopies (especially the
+// sources in this namespace), but it will catch any _stale_ propagated objects in this namespace
+// that no longer have a source in an ancestor namespace, which that function will miss. This can
+// happen either if the source has been deleted or (more likely in the context of
+// OnChangedNamespace) the ancestors of this namespace have changed and so the old sources no longer
+// exist.
+//
+// Since this function is called while the forest lock is held, everything it does is launched in a
+// new goroutine to avoid any possible calls to the apiserver while the lock is held.
+func (r *Reconciler) enqueueExistingObjects(ctx context.Context, log logr.Logger, nsnm string) error {
 	ul := &unstructured.UnstructuredList{}
 	ul.SetGroupVersionKind(r.GVK)
 	ul.SetKind(ul.GetKind() + "List")
-	if err := r.List(ctx, ul, client.InNamespace(ns)); err != nil {
-		log.Error(err, "Couldn't list objects")
+	if err := r.List(ctx, ul, client.InNamespace(nsnm)); err != nil {
 		return err
 	}
+
 	for _, inst := range ul.Items {
 		// We don't need the entire canonical object here but only its metadata.
 		// Using canonical copy is the easiest way to get an object with its metadata set.
@@ -511,23 +548,6 @@ func (r *Reconciler) enqueueLocalObjects(ctx context.Context, log logr.Logger, n
 	}
 
 	return nil
-}
-
-// enqueuePropagatedObjects is only called from SyncNamespace. It's the only place a forest lock is
-// needed in SyncNamespace, so we made it into a function with forest lock instead of holding the
-// lock for the entire SyncNamespace.
-func (r *Reconciler) enqueuePropagatedObjects(log logr.Logger, ns string) {
-	r.Forest.Lock()
-	defer r.Forest.Unlock()
-
-	// Enqueue local copies of the original objects in the ancestors from forest.
-	o := r.Forest.Get(ns).Parent().GetAncestorSourceObjects(r.GVK, "")
-	for _, obj := range o {
-		lc := canonical(obj)
-		lc.SetNamespace(ns)
-		log.V(1).Info("Enqueuing local copy of the ancestor original for reconciliation", "affected", lc.GetName())
-		r.Affected <- event.GenericEvent{Object: lc}
-	}
 }
 
 // operate operates the action generated from syncing the object with the forest.
@@ -548,7 +568,7 @@ func (r *Reconciler) operate(ctx context.Context, log logr.Logger, act syncActio
 		err = fmt.Errorf("HNC couldn't determine how to update this object (desired action: %s)", act)
 	}
 
-	r.generateEvents(srcInst, inst, act, err)
+	r.generateEvents(log, srcInst, inst, act, err)
 	return err
 }
 
@@ -641,22 +661,33 @@ func (r *Reconciler) writeObject(ctx context.Context, log logr.Logger, inst, src
 // generateEvents is called when the reconciler has performed all necessary
 // actions and knows if they've succeeded or failed. If a source should not be
 // propagated or there was a failure, generate "Warning" events.
-func (r *Reconciler) generateEvents(srcInst, inst *unstructured.Unstructured, act syncAction, err error) {
+func (r *Reconciler) generateEvents(log logr.Logger, srcInst, inst *unstructured.Unstructured, act syncAction, err error) {
 	switch {
 	case hasFinalizers(inst):
 		// Propagated objects can never have finalizers
+		log.Info("Generating event", "type", api.EventCannotPropagate, "msg", "Objects with finalizers cannot be propagated")
 		r.EventRecorder.Event(inst, "Warning", api.EventCannotPropagate, "Objects with finalizers cannot be propagated")
+
+	case errors.IsAlreadyExists(err):
+		// This can happen if the same newly-propagated object is enqueued twice in quick succession;
+		// the second goroutine will try to create it but it will already exist. We should definitely
+		// retry the reconciliation (after all, something may have changed) but there's no need to log
+		// an event since this error isn't expected to be persistent - we can always overwrite if we
+		// want to.
+		return
 
 	case err != nil:
 		// There was an error updating this object; generate a warning pointing to
 		// the source object. Note we never take actions on a source object, so only
 		// propagated objects could possibly get an error.
 		msg := fmt.Sprintf("Could not %s from source namespace %q: %s.", act, inst.GetLabels()[api.LabelInheritedFrom], err.Error())
+		log.Info("Generating event", "type", api.EventCannotUpdate, "msg", msg)
 		r.EventRecorder.Event(inst, "Warning", api.EventCannotUpdate, msg)
 
 		// Also generate a warning on the source if one exists.
 		if srcInst != nil {
 			msg = fmt.Sprintf("Could not %s to destination namespace %q: %s.", act, inst.GetNamespace(), err.Error())
+			log.Info("Generating event", "srcNS", srcInst.GetNamespace(), "type", api.EventCannotPropagate, "msg", msg)
 			r.EventRecorder.Event(srcInst, "Warning", api.EventCannotPropagate, msg)
 		}
 	}
@@ -671,18 +702,6 @@ func hasPropagatedLabel(inst *unstructured.Unstructured) bool {
 	}
 	_, po := labels[api.LabelInheritedFrom]
 	return po
-}
-
-// syncPropagation enqueues any propagated copies of the source.
-//
-// The method can be called when the source was deleted by users, or if it will no longer be
-// propagated, e.g. because the user's changed the sync mode in the HNC Config.
-func (r *Reconciler) syncPropagation(log logr.Logger, inst *unstructured.Unstructured) {
-	// Signal the config reconciler for reconciliation because it is possible that the source object is
-	// deleted on the apiserver.
-	r.HNCConfigReconciler.Enqueue("source object")
-
-	r.enqueueDescendants(log, inst, "source object")
 }
 
 // shouldPropagateSource returns true if the object should be propagated by the HNC. The following
@@ -742,7 +761,6 @@ func (r *Reconciler) recordPropagatedObject(namespace, name string) {
 	}
 	if !r.propagatedObjects[nnm] {
 		r.propagatedObjects[nnm] = true
-		r.HNCConfigReconciler.Enqueue("newly propagated object")
 	}
 }
 
@@ -758,7 +776,6 @@ func (r *Reconciler) recordRemovedObject(namespace, name string) {
 	}
 	if r.propagatedObjects[nnm] {
 		delete(r.propagatedObjects, nnm)
-		r.HNCConfigReconciler.Enqueue("newly unpropagated object")
 	}
 }
 

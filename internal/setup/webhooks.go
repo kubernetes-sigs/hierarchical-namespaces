@@ -53,8 +53,8 @@ func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretR
 	})
 }
 
-// CreateWebhooks creates all mutators and validators. This function is called from main.go.
-func CreateWebhooks(mgr ctrl.Manager, f *forest.Forest) {
+// createWebhooks creates all mutators and validators. This function is called from main.go.
+func createWebhooks(mgr ctrl.Manager, f *forest.Forest, opts Options) {
 	// Create webhook for Hierarchy
 	mgr.GetWebhookServer().Register(hierarchyconfig.ServingPath, &webhook.Admission{Handler: &hierarchyconfig.Validator{
 		Log:    ctrl.Log.WithName("hierarchyconfig").WithName("validate"),

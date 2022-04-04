@@ -70,14 +70,10 @@ type Reconciler struct {
 	// use it to determine how to propagate objects.
 	Forest *forest.Forest
 
-	// Affected is a channel of event.GenericEvent (see "Watching Channels" in
+	// affected is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional namespaces that need updating.
-	Affected chan event.GenericEvent
-
-	// These are interfaces to the other reconcilers
-	AnchorReconciler    AnchorReconcilerType
-	HNCConfigReconciler HNCConfigReconcilerType
+	affected chan event.GenericEvent
 
 	ReadOnly bool
 }
@@ -122,9 +118,8 @@ func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm st
 	}
 
 	// Remove the "included-namespace" label on excluded namespace if it exists.
-	origNS := nsInst.DeepCopy()
 	r.removeIncludedNamespaceLabel(log, nsInst)
-	if _, err := r.writeNamespace(ctx, log, origNS, nsInst); err != nil {
+	if err := r.writeNamespace(ctx, log, nsInst); err != nil {
 		return err
 	}
 
@@ -135,6 +130,9 @@ func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm st
 	if err != nil {
 		return err
 	}
+	// Remove the finalizers if there are any. Note that while getSingleton can return an invalid
+	// object (i.e. one without a name or namespace, if there's no singleton on the server), it can
+	// never do that if there are finalizers or children so this is safe to write back.
 	if len(inst.ObjectMeta.Finalizers) > 0 || len(inst.Status.Children) > 0 {
 		log.Info("Removing finalizers and children on unmanaged singleton")
 		inst.ObjectMeta.Finalizers = nil
@@ -161,13 +159,13 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 		}
 		return err
 	}
-	origNS := nsInst.DeepCopy()
 
 	// Add the "included-namespace" label to the namespace if it doesn't exist. The
 	// excluded namespaces should be already skipped earlier.
 	r.addIncludedNamespaceLabel(log, nsInst)
 
-	// Get singleton from apiserver. If it doesn't exist, initialize one.
+	// Get singleton from apiserver. If it doesn't exist, this will be a blank object (i.e. without
+	// the name or namespace set).
 	inst, deletingCRD, err := r.getSingleton(ctx, nm)
 	if err != nil {
 		return err
@@ -178,7 +176,6 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 		log.Info("HierarchyConfiguration CRD is being deleted; will not sync")
 		return nil
 	}
-	origHC := inst.DeepCopy()
 
 	// Get a list of subnamespace anchors from apiserver.
 	anms, err := r.getAnchorNames(ctx, nm)
@@ -195,26 +192,10 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 	r.updateFinalizers(log, inst, nsInst, anms)
 
 	// Sync the Hierarchy singleton with the in-memory forest.
-	needUpdateObjects := r.syncWithForest(log, nsInst, inst, deletingCRD, anms, parentAnchor)
+	r.syncWithForest(log, nsInst, inst, deletingCRD, anms, parentAnchor)
 
-	// Write back if anything's changed. Early-exit if we just write back exactly what we had and this
-	// isn't the first time we're syncing.
-	updated, err := r.writeInstances(ctx, log, origHC, inst, origNS, nsInst)
-	needUpdateObjects = updated || needUpdateObjects
-	if !needUpdateObjects || err != nil {
-		return err
-	}
-
-	// Update all the objects in this namespace. We have to do this at least *after* the tree is
-	// updated, because if we don't, we could incorrectly think we've propagated the wrong objects
-	// from our ancestors, or are propagating the wrong objects to our descendants.
-	//
-	// NB: if writeInstance didn't actually write anything - that is, if the hierarchy didn't change -
-	// this update is skipped. Otherwise, we can get into infinite loops because both objects and
-	// hierarchy reconcilers are enqueuing too freely. TODO: only call updateObjects when we make the
-	// *kind* of changes that *should* cause objects to be updated (eg add/remove the ActivitiesHalted
-	// condition, change subtree parents, etc).
-	return r.updateObjects(ctx, log, nm)
+	// Write the instances.
+	return r.writeInstances(ctx, log, inst, nsInst)
 }
 
 func (r *Reconciler) onMissingNamespace(log logr.Logger, nm string) {
@@ -291,10 +272,12 @@ func (r *Reconciler) updateFinalizers(log logr.Logger, inst *api.HierarchyConfig
 // fully written back to the apiserver yet, each namespace is reconciled in isolation (apart from
 // the in-memory forest) so this is fine. Return true, if the namespace is just synced or the
 // namespace labels are changed that requires updating all objects in the namespaces.
-func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string, parentAnchor *api.SubnamespaceAnchor) bool {
+func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, inst *api.HierarchyConfiguration, deletingCRD bool, anms []string, parentAnchor *api.SubnamespaceAnchor) {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
-	ns := r.Forest.Get(inst.ObjectMeta.Namespace)
+	origNS := nsInst.DeepCopy()
+	origHC := inst.DeepCopy()
+	ns := r.Forest.Get(nsInst.GetName())
 
 	// Clear all conditions; we'll re-add them if they're still relevant. But first, record whether
 	// this namespace (excluding ancestors) was halted, since if that changes, we'll need to notify
@@ -314,10 +297,10 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	// for this namespace to be synced.
 	r.syncSubnamespaceParent(log, inst, nsInst, ns, parentAnchor)
 	r.syncParent(log, inst, ns)
-	initial := r.markExisting(log, ns)
+	r.markExisting(log, ns)
 
 	// Sync labels and annotations, now that the structure's been updated.
-	updatedLabels := r.syncLabels(log, inst, nsInst, ns)
+	r.syncLabels(log, inst, nsInst, ns)
 	r.syncAnnotations(log, inst, nsInst, ns)
 
 	// Sync other spec and spec-like info
@@ -331,8 +314,25 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	inst.Status.Children = ns.ChildNames()
 	r.syncConditions(log, inst, ns, wasHalted)
 
-	r.HNCConfigReconciler.Enqueue("namespace reconciled")
-	return initial || updatedLabels
+	// Trigger any watchers if anything has changed
+	changed := false
+	if !reflect.DeepEqual(origHC, inst) {
+		changed = true
+		initial := false
+		if inst.GetName() == "" {
+			initial = true
+			inst.ObjectMeta.Name = api.Singleton
+			inst.ObjectMeta.Namespace = nsInst.GetName()
+		}
+		log.Info("HierarchyConfiguration has changed", "initial", initial)
+	}
+	if !reflect.DeepEqual(origNS, nsInst) {
+		changed = true
+		log.Info("Namespace has changed")
+	}
+	if changed {
+		r.Forest.OnChangeNamespace(log.WithValues("reason", "insts updated"), ns)
+	}
 }
 
 // syncExternalNamespace sets external tree labels to the namespace in the forest
@@ -411,17 +411,19 @@ func (r *Reconciler) syncSubnamespaceParent(log logr.Logger, inst *api.Hierarchy
 
 // markExisting marks the namespace as existing. If this is the first time we're reconciling this namespace,
 // mark all possible relatives as being affected since they may have been waiting for this namespace.
-func (r *Reconciler) markExisting(log logr.Logger, ns *forest.Namespace) bool {
+func (r *Reconciler) markExisting(log logr.Logger, ns *forest.Namespace) {
 	if !ns.SetExists() {
-		return false
+		return
 	}
 	log.Info("New namespace found")
 	r.enqueueAffected(log, "relative of newly found namespace", ns.RelativesNames()...)
 	if ns.IsSub {
 		r.enqueueAffected(log, "parent of the newly found subnamespace", ns.Parent().Name())
-		r.AnchorReconciler.Enqueue(log, ns.Name(), ns.Parent().Name(), "the missing subnamespace is found")
 	}
-	return true
+
+	// Even if we don't change anything in this namespace, we may have skipped reconciling objects in
+	// it before we synced it for the first time.
+	r.Forest.OnChangeNamespace(log.WithValues("reason", "newly found namespace"), ns)
 }
 
 func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguration, ns *forest.Namespace) {
@@ -429,6 +431,9 @@ func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguratio
 	defer r.setCycleCondition(log, ns)
 
 	if ns.IsExternal() {
+		if ns.Parent() != nil {
+			r.enqueueAffected(log, "removed as parent", ns.Parent().Name())
+		}
 		ns.SetParent(nil)
 		return
 	}
@@ -454,6 +459,7 @@ func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguratio
 	r.enqueueAffected(log, "member of a cycle", ns.CycleNames()...)
 
 	// Change the parent.
+	log.Info("Changed parent", "old", oldParent.Name(), "new", curParent.Name())
 	ns.SetParent(curParent)
 
 	// Enqueue all other namespaces that could be directly affected. The old and new parents have just
@@ -491,7 +497,7 @@ func (r *Reconciler) syncAnchors(log logr.Logger, ns *forest.Namespace, anms []s
 
 // Sync namespace managed and tree labels. Return true if the labels are updated, so we know to
 // re-sync all objects that could be affected by exclusions.
-func (r *Reconciler) syncLabels(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) bool {
+func (r *Reconciler) syncLabels(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, ns *forest.Namespace) {
 	// Get a list of all managed labels from the config object.
 	managed := map[string]string{}
 	for _, kvp := range inst.Spec.Labels {
@@ -536,10 +542,6 @@ func (r *Reconciler) syncLabels(log logr.Logger, inst *api.HierarchyConfiguratio
 	if ns.IsExternal() {
 		metadata.SetLabel(nsInst, nsInst.Name+api.LabelTreeDepthSuffix, "0")
 		ns.SetLabels(nsInst.Labels)
-
-		// There are no propagated objects in external namespaces so we don't need to notify the caller
-		// that any propagation-relevant labels have changed.
-		return false
 	}
 
 	// Set all managed and tree labels, starting from the current namespace and going up through the
@@ -577,14 +579,14 @@ func (r *Reconciler) syncLabels(log logr.Logger, inst *api.HierarchyConfiguratio
 		depth++
 	}
 
-	// Update the labels in the forest so that they can be used in object propagation. If they've
-	// changed, return true so that all propagated objects in this namespace can be compared to its
-	// new labels.
+	// Update the labels in the forest so that they can be used in object propagation. Explicitly
+	// invoke the listeners here, even if the reconciler doesn't make any other changes (the normal
+	// way listeners get invoked) because even if the user just adds a label to a namespace and we
+	// don't do anything, we still need to enqueue all objects in this NS to ensure they're propagated
+	// correctly.
 	if ns.SetLabels(nsInst.Labels) {
-		log.Info("Namespace's managed and/or tree labels have been updated")
-		return true
+		r.Forest.OnChangeNamespace(log.WithValues("reason", "updated labels"), ns)
 	}
-	return false
 }
 
 // Sync namespace managed annotations. This is mainly a simplified version of syncLabels with all
@@ -669,6 +671,7 @@ func (r *Reconciler) syncConditions(log logr.Logger, inst *api.HierarchyConfigur
 //
 // It's fine to call this function with `foo.Name()` even if `foo` is nil; it will just be ignored.
 func (r *Reconciler) enqueueAffected(log logr.Logger, reason string, affected ...string) {
+	log.Info("Enqueuing", "reason", reason, "affected", affected)
 	go func() {
 		for _, nm := range affected {
 			// Ignore any nil namespaces (lets callers skip a nil check)
@@ -680,40 +683,33 @@ func (r *Reconciler) enqueueAffected(log logr.Logger, reason string, affected ..
 			inst := &api.HierarchyConfiguration{}
 			inst.ObjectMeta.Name = api.Singleton
 			inst.ObjectMeta.Namespace = nm
-			r.Affected <- event.GenericEvent{Object: inst}
+			r.affected <- event.GenericEvent{Object: inst}
 		}
 	}()
 }
 
-func (r *Reconciler) writeInstances(ctx context.Context, log logr.Logger, oldHC, newHC *api.HierarchyConfiguration, oldNS, newNS *corev1.Namespace) (bool, error) {
+func (r *Reconciler) writeInstances(ctx context.Context, log logr.Logger, newHC *api.HierarchyConfiguration, newNS *corev1.Namespace) error {
 	isDeletingNS := !newNS.DeletionTimestamp.IsZero()
-	updated := false
-	if up, err := r.writeHierarchy(ctx, log, oldHC, newHC, isDeletingNS); err != nil {
-		return false, err
-	} else {
-		updated = updated || up
+	if err := r.writeHierarchy(ctx, log, newHC, isDeletingNS); err != nil {
+		return err
 	}
 
-	if up, err := r.writeNamespace(ctx, log, oldNS, newNS); err != nil {
-		return false, err
-	} else {
-		updated = updated || up
+	if err := r.writeNamespace(ctx, log, newNS); err != nil {
+		return err
 	}
-	return updated, nil
+	return nil
 }
 
-func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, inst *api.HierarchyConfiguration, isDeletingNS bool) (bool, error) {
-	if reflect.DeepEqual(orig, inst) {
-		return false, nil
-	}
-	if r.ReadOnly {
-		// We *wanted* to change something, so assume that we need to re-reconcile other objects as well
-		return true, nil
+func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, isDeletingNS bool) error {
+	// The inst's name will be blank if it wasn't on the apiserver and we didn't want to make any
+	// changes to it (e.g. no children, conditions, etc).
+	if r.ReadOnly || inst.GetName() == "" {
+		return nil
 	}
 	exists := !inst.CreationTimestamp.IsZero()
 	if !exists && isDeletingNS {
 		log.Info("Will not create hierarchyconfiguration since namespace is being deleted")
-		return false, nil
+		return nil
 	}
 
 	stats.WriteHierConfig()
@@ -721,49 +717,12 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, orig, 
 		log.Info("Creating hierarchyconfiguration", "conditions", len(inst.Status.Conditions))
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
-			return false, err
+			return err
 		}
 	} else {
 		log.V(1).Info("Updating singleton on apiserver", "conditions", len(inst.Status.Conditions))
 		if err := r.Update(ctx, inst); err != nil {
 			log.Error(err, "while updating apiserver")
-			return false, err
-		}
-	}
-
-	return true, nil
-}
-
-func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, orig, inst *corev1.Namespace) (bool, error) {
-	if reflect.DeepEqual(orig, inst) {
-		return false, nil
-	}
-	if r.ReadOnly {
-		// We *wanted* to change something, so assume that we need to re-reconcile other objects as well
-		return true, nil
-	}
-
-	// NB: HCR can't create namespaces, that's only in anchor reconciler
-	stats.WriteNamespace()
-	log.V(1).Info("Updating namespace on apiserver")
-	if err := r.Update(ctx, inst); err != nil {
-		log.Error(err, "while updating apiserver")
-		return false, err
-	}
-
-	return true, nil
-}
-
-// updateObjects calls all type reconcillers in this namespace.
-func (r *Reconciler) updateObjects(ctx context.Context, log logr.Logger, ns string) error {
-	log.V(1).Info("Syncing all objects (hierarchy updated or new namespace found)")
-	// Use mutex to guard the read from the types list of the forest to prevent the ConfigReconciler
-	// from modifying the list at the same time.
-	r.Forest.Lock()
-	trs := r.Forest.GetTypeSyncers()
-	r.Forest.Unlock()
-	for _, tr := range trs {
-		if err := tr.SyncNamespace(ctx, log, ns); err != nil {
 			return err
 		}
 	}
@@ -771,8 +730,24 @@ func (r *Reconciler) updateObjects(ctx context.Context, log logr.Logger, ns stri
 	return nil
 }
 
-// getSingleton returns the singleton if it exists, or creates an empty one if
-// it doesn't. The second parameter is true if the CRD itself is being deleted.
+func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
+	if r.ReadOnly {
+		return nil
+	}
+
+	// NB: HCR can't create namespaces, that's only in anchor reconciler
+	stats.WriteNamespace()
+	log.V(1).Info("Updating namespace on apiserver")
+	if err := r.Update(ctx, inst); err != nil {
+		log.Error(err, "while updating apiserver")
+		return err
+	}
+
+	return nil
+}
+
+// getSingleton returns the singleton if it exists, or creates an empty one if it doesn't (with the
+// name and namespace unset). The second parameter is true if the CRD itself is being deleted.
 func (r *Reconciler) getSingleton(ctx context.Context, nm string) (*api.HierarchyConfiguration, bool, error) {
 	nnm := types.NamespacedName{Namespace: nm, Name: api.Singleton}
 	inst := &api.HierarchyConfiguration{}
@@ -780,10 +755,6 @@ func (r *Reconciler) getSingleton(ctx context.Context, nm string) (*api.Hierarch
 		if !apierrors.IsNotFound(err) {
 			return nil, false, err
 		}
-
-		// It doesn't exist - initialize it to a sane initial value.
-		inst.ObjectMeta.Name = api.Singleton
-		inst.ObjectMeta.Namespace = nm
 	}
 
 	// If the HC is either being deleted, or it doesn't exist, this may be because HNC is being
@@ -836,6 +807,8 @@ func (r *Reconciler) getAnchorNames(ctx context.Context, nm string) ([]string, e
 }
 
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error {
+	r.affected = make(chan event.GenericEvent)
+
 	// Maps namespaces to their singletons
 	nsMapFn := func(obj client.Object) []reconcile.Request {
 		return []reconcile.Request{
@@ -866,7 +839,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.HierarchyConfiguration{}).
-		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Channel{Source: r.affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
 		Watches(&source.Kind{Type: &api.SubnamespaceAnchor{}}, handler.EnqueueRequestsFromMapFunc(anchorMapFn)).
 		WithOptions(opts).
