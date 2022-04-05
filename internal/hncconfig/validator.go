@@ -162,8 +162,8 @@ func (v *Validator) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancest
 	conflicts := []string{}
 	// make a local copy of the ancestorObjects so that the original copy doesn't get modified
 	objs := ao.copy()
-	for _, o := range ns.GetSourceObjects(gvk) {
-		onm := o.GetName()
+	for _, srcNNM := range ns.GetSourceNames(gvk) {
+		onm := srcNNM.Name
 		// If there exists objects with the same name and gvk, check if there will be overwriting conflict
 		for _, nnm := range objs[onm] {
 			// check if the existing ns will propagate this object to the current ns

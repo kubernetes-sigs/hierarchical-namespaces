@@ -47,10 +47,10 @@ type Reconciler struct {
 
 	Forest *forest.Forest
 
-	// Affected is a channel of event.GenericEvent (see "Watching Channels" in
+	// affected is a channel of event.GenericEvent (see "Watching Channels" in
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional objects that need updating.
-	Affected chan event.GenericEvent
+	affected chan event.GenericEvent
 
 	// ReadOnly disables writebacks
 	ReadOnly bool
@@ -319,16 +319,22 @@ func (r *Reconciler) updateState(log logr.Logger, inst *api.SubnamespaceAnchor, 
 	}
 }
 
-// Enqueue enqueues a subnamespace anchor for later reconciliation. This occurs in a goroutine
-// so the caller doesn't block; since the reconciler is never garbage-collected, this is safe.
-func (r *Reconciler) Enqueue(log logr.Logger, nm, pnm, reason string) {
+// OnChangeNamespace enqueues a subnamespace anchor for later reconciliation. This occurs in a
+// goroutine so the caller doesn't block; since the reconciler is never garbage-collected, this is
+// safe.
+func (r *Reconciler) OnChangeNamespace(log logr.Logger, ns *forest.Namespace) {
+	if ns == nil || !ns.IsSub {
+		return
+	}
+	nm := ns.Name()
+	pnm := ns.Parent().Name()
 	go func() {
 		// The watch handler doesn't care about anything except the metadata.
 		inst := &api.SubnamespaceAnchor{}
 		inst.ObjectMeta.Name = nm
 		inst.ObjectMeta.Namespace = pnm
-		log.V(1).Info("Enqueuing for reconciliation", "affected", pnm+"/"+nm, "reason", reason)
-		r.Affected <- event.GenericEvent{Object: inst}
+		log.V(1).Info("Enqueuing for reconciliation", "affected", pnm+"/"+nm)
+		r.affected <- event.GenericEvent{Object: inst}
 	}()
 }
 
@@ -423,6 +429,8 @@ func (r *Reconciler) deleteNamespace(ctx context.Context, log logr.Logger, inst 
 }
 
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.affected = make(chan event.GenericEvent)
+
 	// Maps an subnamespace to its anchor in the parent namespace.
 	nsMapFn := func(obj client.Object) []reconcile.Request {
 		if obj.GetAnnotations()[api.SubnamespaceOf] == "" {
@@ -437,7 +445,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.SubnamespaceAnchor{}).
-		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
+		Watches(&source.Channel{Source: r.affected}, &handler.EnqueueRequestForObject{}).
 		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
 		Complete(r)
 }

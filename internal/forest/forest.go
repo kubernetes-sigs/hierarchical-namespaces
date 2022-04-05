@@ -30,6 +30,9 @@ type Forest struct {
 	// We can also move the lock out of the forest and pass it to all reconcilers that need the lock.
 	// In that way, we don't need to put the list in the forest.
 	types []TypeSyncer
+
+	// nsListeners is a list of listeners
+	listeners []NamespaceListener
 }
 
 type namedNamespaces map[string]*Namespace
@@ -37,9 +40,6 @@ type namedNamespaces map[string]*Namespace
 // TypeSyncer syncs objects of a specific type. Reconcilers implement the interface so that they can be
 // called by the HierarchyReconciler if the hierarchy changes.
 type TypeSyncer interface {
-	// SyncNamespace syncs objects of a namespace for a specific type.
-	SyncNamespace(context.Context, logr.Logger, string) error
-
 	// Provides the GVK that is handled by the reconciler who implements the interface.
 	GetGVK() schema.GroupVersionKind
 
@@ -53,6 +53,12 @@ type TypeSyncer interface {
 
 	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
 	GetNumPropagatedObjects() int
+}
+
+// NamespaceListener has methods that get called whenever a namespace changes.
+type NamespaceListener interface {
+	// OnChangeNamespace is called whenever a namespace changes.
+	OnChangeNamespace(logr.Logger, *Namespace)
 }
 
 func NewForest() *Forest {
@@ -147,4 +153,14 @@ func (f *Forest) GetTypeSyncers() []TypeSyncer {
 	types := make([]TypeSyncer, len(f.types))
 	copy(types, f.types)
 	return types
+}
+
+func (f *Forest) AddListener(l NamespaceListener) {
+	f.listeners = append(f.listeners, l)
+}
+
+func (f *Forest) OnChangeNamespace(log logr.Logger, ns *Namespace) {
+	for _, l := range f.listeners {
+		l.OnChangeNamespace(log, ns)
+	}
 }

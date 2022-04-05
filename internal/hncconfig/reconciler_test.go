@@ -27,15 +27,9 @@ const (
 	nopTime = 1 * time.Second
 
 	// countUpdateTime is the timeout for `Eventually` to verify the object counts in the HNC Config
-	// status.  Currently the config reconciler periodically updates status every 3 seconds. From
-	// experiments on workstations, tests are flaky when setting the countUpdateTime to 3 seconds and
-	// tests can always pass when setting the time to 4 seconds. We may need to increase the time in
-	// future if the config reconciler takes longer to update the status.  This issue is logged at
-	// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/871
-	//
-	// Update: since Prow machines appear to be overloaded, and since we've seen some random failures
-	// in counting tests, I'm increasing this to 6s - aludwin, Oct 2020
-	countUpdateTime = 6 * time.Second
+	// status. We've set the duration to be 1s for tests (it's usually much higher) but sync Prow
+	// seems to get overloaded easily, we'll keep the timeout much higher - aludwin, Mar 2022
+	countUpdateTime = 5 * time.Second
 
 	// testModeMisssing is a fake mode to indicate that the spec/status doesn't exist in the config
 	testModeMisssing api.SynchronizationMode = "<missing>"
