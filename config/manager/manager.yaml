@@ -3,6 +3,8 @@ kind: Namespace
 metadata:
   labels:
     control-plane: controller-manager
+    pod-security.kubernetes.io/enforce: restricted  
+    pod-security.kubernetes.io/enforce-version: v1.23
   name: system
 ---
 apiVersion: apps/v1
@@ -57,6 +59,14 @@ spec:
         - containerPort: 8080
           name: metrics
           protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop: ["ALL"]
         volumeMounts:
         - mountPath: /tmp/k8s-webhook-server/serving-certs
           name: cert
