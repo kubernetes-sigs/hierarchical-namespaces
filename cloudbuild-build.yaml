@@ -1,0 +1,7 @@
+# This file is called by a cloud build trigger for any push/merge to the main branch (master).
+# See here for more info: https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/automated-builds.md
+steps:
+  # TODO: Add build steps for manifests and krew plugin.
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/hnc-manager:$BRANCH_NAME-$SHORT_SHA', '.']
+images: ['gcr.io/$PROJECT_ID/hnc-manager:$BRANCH_NAME-$SHORT_SHA']

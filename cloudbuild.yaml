@@ -1,3 +1,5 @@
+# Note: This file is used for the manual release process.
+# We intend to sunset this as we create auto created releases.
 steps:
 # Build release container image
 # Pull source and check out correct tag
