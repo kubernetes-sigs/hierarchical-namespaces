@@ -3,7 +3,7 @@ package e2e
 import (
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 

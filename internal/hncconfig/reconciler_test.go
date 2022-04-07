@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "k8s.io/api/rbac/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -39,7 +39,7 @@ func TestInteg(t *testing.T) {
 	HNCRun(t, "HNCConfig reconciler")
 }
 
-var _ = BeforeSuite(HNCBeforeSuite, 60)
+var _ = BeforeSuite(HNCBeforeSuite)
 var _ = AfterSuite(HNCAfterSuite)
 
 var _ = Describe("HNCConfiguration", func() {

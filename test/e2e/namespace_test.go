@@ -3,16 +3,16 @@ package e2e
 import (
 	"os/exec"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 
 var _ = Describe("Namespace", func() {
 	const (
-		prefix = namspacePrefix + "namespace-"
-		nsA    = prefix + "a"
-		nsB    = prefix + "b"
+		prefix              = namspacePrefix + "namespace-"
+		nsA                 = prefix + "a"
+		nsB                 = prefix + "b"
 		wrong_included_file = "wrong_included_namespace.yaml"
 	)
 

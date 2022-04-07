@@ -4,9 +4,8 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 )
 
 const (
@@ -23,7 +22,5 @@ func TestE2e(t *testing.T) {
 	RegisterFailHandler(Fail)
 
 	SetDefaultEventuallyTimeout(time.Second * 2)
-	RunSpecsWithDefaultAndCustomReporters(t,
-		"HNC Suite",
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, "HNC Suite")
 }
