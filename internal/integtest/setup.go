@@ -21,15 +21,14 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo" //lint:ignore ST1001 Ignoring this for now
-	. "github.com/onsi/gomega" //lint:ignore ST1001 Ignoring this for now
+	. "github.com/onsi/ginkgo/v2" //lint:ignore ST1001 Ignoring this for now
+	. "github.com/onsi/gomega"    //lint:ignore ST1001 Ignoring this for now
 	corev1 "k8s.io/api/core/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -52,9 +51,7 @@ var (
 )
 
 func HNCRun(t *testing.T, title string) {
-	RunSpecsWithDefaultAndCustomReporters(t,
-		title,
-		[]Reporter{printer.NewlineReporter{}})
+	RunSpecs(t, title)
 }
 
 // All tests in the reconcilers_test package are in one suite. As a result, they

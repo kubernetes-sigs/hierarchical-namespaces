@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/ginkgo/v2"
 	. "sigs.k8s.io/hierarchical-namespaces/pkg/testutils"
 )
 
@@ -279,8 +279,8 @@ metadata:
     propagate.hnc.x-k8s.io/treeSelect: team-a
   name: my-secret
   namespace: acme-org`
-  		MustApplyYAML(secret)
-  		RunShouldContain("my-secret", defTimeout, "kubectl -n", nsTeamA, "get secrets")
+		MustApplyYAML(secret)
+		RunShouldContain("my-secret", defTimeout, "kubectl -n", nsTeamA, "get secrets")
 		RunShouldNotContain("my-secret", defTimeout, "kubectl -n", nsTeamB, "get secrets")
 	})
 })
