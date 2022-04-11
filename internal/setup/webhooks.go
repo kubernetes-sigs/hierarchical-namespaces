@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hierarchyconfig"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hncconfig"
+	"sigs.k8s.io/hierarchical-namespaces/internal/hrq"
 	ns "sigs.k8s.io/hierarchical-namespaces/internal/namespace" // for some reason, by default this gets imported as "namespace*s*"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
 )
@@ -53,7 +54,7 @@ func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretR
 	})
 }
 
-// createWebhooks creates all mutators and validators. This function is called from main.go.
+// createWebhooks creates all mutators and validators.
 func createWebhooks(mgr ctrl.Manager, f *forest.Forest, opts Options) {
 	// Create webhook for Hierarchy
 	mgr.GetWebhookServer().Register(hierarchyconfig.ServingPath, &webhook.Admission{Handler: &hierarchyconfig.Validator{
@@ -89,4 +90,17 @@ func createWebhooks(mgr ctrl.Manager, f *forest.Forest, opts Options) {
 	mgr.GetWebhookServer().Register(ns.MutatorServingPath, &webhook.Admission{Handler: &ns.Mutator{
 		Log: ctrl.Log.WithName("namespace").WithName("mutate"),
 	}})
+
+	if opts.HRQ {
+		// Create webhook for ResourceQuota status.
+		mgr.GetWebhookServer().Register(hrq.ResourceQuotasStatusServingPath, &webhook.Admission{Handler: &hrq.ResourceQuotaStatus{
+			Log:    ctrl.Log.WithName("validators").WithName("ResourceQuota"),
+			Forest: f,
+		}})
+
+		// Create webhook for HierarchicalResourceQuota spec.
+		mgr.GetWebhookServer().Register(hrq.HRQServingPath, &webhook.Admission{Handler: &hrq.HRQ{
+			Log: ctrl.Log.WithName("validators").WithName("HierarchicalResourceQuota"),
+		}})
+	}
 }

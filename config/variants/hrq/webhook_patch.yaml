@@ -1,0 +1,46 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- name: hrq.hnc.x-k8s.io
+  admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-hnc-x-k8s-io-v1alpha2-hrq
+  failurePolicy: Fail
+  rules:
+  - apiGroups:
+    - hnc.x-k8s.io
+    apiVersions:
+    - v1alpha2
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - hierarchicalresourcequotas
+  sideEffects: None
+- name: resourcesquotasstatus.hnc.x-k8s.io
+  admissionReviewVersions:
+  - v1
+  - v1beta1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-hnc-x-k8s-io-v1alpha2-resourcequotasstatus
+  failurePolicy: Ignore
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - UPDATE
+    resources:
+    - resourcequotas/status
+  sideEffects: None

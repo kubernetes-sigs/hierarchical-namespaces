@@ -59,6 +59,9 @@ type Namespace struct {
 	// managed by HNC. Any other value means that the namespace is an "external" namespace, whose
 	// metadata (e.g. labels) are set outside of HNC.
 	Manager string
+
+	// quotas stores information about the hierarchical quotas and resource usage in this namespace
+	quotas quotas
 }
 
 // Name returns the name of the namespace, of "<none>" if the namespace is nil.

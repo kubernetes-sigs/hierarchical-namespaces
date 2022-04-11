@@ -13,14 +13,17 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hierarchyconfig"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hncconfig"
+	"sigs.k8s.io/hierarchical-namespaces/internal/hrq"
 )
 
 type Options struct {
-	MaxReconciles int
-	ReadOnly      bool
-	UseFakeClient bool
-	NoWebhooks    bool
-	HNCCfgRefresh time.Duration
+	MaxReconciles   int
+	ReadOnly        bool
+	UseFakeClient   bool
+	NoWebhooks      bool
+	HNCCfgRefresh   time.Duration
+	HRQ             bool
+	HRQSyncInterval time.Duration
 }
 
 func Create(log logr.Logger, mgr ctrl.Manager, f *forest.Forest, opts Options) {
@@ -73,6 +76,38 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 		ReadOnly: opts.ReadOnly,
 	}
 
+	if opts.HRQ {
+		// Create resource quota reconciler
+		rqr := &hrq.ResourceQuotaReconciler{
+			Client: mgr.GetClient(),
+			Log:    ctrl.Log.WithName("reconcilers").WithName("ResourceQuota"),
+			Forest: f,
+		}
+		f.AddListener(rqr)
+
+		// Create hierarchical resource quota reconciler
+		hrqr := &hrq.HierarchicalResourceQuotaReconciler{
+			Client: mgr.GetClient(),
+			Log:    ctrl.Log.WithName("reconcilers").WithName("HierarchicalResourceQuota"),
+			Forest: f,
+			RQR:    rqr,
+		}
+		rqr.HRQR = hrqr
+
+		if err := rqr.SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("cannot create resource quota reconciler: %s", err.Error())
+		}
+		if err := hrqr.SetupWithManager(mgr); err != nil {
+			return fmt.Errorf("cannot create hierarchical resource quota reconciler: %s", err.Error())
+		}
+		rqr.HRQR = hrqr
+
+		// Create a periodic checker to make sure the forest is not out-of-sync.
+		if opts.HRQSyncInterval != 0 {
+			go detectIncrementalHRQUsageDrift(f, opts.HRQSyncInterval, hrqr)
+		}
+	}
+
 	if err := ar.SetupWithManager(mgr); err != nil {
 		return fmt.Errorf("cannot create anchor reconciler: %s", err.Error())
 	}
@@ -84,4 +119,15 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 	}
 
 	return nil
+}
+
+func detectIncrementalHRQUsageDrift(f *forest.Forest, forestSyncInterval time.Duration, hrqr *hrq.HierarchicalResourceQuotaReconciler) {
+	syncTicker := time.NewTicker(forestSyncInterval)
+	for {
+		<-syncTicker.C
+		// If there's any out-of-sync, enqueue the affected HRQs to update usages.
+		// If not, nothing will be enqueued.
+		//hrqr.Enqueue(hrqr.Log, "recover out-of-sync usages", f.CheckSubtreeUsages())
+		hrqr.Log.Info("TODO: recover out-of-sync usages")
+	}
 }
