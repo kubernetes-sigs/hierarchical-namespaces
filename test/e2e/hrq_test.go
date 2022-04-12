@@ -27,7 +27,8 @@ const (
 	resourceQuotaSingleton = "hrq.hnc.x-k8s.io"
 )
 
-var _ = Describe("Hierarchical Resource Quota", func() {
+// HRQ tests are pending (disabled) until we turn them on in all the default manifests
+var _ = PDescribe("Hierarchical Resource Quota", func() {
 	BeforeEach(func() {
 		rand.Seed(time.Now().UnixNano())
 		CleanupTestNamespaces()
