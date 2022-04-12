@@ -28,7 +28,6 @@ import (
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
-	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
 var describeCmd = &cobra.Command{
@@ -83,7 +82,7 @@ var describeCmd = &cobra.Command{
 	},
 }
 
-func describeConditions(cond []api.Condition) {
+func describeConditions(cond []metav1.Condition) {
 	if len(cond) == 0 {
 		fmt.Printf("  No conditions\n")
 		return

@@ -11,6 +11,7 @@ import (
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -357,7 +358,13 @@ func (r *Reconciler) createObjectReconciler(gvk schema.GroupVersionKind, mode ap
 }
 
 func (r *Reconciler) writeCondition(inst *api.HNCConfiguration, tp, reason, msg string) {
-	inst.Status.Conditions = append(inst.Status.Conditions, api.NewCondition(tp, reason, msg))
+	c := metav1.Condition{
+		Type:    tp,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: msg,
+	}
+	meta.SetStatusCondition(&inst.Status.Conditions, c)
 }
 
 // setTypeStatuses adds Status.Resources for types configured in the spec. Only the status of types

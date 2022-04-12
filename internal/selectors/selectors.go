@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/validation"
@@ -126,11 +126,11 @@ func GetSelector(inst *unstructured.Unstructured) (labels.Selector, error) {
 // getSelectorFromString converts the given string to a selector
 // Note: any invalid Selector value will cause this object not propagating to any child namespace
 func getSelectorFromString(str string) (labels.Selector, error) {
-	labelSelector, err := v1.ParseToLabelSelector(str)
+	labelSelector, err := metav1.ParseToLabelSelector(str)
 	if err != nil {
 		return nil, err
 	}
-	selector, err := v1.LabelSelectorAsSelector(labelSelector)
+	selector, err := metav1.LabelSelectorAsSelector(labelSelector)
 	if err != nil {
 		return nil, err
 	}
