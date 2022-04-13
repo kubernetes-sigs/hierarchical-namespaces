@@ -159,7 +159,7 @@ type HNCConfigurationStatus struct {
 	// affected namespaces. The HierarchyConfiguration object in each of the
 	// affected namespaces will have more information. To learn more about
 	// conditions, see https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#admin-conditions.
-	Conditions []Condition `json:"conditions,omitempty"`
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

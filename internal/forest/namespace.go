@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -46,7 +47,7 @@ type Namespace struct {
 
 	// conditions store conditions so that object propagation can be disabled if there's a problem
 	// on this namespace.
-	conditions []api.Condition
+	conditions []metav1.Condition
 
 	// IsSub indicates that this namespace is being or was created solely to live as a
 	// subnamespace of the specified parent.

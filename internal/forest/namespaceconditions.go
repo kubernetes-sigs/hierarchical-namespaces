@@ -3,6 +3,9 @@ package forest
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
@@ -41,7 +44,13 @@ func (ns *Namespace) SetCondition(tp, reason, msg string) {
 	if reason == api.ReasonAncestor {
 		return
 	}
-	ns.conditions = append(ns.conditions, api.NewCondition(tp, reason, msg))
+	c := metav1.Condition{
+		Type:    tp,
+		Status:  metav1.ConditionTrue,
+		Reason:  reason,
+		Message: msg,
+	}
+	meta.SetStatusCondition(&ns.conditions, c)
 }
 
 // ClearConditions set conditions to nil.
@@ -50,12 +59,19 @@ func (ns *Namespace) ClearConditions() {
 }
 
 // Conditions returns a full list of the conditions in the namespace.
-func (ns *Namespace) Conditions() []api.Condition {
+func (ns *Namespace) Conditions() []metav1.Condition {
 	if root := ns.GetHaltedRoot(); root != "" && root != ns.name {
-		msg := fmt.Sprintf("Propagation paused in %q and its descendants due to ActivitiesHalted condition on ancestor %q", ns.name, root)
-		ret := []api.Condition{api.NewCondition(api.ConditionActivitiesHalted, api.ReasonAncestor, msg)}
+		ret := []metav1.Condition{{
+			Type:   api.ConditionActivitiesHalted,
+			Status: metav1.ConditionTrue,
+			// TODO(adrianludwin) Review; Some callers require this field to be set - since it is mandatory in the API
+			// Set time as an obviously wrong value 1970-01-01T00:00:00Z since we
+			// overwrite conditions every time.
+			LastTransitionTime: metav1.Unix(0, 0),
+			Reason:             api.ReasonAncestor,
+			Message:            fmt.Sprintf("Propagation paused in %q and its descendants due to ActivitiesHalted condition on ancestor %q", ns.name, root),
+		}}
 		return append(ret, ns.conditions...)
 	}
-
 	return ns.conditions
 }

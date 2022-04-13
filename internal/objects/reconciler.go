@@ -24,7 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -310,7 +310,7 @@ func (r *Reconciler) skipNamespace(log logr.Logger, inst *unstructured.Unstructu
 // modify `inst`.
 func (r *Reconciler) syncMissingObject(log logr.Logger, inst *unstructured.Unstructured) syncAction {
 	// If the object exists, skip.
-	if inst.GetCreationTimestamp() != (v1.Time{}) {
+	if inst.GetCreationTimestamp() != (metav1.Time{}) {
 		return actionUnknown
 	}
 
@@ -435,7 +435,7 @@ func (r *Reconciler) syncPropagated(inst, srcInst *unstructured.Unstructured) (s
 	}
 
 	// If an object doesn't exist, assume it's been deleted or not yet created.
-	exists := inst.GetCreationTimestamp() != v1.Time{}
+	exists := inst.GetCreationTimestamp() != metav1.Time{}
 
 	// If the copy does not exist, or is different from the source, return the write action and the
 	// source instance. Note that DeepEqual could return `true` even if the object doesn't exist if
@@ -594,7 +594,7 @@ func (r *Reconciler) deleteObject(ctx context.Context, log logr.Logger, inst *un
 
 func (r *Reconciler) writeObject(ctx context.Context, log logr.Logger, inst, srcInst *unstructured.Unstructured) error {
 	// The object exists if CreationTimestamp is set. This flag enables us to have only 1 API call.
-	exist := inst.GetCreationTimestamp() != v1.Time{}
+	exist := inst.GetCreationTimestamp() != metav1.Time{}
 	ns := inst.GetNamespace()
 	// Get current ResourceVersion, required for updates for newer API objects (including custom resources).
 	rv := inst.GetResourceVersion()
