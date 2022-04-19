@@ -26,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -81,9 +82,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// Anchors in unmanaged namespace should be ignored. Make sure it
 	// doesn't have any finalizers, otherwise, leave it alone.
 	if why := config.WhyUnmanaged(pnm); why != "" {
-		if len(inst.ObjectMeta.Finalizers) > 0 {
+		if controllerutil.ContainsFinalizer(inst, api.MetaGroup) {
 			log.Info("Removing finalizers from anchor in unmanaged namespace", "reason", why)
-			inst.ObjectMeta.Finalizers = nil
+			controllerutil.RemoveFinalizer(inst, api.MetaGroup)
 			return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 		}
 		return ctrl.Result{}, nil
@@ -94,10 +95,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// been bypassed and the anchor has been successfully created. Forbidden
 	// anchors won't have finalizers.
 	if why := config.WhyUnmanaged(nm); why != "" {
-		if inst.Status.State != api.Forbidden || len(inst.ObjectMeta.Finalizers) > 0 {
+		if inst.Status.State != api.Forbidden || controllerutil.ContainsFinalizer(inst, api.MetaGroup) {
 			log.Info("Setting forbidden state on anchor with unmanaged name", "reason", why)
 			inst.Status.State = api.Forbidden
-			inst.ObjectMeta.Finalizers = nil
+			controllerutil.RemoveFinalizer(inst, api.MetaGroup)
 			return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 		}
 		return ctrl.Result{}, nil
@@ -113,9 +114,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	r.updateState(log, inst, snsInst)
 
 	// Handle the case where the anchor is being deleted.
-	if deleting, err := r.onDeleting(ctx, log, inst, snsInst); deleting {
-		return ctrl.Result{}, err
+	if !inst.DeletionTimestamp.IsZero() {
+		// Stop reconciliation as anchor is being deleted
+		return ctrl.Result{}, r.onDeleting(ctx, log, inst, snsInst)
 	}
+	// Add finalizers on all non-forbidden anchors to ensure it's not deleted until
+	// after the subnamespace is deleted.
+	controllerutil.AddFinalizer(inst, api.MetaGroup)
 
 	// If the subnamespace doesn't exist, create it.
 	if inst.Status.State == api.Missing {
@@ -130,9 +135,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 	}
 
-	// Add finalizers on all non-forbidden anchors to ensure it's not deleted until
-	// after the subnamespace is deleted.
-	inst.ObjectMeta.Finalizers = []string{api.MetaGroup}
 	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
 }
 
@@ -145,19 +147,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // There are several conditions where we skip step 1 - for example, if we're uninstalling HNC, or
 // if allowCascadingDeletion is disabled but the subnamespace has descendants (see
 // shouldDeleteSubns for details). In such cases, we move straight to step 2.
-func (r *Reconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) (bool, error) {
-	// Early exit and continue reconciliation if the instance is not being deleted.
-	if inst.DeletionTimestamp.IsZero() {
-		return false, nil
-	}
-
+func (r *Reconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) error {
 	// We handle deletions differently depending on whether _one_ anchor is being deleted (i.e., the
 	// user wants to delete the namespace) or whether the Anchor CRD is being deleted, which usually
 	// means HNC is being uninstalled and we shouldn't delete _any_ namespaces.
 	deletingCRD, err := crd.IsDeletingCRD(ctx, api.Anchors)
 	if err != nil {
 		log.Error(err, "Couldn't determine if CRD is being deleted")
-		return false, err
+		return err
 	}
 	log.V(1).Info("Anchor is being deleted", "deletingCRD", deletingCRD)
 
@@ -166,21 +163,21 @@ func (r *Reconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.
 	switch {
 	case r.shouldDeleteSubns(log, inst, snsInst, deletingCRD):
 		log.Info("Deleting subnamespace due to anchor being deleted")
-		return true, r.deleteNamespace(ctx, log, snsInst)
+		return r.deleteNamespace(ctx, log, snsInst)
 	case r.shouldFinalizeAnchor(log, inst, snsInst):
 		log.V(1).Info("Unblocking deletion") // V(1) since we'll very shortly show an "anchor deleted" message
-		inst.ObjectMeta.Finalizers = nil
-		return true, r.writeInstance(ctx, log, inst)
+		controllerutil.RemoveFinalizer(inst, api.MetaGroup)
+		return r.writeInstance(ctx, log, inst)
 	default:
 		// There's nothing to do; we're just waiting for something to happen. Print out a log message
 		// indicating what we're waiting for.
-		if len(inst.ObjectMeta.Finalizers) > 0 {
+		if controllerutil.ContainsFinalizer(inst, api.MetaGroup) {
 			log.Info("Waiting for subnamespace to be fully purged before letting the anchor be deleted")
 		} else {
 			// I doubt we'll ever get here but I suppose it's possible
 			log.Info("Waiting for K8s to delete this anchor (all finalizers are removed)")
 		}
-		return true, nil
+		return nil
 	}
 }
 
@@ -213,7 +210,7 @@ func (r *Reconciler) shouldDeleteSubns(log logr.Logger, inst *api.SubnamespaceAn
 			log.V(1).Info("The subnamespace is already being deleted; no need to delete again")
 			return false
 		}
-		if len(inst.ObjectMeta.Finalizers) == 0 {
+		if !controllerutil.ContainsFinalizer(inst, api.MetaGroup) {
 			log.V(1).Info("The anchor has already been finalized; do not reconsider deleting the namespace")
 			return false
 		}
@@ -257,7 +254,7 @@ func (r *Reconciler) shouldDeleteSubns(log logr.Logger, inst *api.SubnamespaceAn
 // deleted, it's in the process of being deleted, etc).
 func (r *Reconciler) shouldFinalizeAnchor(log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) bool {
 	// If the anchor is already finalized, there's no need to do it again.
-	if len(inst.ObjectMeta.Finalizers) == 0 {
+	if !controllerutil.ContainsFinalizer(inst, api.MetaGroup) {
 		return false
 	}
 
