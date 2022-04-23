@@ -123,12 +123,10 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 
 	if why := config.WhyUnmanaged(req.hc.Namespace); why != "" {
 		err := fmt.Errorf("namespace %q is not managed by HNC (%s) and cannot be set as a child of another namespace", req.hc.Namespace, why)
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 	if why := config.WhyUnmanaged(req.hc.Spec.Parent); why != "" {
 		err := fmt.Errorf("namespace %q is not managed by HNC (%s) and cannot be set as the parent of another namespace", req.hc.Spec.Parent, why)
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
@@ -190,7 +188,6 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 	haltedRoot := ns.GetHaltedRoot()
 	if haltedRoot != "" && haltedRoot != ns.Name() {
 		err := fmt.Errorf("ancestor %q of namespace %q has a critical condition, which must be resolved before any changes can be made to the hierarchy configuration", haltedRoot, ns.Name())
-		// TODO(erikgb): InternalError better?
 		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
@@ -201,7 +198,6 @@ func (v *Validator) checkNS(ns *forest.Namespace) admission.Response {
 func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admission.Response {
 	if ns.IsExternal() && newParent != nil {
 		err := fmt.Errorf("namespace %q is managed by %q, not HNC, so it cannot have a parent in HNC", ns.Name(), ns.Manager)
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
@@ -212,14 +208,12 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// Prevent changing parent of a subnamespace
 	if ns.IsSub {
 		err := fmt.Errorf("illegal parent: Cannot set the parent of %q to %q because it's a subnamespace of %q", ns.Name(), newParent.Name(), curParent.Name())
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyConflict(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
 	// non existence of parent namespace -> not allowed
 	if newParent != nil && !newParent.Exists() {
 		err := fmt.Errorf("requested parent %q does not exist", newParent.Name())
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyForbidden(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
@@ -230,7 +224,6 @@ func (v *Validator) checkParent(ns, curParent, newParent *forest.Namespace) admi
 	// parent conflicts with something in the _existing_ hierarchy.
 	if reason := ns.CanSetParent(newParent); reason != "" {
 		err := fmt.Errorf("illegal parent: %s", reason)
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyConflict(api.HierarchyConfigurationGR, api.Singleton, err)
 	}
 
