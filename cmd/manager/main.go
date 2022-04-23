@@ -242,7 +242,7 @@ func createManager() ctrl.Manager {
 	// it turns out to be harmful.
 	cfg.Burst = int(cfg.QPS * 1.5)
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		NewClient:              config.NewCachingClient,
+		NewClient:              config.NewClient(webhooksOnly),
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
 		HealthProbeBindAddress: probeAddr,
@@ -304,7 +304,6 @@ func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
 	opts := setup.Options{
 		NoWebhooks:    noWebhooks,
 		MaxReconciles: maxReconciles,
-		ReadOnly:      webhooksOnly,
 		HRQ:           enableHRQ,
 	}
 	setup.Create(setupLog, mgr, f, opts)

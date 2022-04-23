@@ -99,7 +99,7 @@ func HNCBeforeSuite() {
 
 	By("creating manager")
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
-		NewClient:          config.NewCachingClient,
+		NewClient:          config.NewClient(false),
 		MetricsBindAddress: "0", // disable metrics serving since 'go test' runs multiple suites in parallel processes
 		Scheme:             scheme.Scheme,
 	})

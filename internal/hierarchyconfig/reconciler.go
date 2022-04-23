@@ -74,8 +74,6 @@ type Reconciler struct {
 	// https://book-v1.book.kubebuilder.io/beyond_basics/controller_watches.html) that is used to
 	// enqueue additional namespaces that need updating.
 	affected chan event.GenericEvent
-
-	ReadOnly bool
 }
 
 type AnchorReconcilerType interface {
@@ -703,7 +701,7 @@ func (r *Reconciler) writeInstances(ctx context.Context, log logr.Logger, newHC 
 func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, isDeletingNS bool) error {
 	// The inst's name will be blank if it wasn't on the apiserver and we didn't want to make any
 	// changes to it (e.g. no children, conditions, etc).
-	if r.ReadOnly || inst.GetName() == "" {
+	if inst.GetName() == "" {
 		return nil
 	}
 	exists := !inst.CreationTimestamp.IsZero()
@@ -731,10 +729,6 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst *
 }
 
 func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
-	if r.ReadOnly {
-		return nil
-	}
-
 	// NB: HCR can't create namespaces, that's only in anchor reconciler
 	stats.WriteNamespace()
 	log.V(1).Info("Updating namespace on apiserver")
