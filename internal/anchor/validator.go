@@ -97,13 +97,11 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 		// Can't create subnamespaces in unmanaged namespaces
 		if why := config.WhyUnmanaged(pnm); why != "" {
 			err := fmt.Errorf("cannot create a subnamespace in the unmanaged namespace %q (%s)", pnm, why)
-			// TODO(erikgb): Add to list of Invalid field errors?
 			return webhooks.DenyForbidden(api.SubnamespaceAnchorGR, pnm, err)
 		}
 		// Can't create subnamespaces using unmanaged namespace names
 		if why := config.WhyUnmanaged(cnm); why != "" {
 			err := fmt.Errorf("cannot create a subnamespace using the unmanaged namespace name %q (%s)", cnm, why)
-			// TODO(erikgb): Add to list of Invalid field errors?
 			return webhooks.DenyForbidden(api.SubnamespaceAnchorGR, cnm, err)
 		}
 
@@ -113,7 +111,6 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 			childIsMissingAnchor := (cns.Parent().Name() == pnm && cns.IsSub)
 			if !childIsMissingAnchor {
 				err := errors.New("cannot create a subnamespace using an existing namespace")
-				// TODO(erikgb): Add to list of Invalid field errors?
 				return webhooks.DenyConflict(api.SubnamespaceAnchorGR, cnm, err)
 			}
 		}

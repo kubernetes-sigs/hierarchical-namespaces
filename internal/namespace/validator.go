@@ -136,7 +136,6 @@ func (v *Validator) illegalTreeLabel(req *nsRequest) admission.Response {
 		// Check if new HNC label tree key isn't being added
 		if oldLabels[key] != val {
 			err := fmt.Errorf("cannot set or modify tree label %q in namespace %q; these can only be managed by HNC", key, req.ns.Name)
-			// TODO(erikgb): Invalid field error list better?
 			return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 		}
 	}
@@ -146,7 +145,6 @@ func (v *Validator) illegalTreeLabel(req *nsRequest) admission.Response {
 		if strings.Contains(key, api.LabelTreeDepthSuffix) {
 			if _, ok := req.ns.Labels[key]; !ok {
 				err := fmt.Errorf("cannot remove tree label %q in namespace %q; these can only be managed by HNC", key, req.ns.Name)
-				// TODO(erikgb): Invalid field error list better?
 				return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 			}
 		}
@@ -175,7 +173,6 @@ func (v *Validator) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 		err := fmt.Errorf("you cannot enforce webhook rules on this unmanaged namespace using the %q label. "+
 			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
 			"for detail", api.LabelIncludedNamespace)
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 
@@ -187,7 +184,6 @@ func (v *Validator) illegalIncludedNamespaceLabel(req *nsRequest) admission.Resp
 		err := fmt.Errorf("you cannot change the value of the %q label. It has to be set as true on all managed namespaces. "+
 			"See https://github.com/kubernetes-sigs/hierarchical-namespaces/blob/master/docs/user-guide/concepts.md#included-namespace-label "+
 			"for detail", api.LabelIncludedNamespace)
-		// TODO(erikgb): Invalid field error better?
 		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 
@@ -220,7 +216,6 @@ func (v *Validator) conflictBetweenParentAndExternalManager(req *nsRequest, ns *
 	if mgr != "" && mgr != api.MetaGroup && ns.Parent() != nil {
 		err := fmt.Errorf("is a child of %q. Namespaces with parents defined by HNC cannot also be managed externally. "+
 			"To manage this namespace with %q, first make it a root in HNC", ns.Parent().Name(), mgr)
-		// TODO(erikgb): Conflict error better?
 		return webhooks.DenyForbidden(namespaceGR, req.ns.Name, err)
 	}
 	return webhooks.Allow("")
