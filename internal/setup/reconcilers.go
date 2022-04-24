@@ -18,7 +18,6 @@ import (
 
 type Options struct {
 	MaxReconciles   int
-	ReadOnly        bool
 	UseFakeClient   bool
 	NoWebhooks      bool
 	HNCCfgRefresh   time.Duration
@@ -51,10 +50,9 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 
 	// Create Anchor reconciler.
 	ar := &anchor.Reconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("anchor").WithName("reconcile"),
-		Forest:   f,
-		ReadOnly: opts.ReadOnly,
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("anchor").WithName("reconcile"),
+		Forest: f,
 	}
 	f.AddListener(ar)
 
@@ -64,16 +62,14 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 		Log:             ctrl.Log.WithName("hncconfig").WithName("reconcile"),
 		Manager:         mgr,
 		Forest:          f,
-		ReadOnly:        opts.ReadOnly,
 		RefreshDuration: opts.HNCCfgRefresh,
 	}
 
 	// Create the HC reconciler with a pointer to the Anchor reconciler.
 	hcr := &hierarchyconfig.Reconciler{
-		Client:   mgr.GetClient(),
-		Log:      ctrl.Log.WithName("hierarchyconfig").WithName("reconcile"),
-		Forest:   f,
-		ReadOnly: opts.ReadOnly,
+		Client: mgr.GetClient(),
+		Log:    ctrl.Log.WithName("hierarchyconfig").WithName("reconcile"),
+		Forest: f,
 	}
 
 	if opts.HRQ {
