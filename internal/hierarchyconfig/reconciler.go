@@ -30,6 +30,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -133,9 +134,9 @@ func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm st
 	// Remove the finalizers if there are any. Note that while getSingleton can return an invalid
 	// object (i.e. one without a name or namespace, if there's no singleton on the server), it can
 	// never do that if there are finalizers or children so this is safe to write back.
-	if len(inst.ObjectMeta.Finalizers) > 0 || len(inst.Status.Children) > 0 {
+	if controllerutil.ContainsFinalizer(inst, api.FinalizerHasSubnamespace) || len(inst.Status.Children) > 0 {
 		log.Info("Removing finalizers and children on unmanaged singleton")
-		inst.ObjectMeta.Finalizers = nil
+		controllerutil.RemoveFinalizer(inst, api.FinalizerHasSubnamespace)
 		inst.Status.Children = nil
 		stats.WriteHierConfig()
 		if err := r.Update(ctx, inst); err != nil {
@@ -241,27 +242,27 @@ func (r *Reconciler) addIncludedNamespaceLabel(log logr.Logger, nsInst *corev1.N
 // .spec.allowCascadingDeletion field, so if we allowed this object to be deleted before all
 // descendants have been deleted, we would lose the knowledge that cascading deletion is enabled.
 func (r *Reconciler) updateFinalizers(log logr.Logger, inst *api.HierarchyConfiguration, nsInst *corev1.Namespace, anms []string) {
-	// No-one should put a finalizer on a hierarchy config except us. See
-	// https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/623 as we try to enforce that.
 	switch {
 	case len(anms) == 0:
 		// There are no subnamespaces in this namespace. The HC instance can be safely deleted anytime.
-		if len(inst.ObjectMeta.Finalizers) > 0 {
+		if controllerutil.ContainsFinalizer(inst, api.FinalizerHasSubnamespace) {
 			log.V(1).Info("Removing finalizers since there are no longer any anchors in the namespace.")
+			controllerutil.RemoveFinalizer(inst, api.FinalizerHasSubnamespace)
 		}
-		inst.ObjectMeta.Finalizers = nil
 	case !inst.DeletionTimestamp.IsZero() && nsInst.DeletionTimestamp.IsZero():
 		// If the HC instance is being deleted but not the namespace (which means
 		// it's not a cascading delete), remove the finalizers to let it go through.
 		// This is the only case the finalizers can be removed even when the
 		// namespace has subnamespaces. (A default HC will be recreated later.)
-		log.Info("Removing finalizers to allow a single deletion of the singleton (not involved in a cascading deletion).")
-		inst.ObjectMeta.Finalizers = nil
-	default:
-		if len(inst.ObjectMeta.Finalizers) == 0 {
-			log.Info("Adding finalizers since there's at least one anchor in the namespace.")
+		if controllerutil.ContainsFinalizer(inst, api.FinalizerHasSubnamespace) {
+			log.Info("Removing finalizers to allow a single deletion of the singleton (not involved in a cascading deletion).")
+			controllerutil.RemoveFinalizer(inst, api.FinalizerHasSubnamespace)
 		}
-		inst.ObjectMeta.Finalizers = []string{api.FinalizerHasSubnamespace}
+	default:
+		if !controllerutil.ContainsFinalizer(inst, api.FinalizerHasSubnamespace) {
+			log.Info("Adding finalizers since there's at least one anchor in the namespace.")
+			controllerutil.AddFinalizer(inst, api.FinalizerHasSubnamespace)
+		}
 	}
 }
 
