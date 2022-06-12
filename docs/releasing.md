@@ -1,7 +1,7 @@
 # Releasing HNC
 
 HNC uses semantic versioning. We use long-lived branches for every minor
-release, and each release is tagged in Git. Usually, a release will be preceeded
+release, and each release is tagged in Git. Usually, a release will be preceded
 by one or more release candidates. Therefore, at a high level, the flow to
 release a new _minor_ version of HNC is:
 
