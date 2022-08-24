@@ -202,8 +202,7 @@ func (r *ResourceQuotaReconciler) deleteSingleton(ctx context.Context, log logr.
 //   and its ancestors.
 // - Updates `hrq.used.local` of the current namespace and `hrq.used.subtree`
 //   of the current namespace and its ancestors based on `ResourceQuota.Status.Used`.
-func (r *ResourceQuotaReconciler) syncWithForest(log logr.Logger,
-	inst *v1.ResourceQuota) bool {
+func (r *ResourceQuotaReconciler) syncWithForest(log logr.Logger, inst *v1.ResourceQuota) bool {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()
 	ns := r.Forest.Get(inst.ObjectMeta.Namespace)

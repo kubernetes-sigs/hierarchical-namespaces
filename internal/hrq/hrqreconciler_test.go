@@ -163,6 +163,68 @@ var _ = Describe("HRQ reconciler tests", func() {
 		Eventually(getRQSpec(ctx, barName)).Should(equalRL("secrets", "6", "pods", "3"))
 		Eventually(getRQSpec(ctx, bazName)).Should(equalRL("secrets", "6", "pods", "3"))
 	})
+
+	It("should update usages in status correctly after moving namespace out of subtree", func() {
+		setHRQ(ctx, fooHRQName, fooName, "secrets", "6", "pods", "3")
+		setHRQ(ctx, barHRQName, barName, "secrets", "100", "cpu", "50")
+		setHRQ(ctx, bazHRQName, bazName, "pods", "1")
+		// Simulate the K8s ResourceQuota controller to update usages.
+		updateRQUsage(ctx, fooName, "secrets", "0", "pods", "0")
+		updateRQUsage(ctx, barName, "secrets", "0", "cpu", "0", "pods", "0")
+		updateRQUsage(ctx, bazName, "secrets", "0", "pods", "0")
+
+		// Increase pods count from 0 to 1 in baz and verify that the usage is
+		// increased in foo's HRQ but not bar's (not an ancestor of baz)
+		updateRQUsage(ctx, bazName, "pods", "1")
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "0", "pods", "1"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "0", "cpu", "0"))
+		Eventually(getHRQUsed(ctx, bazName, bazHRQName)).Should(equalRL("pods", "1"))
+
+		// Make baz a full namespace by changing its parent to nil
+		bazHier := GetHierarchy(ctx, bazName)
+		bazHier.Spec.Parent = ""
+		UpdateHierarchy(ctx, bazHier)
+
+		Eventually(HasChild(ctx, fooName, bazName)).ShouldNot(Equal(true))
+
+		// Ensure pods usage is decreased on foo after the change in hierarchy
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "0", "pods", "0"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "0", "cpu", "0"))
+		Eventually(getHRQUsed(ctx, bazName, bazHRQName)).Should(equalRL("pods", "1"))
+	})
+
+	It("should update usages in status correctly after moving full namespace with limits into hierarchy", func() {
+		// Make bar a full namespace by changing its parent to nil
+		barHier := GetHierarchy(ctx, barName)
+		barHier.Spec.Parent = ""
+		UpdateHierarchy(ctx, barHier)
+
+		Eventually(HasChild(ctx, fooName, barName)).ShouldNot(Equal(true))
+
+		setHRQ(ctx, fooHRQName, fooName, "secrets", "6", "pods", "3")
+		setHRQ(ctx, barHRQName, barName, "secrets", "100", "cpu", "50")
+
+		// Simulate the K8s ResourceQuota controller to update usages.
+		updateRQUsage(ctx, fooName, "secrets", "0", "pods", "0")
+		updateRQUsage(ctx, barName, "secrets", "0", "cpu", "0", "pods", "0")
+
+		// Increase secrets count from 0 to 1 in bar and verify that the usage is
+		// increased in bar's HRQ but not foo's (not an ancestor of baz)
+		updateRQUsage(ctx, barName, "secrets", "1")
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "0", "pods", "0"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "1", "cpu", "0"))
+
+		// Make bar a full namespace by changing its parent to nil
+		barHier = GetHierarchy(ctx, barName)
+		barHier.Spec.Parent = fooName
+		UpdateHierarchy(ctx, barHier)
+
+		Eventually(HasChild(ctx, fooName, barName)).Should(Equal(true))
+
+		// Ensure secrets usage is decreased on foo after the change in hierarchy
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "1", "pods", "0"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "1", "cpu", "0"))
+	})
 })
 
 func forestSetSubtreeUsages(ns string, args ...string) {

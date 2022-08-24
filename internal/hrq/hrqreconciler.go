@@ -156,6 +156,35 @@ func isDeleted(inst *api.HierarchicalResourceQuota) bool {
 	return inst.GetCreationTimestamp() == (metav1.Time{})
 }
 
+// allSubtreeHRQs returns a slice of all HRQ objects in a subtree
+func (r *HierarchicalResourceQuotaReconciler) allSubtreeHRQs(ns *forest.Namespace) []api.HierarchicalResourceQuota {
+	insts := []api.HierarchicalResourceQuota{}
+	for _, nsnm := range ns.AncestryNames() {
+		for _, hrqnm := range r.Forest.Get(nsnm).HRQNames() {
+			inst := api.HierarchicalResourceQuota{}
+			inst.ObjectMeta.Name = hrqnm
+			inst.ObjectMeta.Namespace = nsnm
+
+			insts = append(insts, inst)
+		}
+	}
+	return insts
+}
+
+// OnChangeNamespace enqueues all HRQ objects in the subtree for later reconciliation.
+// This is needed so that the HRQ objects are enqueued for reconciliation when there is a
+// change in the tree hierarchy which affects the subtree usage of the HRQ objects.
+// This occurs in a goroutine so the caller doesn't block; since the
+// reconciler is never garbage-collected, this is safe.
+func (r *HierarchicalResourceQuotaReconciler) OnChangeNamespace(log logr.Logger, ns *forest.Namespace) {
+	insts := r.allSubtreeHRQs(ns)
+	go func() {
+		for _, inst := range insts {
+			r.trigger <- event.GenericEvent{Object: &inst}
+		}
+	}()
+}
+
 // Enqueue enqueues a specific HierarchicalResourceQuota object to trigger the reconciliation of the
 // object for a given reason. This occurs in a goroutine so the caller doesn't block; since the
 // reconciler is never garbage-collected, this is safe.
