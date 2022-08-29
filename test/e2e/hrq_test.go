@@ -22,6 +22,7 @@ const (
 	nsA = prefix+"a"
 	nsB = prefix+"b"
 	nsC = prefix+"c"
+	nsD = prefix+"d"
 
 	propagationTime = 5
 	resourceQuotaSingleton = "hrq.hnc.x-k8s.io"
@@ -136,6 +137,55 @@ var _ = PDescribe("Hierarchical Resource Quota", func() {
 
 		// verify the HRQ usages are updated (restored)
 		FieldShouldContain("hrq", nsA, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:0")
+	})
+
+	It("should update ancestor HRQ usages if a descendant namespace with limited resources is moved out of subtree", func() {
+		// set up namespaces and subnamespaces
+		CreateNamespace(nsA)
+		CreateSubnamespace(nsB, nsA)
+		CreateSubnamespace(nsC, nsB)
+		CreateNamespace(nsD)
+
+		// set up an HRQ on the root namespaces and on the child namespace
+		setHRQ("a-hrq-persistentvolumeclaims", nsA, "persistentvolumeclaims", "5")
+		setHRQ("a-hrq-secrets", nsA, "secrets", "5")
+
+		setHRQ("a-hrq-persistentvolumeclaims", nsC, "persistentvolumeclaims", "3")
+		setHRQ("a-hrq-secrets", nsC, "secrets", "3")
+
+		setHRQ("a-hrq-persistentvolumeclaims", nsD, "persistentvolumeclaims", "1")
+		setHRQ("a-hrq-secrets", nsD, "secrets", "1")
+
+		// verify usage updates after consuming limited resources in the descendants
+		Eventually(createPVC("b-pvc", nsB)).Should(Succeed())
+		Eventually(createSecret("b-secret", nsB)).Should(Succeed())
+
+		FieldShouldContain("hrq", nsA, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:1")
+		FieldShouldContain("hrq", nsA, "a-hrq-secrets", ".status.used", "secrets:1")
+
+		Eventually(createPVC("d-pvc", nsD)).Should(Succeed())
+		Eventually(createSecret("d-secret", nsD)).Should(Succeed())
+
+		// make full namespace the child of a subnamespace
+		MustRun("kubectl hns set", nsD, "--parent", nsC)
+
+		FieldShouldContain("hrq", nsA, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:2")
+		FieldShouldContain("hrq", nsA, "a-hrq-secrets", ".status.used", "secrets:2")
+		FieldShouldContain("hrq", nsC, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:1")
+		FieldShouldContain("hrq", nsC, "a-hrq-secrets", ".status.used", "secrets:1")
+		FieldShouldContain("hrq", nsD, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:1")
+		FieldShouldContain("hrq", nsD, "a-hrq-secrets", ".status.used", "secrets:1")
+
+		// test moving out of subree the namespace with usages
+		MustRun("kubectl hns set --root", nsD)
+
+		// verify the HRQ usages are updated
+		FieldShouldContain("hrq", nsA, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:1")
+		FieldShouldContain("hrq", nsA, "a-hrq-secrets", ".status.used", "secrets:1")
+		FieldShouldContain("hrq", nsC, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:0")
+		FieldShouldContain("hrq", nsC, "a-hrq-secrets", ".status.used", "secrets:0")
+		FieldShouldContain("hrq", nsD, "a-hrq-persistentvolumeclaims", ".status.used", "persistentvolumeclaims:1")
+		FieldShouldContain("hrq", nsD, "a-hrq-secrets", ".status.used", "secrets:1")
 	})
 
 	It("should update descendant RQ limits or delete them if a namespace with HRQs is deleted", func() {
@@ -301,6 +351,23 @@ spec:
       storage: 1Gi`
 		fn := writeTempFile(pvc)
 		GinkgoT().Log("Wrote "+fn+":\n"+pvc)
+		defer removeFile(fn)
+		return TryRun("kubectl apply -f", fn)
+	}
+}
+
+func createSecret(nm, nsnm string) func() error {
+	return func() error {
+		secret := `# temp file created by hrq_test.go
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ` + nm + `
+  namespace: ` + nsnm + `
+data:
+  key: YmFyCg==`
+		fn := writeTempFile(secret)
+		GinkgoT().Log("Wrote " + fn + ":\n" + secret)
 		defer removeFile(fn)
 		return TryRun("kubectl apply -f", fn)
 	}

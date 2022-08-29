@@ -89,6 +89,7 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 			RQR:    rqr,
 		}
 		rqr.HRQR = hrqr
+		f.AddListener(hrqr)
 
 		if err := rqr.SetupWithManager(mgr); err != nil {
 			return fmt.Errorf("cannot create resource quota reconciler: %s", err.Error())

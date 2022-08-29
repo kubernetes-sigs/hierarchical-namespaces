@@ -21,9 +21,8 @@ type testNS struct {
 	ancs string
 	// There is at most one hrq in each namespace in this test. Omitting the field
 	// means there's no hrq in the namespace.
-	limits  string
-	local   string
-	subtree string
+	limits string
+	local  string
 }
 
 // testReq represents a request with namespace name and resource usages. Note:
@@ -76,38 +75,38 @@ func TestTryUseResources(t *testing.T) {
 		error    []wantError
 	}{{
 		name:     "allow nil change when under limit in single namespace",
-		setup:    []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 2", subtree: "secrets 2"}},
+		setup:    []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 2"}},
 		req:      testReq{ns: "foo", use: "secrets 2"},
 		expected: usages{"foo": "secrets 2"},
 	}, {
 		name: "allow increase in child when under limit in both parent and child",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 2"},
 		expected: usages{"foo": "secrets 3", "bar": "secrets 2"},
 	}, {
 		name: "allow increase in child when under limit in both parent and child, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1", subtree: "secrets 1 pods 1"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 2 pods 1"},
 		expected: usages{"foo": "secrets 3", "bar": "secrets 2 pods 1"},
 	}, {
 		name: "allow underused resources to increase even though other resources are over their limits",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4", subtree: "secrets 1 pods 4"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 2 pods 4"},
 		expected: usages{"foo": "secrets 3", "bar": "secrets 2 pods 4"},
 	}, {
 		name: "deny increase when it would exceed limit in parent but not child",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 		},
 		req:   testReq{ns: "bar", use: "secrets 2"},
 		error: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "1", used: "2", limited: "2"}}}},
@@ -116,8 +115,8 @@ func TestTryUseResources(t *testing.T) {
 	}, {
 		name: "deny increase in sibling when it would exceed limit in parent but not in children",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 			{nm: "baz", ancs: "foo"},
 		},
 		req:   testReq{ns: "baz", use: "secrets 1"},
@@ -128,8 +127,8 @@ func TestTryUseResources(t *testing.T) {
 	}, {
 		name: "deny increase when it would exceed limit in parent but not child, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1", subtree: "secrets 1 pods 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1"},
 		},
 		req:   testReq{ns: "bar", use: "secrets 2 pods 1"},
 		error: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "1", used: "2", limited: "2"}}}},
@@ -138,16 +137,16 @@ func TestTryUseResources(t *testing.T) {
 	}, {
 		name: "allow decrease under limit in both parent and child",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 3"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 2", subtree: "secrets 2"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 2"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 1"},
 		expected: usages{"foo": "secrets 2", "bar": "secrets 1"},
 	}, {
 		name: "allow decrease under limit in both parent and child, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 3"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 2 pods 1", subtree: "secrets 2 pods 1"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 2 pods 1"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 1 pods 1"},
 		expected: usages{"foo": "secrets 2", "bar": "secrets 1 pods 1"},
@@ -159,8 +158,8 @@ func TestTryUseResources(t *testing.T) {
 		// will be called to prevent users from deleting exceeded resources.
 		name: "deny decrease if it still exceeds limits",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 5"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 4", subtree: "secrets 4"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 4"},
 		},
 		req: testReq{ns: "bar", use: "secrets 2"},
 		// In reality it won't show negative number since neither K8s rq validator
@@ -172,8 +171,8 @@ func TestTryUseResources(t *testing.T) {
 		// Note: we are expecting an error here for the same reason in the above test.
 		name: "deny decrease if it still exceeds limits, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 5"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 4 pods 1", subtree: "secrets 4 pods 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 4 pods 1"},
 		},
 		req: testReq{ns: "bar", use: "secrets 2 pods 1"},
 		// In reality it won't show negative number since neither K8s rq validator
@@ -219,26 +218,26 @@ func TestCanUseResource(t *testing.T) {
 		req:   testReq{ns: "foo", use: "secrets 2"},
 	}, {
 		name:  "allow change under limit when no parent",
-		setup: []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 1"}},
+		setup: []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1"}},
 		req:   testReq{ns: "foo", use: "secrets 1"},
 	}, {
 		name:  "deny increase exceeding local limit when no parent",
-		setup: []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 1"}},
+		setup: []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1"}},
 		req:   testReq{ns: "foo", use: "secrets 4"},
 		want:  []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "3", used: "1", limited: "3"}}}},
 	}, {
 		name: "deny increase exceeding parent limit",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 		},
 		req:  testReq{ns: "bar", use: "secrets 3"},
 		want: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "2", used: "2", limited: "2"}}}},
 	}, {
 		name: "deny increase in sibling exceeding parent limit",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 			{nm: "baz", ancs: "foo"},
 		},
 		req:  testReq{ns: "baz", use: "secrets 1"},
@@ -246,8 +245,8 @@ func TestCanUseResource(t *testing.T) {
 	}, {
 		name: "deny increase exceeding parent limit, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1", subtree: "secrets 1 pods 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1"},
 		},
 		req:  testReq{ns: "bar", use: "secrets 3 pods 1"},
 		want: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "2", used: "2", limited: "2"}}}},
@@ -259,8 +258,8 @@ func TestCanUseResource(t *testing.T) {
 		// will be called to prevent users from deleting exceeded resources.
 		name: "deny decrease exceeding local limit when has parent",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 1"},
-			{nm: "bar", ancs: "foo", limits: "pods 2", local: "pods 4", subtree: "pods 4"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "pods 2", local: "pods 4"},
 		},
 		req: testReq{ns: "bar", use: "pods 3"},
 		// In reality it won't show negative number since neither K8s rq validator
@@ -270,8 +269,8 @@ func TestCanUseResource(t *testing.T) {
 		// Note: we are expecting an error here for the same reason in the above test.
 		name: "deny decrease exceeding local limit when has parent, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4", subtree: "secrets 1 pods 4"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4"},
 		},
 		req: testReq{ns: "bar", use: "secrets 1 pods 3"},
 		// In reality it won't show negative number since neither K8s rq validator
@@ -281,8 +280,8 @@ func TestCanUseResource(t *testing.T) {
 		// Note: we are expecting an error here for the same reason in the above test.
 		name: "deny decrease exceeding parent limit when has parent",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 5"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 4", subtree: "secrets 4"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 4"},
 		},
 		req: testReq{ns: "bar", use: "secrets 3"},
 		// In reality it won't show negative number since neither K8s rq validator
@@ -292,8 +291,8 @@ func TestCanUseResource(t *testing.T) {
 		// Note: we are expecting an error here for the same reason in the above test.
 		name: "deny decrease exceeding parent limit when has parent, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 5"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 4 pods 2", subtree: "secrets 4 pods 2"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 4 pods 2"},
 		},
 		req: testReq{ns: "bar", use: "secrets 3 pods 2"},
 		// In reality it won't show negative number since neither K8s rq validator
@@ -302,8 +301,8 @@ func TestCanUseResource(t *testing.T) {
 	}, {
 		name: "deny multiple resources exceeding limits",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1", subtree: "secrets 1 pods 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1"},
 		},
 		req: testReq{ns: "bar", use: "secrets 3 pods 4"},
 		want: []wantError{
@@ -339,22 +338,22 @@ func TestUseResource(t *testing.T) {
 		req:   testReq{ns: "foo"},
 	}, {
 		name:     "increase when no parent",
-		setup:    []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 1"}},
+		setup:    []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1"}},
 		req:      testReq{ns: "foo", use: "secrets 2"},
 		expected: usages{"foo": "secrets 2"},
 	}, {
 		name: "increase in child when has parent",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 2"},
 		expected: usages{"foo": "secrets 3", "bar": "secrets 2"},
 	}, {
 		name: "increase in sibling when has parent",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1", subtree: "secrets 1"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 1"},
 			{nm: "baz", ancs: "foo"},
 		},
 		req: testReq{ns: "baz", use: "secrets 1"},
@@ -364,24 +363,24 @@ func TestUseResource(t *testing.T) {
 	}, {
 		name: "increase in child when has parent, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4", subtree: "secrets 1 pods 4"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 2 pods 4"},
 		expected: usages{"foo": "secrets 3", "bar": "secrets 2 pods 4"},
 	}, {
 		name: "decrease in child when has parent",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 3"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 2", subtree: "secrets 2"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 2"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 1"},
 		expected: usages{"foo": "secrets 2", "bar": "secrets 1"},
 	}, {
 		name: "decrease in child when has parent, while not affecting other resource usages",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 3"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 2 pods 1", subtree: "secrets 2 pods 1"},
+			{nm: "foo", limits: "secrets 3", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 2 pods 1"},
 		},
 		req:      testReq{ns: "bar", use: "secrets 1 pods 1"},
 		expected: usages{"foo": "secrets 2", "bar": "secrets 1 pods 1"},
@@ -496,14 +495,14 @@ func TestLimits(t *testing.T) {
 		want:  "",
 	}, {
 		name:  "no parent",
-		setup: []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1", subtree: "secrets 1"}},
+		setup: []testNS{{nm: "foo", limits: "secrets 3", local: "secrets 1"}},
 		ns:    "foo",
 		want:  "secrets 3",
 	}, {
 		name: "has parent",
 		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1", subtree: "secrets 2"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1", subtree: "secrets 1 pods 1"},
+			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
+			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 1"},
 		},
 		ns:   "bar",
 		want: "secrets 2 pods 2",
@@ -538,7 +537,7 @@ func buildForest(t *testing.T, nss []testNS) *Forest {
 			limits: limits{ns.nm + "Hrq": stringToResourceList(t, ns.limits)},
 			used: usage{
 				local:   stringToResourceList(t, ns.local),
-				subtree: stringToResourceList(t, ns.subtree),
+				subtree: stringToResourceList(t, ns.local),
 			},
 		}
 	}

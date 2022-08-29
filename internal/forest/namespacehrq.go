@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	"sigs.k8s.io/hierarchical-namespaces/internal/hrq/utils"
 )
@@ -155,6 +154,9 @@ func (n *Namespace) canUseResources(u v1.ResourceList) error {
 //  usages are different from ResourceQuota.Status.Used
 //   - Called by the HRQ Namespace reconciler to remove `local` usages of a
 //  namespace from the subtree usages of the previous ancestors of the namespace.
+//   - Called by the SetParent to remove `local` usages of a namespace from
+//  the subtree usages of the previous ancestors of the namespace and add the
+//  usages to the new ancestors following a parent update
 func (n *Namespace) UseResources(newUsage v1.ResourceList) {
 	oldUsage := n.quotas.used.local
 	// We only consider limited usages.
@@ -256,15 +258,4 @@ func (n *Namespace) UpdateLimits(nm string, l v1.ResourceList) bool {
 	}
 	n.quotas.limits[nm] = l
 	return true
-}
-
-// DeleteUsages removes the local usages of a namespace. The usages are also
-// removed from the subtree usages of the ancestors of the namespace. The caller
-// should enqueue the ancestor HRQs to update the usages.
-func (n *Namespace) DeleteUsages() {
-	local := v1.ResourceList{}
-	for r := range n.quotas.used.local {
-		local[r] = resource.MustParse("0")
-	}
-	n.UseResources(local)
 }

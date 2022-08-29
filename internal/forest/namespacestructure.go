@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 // ChildNames returns a sorted list of names or nil if there are no children.
@@ -31,10 +33,15 @@ func (ns *Namespace) IsAncestor(other *Namespace) bool {
 	return ns.parent.IsAncestor(other)
 }
 
-// SetParent modifies the namespace's parent, including updating the list of children. It may result
-// in a cycle being created; this can be prevented by calling CanSetParent before, or seeing if it
-// happened by calling CycleNames afterwards.
+// SetParent modifies the namespace's parent, including updating the list of children and updating
+// the old and new subtree usage. It may result in a cycle being created; this can be prevented by
+// calling CanSetParent before, or seeing if it happened by calling CycleNames afterwards.
 func (ns *Namespace) SetParent(p *Namespace) {
+	// Remove usage from old subtree.
+	nsUsage := ns.quotas.used.local
+	if nsUsage != nil {
+		ns.UseResources(v1.ResourceList{})
+	}
 	// Remove old parent and cleans it up.
 	if ns.parent != nil {
 		delete(ns.parent.children, ns.name)
@@ -47,6 +54,10 @@ func (ns *Namespace) SetParent(p *Namespace) {
 	ns.parent = p
 	if p != nil {
 		p.children[ns.name] = ns
+	}
+	// Add usage to new subtree.
+	if nsUsage != nil {
+		ns.UseResources(nsUsage)
 	}
 }
 
