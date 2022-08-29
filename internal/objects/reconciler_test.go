@@ -51,6 +51,7 @@ var _ = Describe("Exceptions", func() {
 			selector     string
 			treeSelector string
 			noneSelector string
+			allSelector  string
 			want         []string
 			notWant      []string
 		}{{
@@ -120,6 +121,20 @@ var _ = Describe("Exceptions", func() {
 			noneSelector: "true",
 			want:         []string{},
 			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "not propagate when allSelector and noneSelector are both true",
+			noneSelector: "true",
+			allSelector:  "all",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
+		}, {
+			name:         "only propagate the intersection of four selectors",
+			selector:     c1 + api.LabelTreeDepthSuffix,
+			treeSelector: c1 + ", " + c2,
+			noneSelector: "true",
+			allSelector:  "true",
+			want:         []string{},
+			notWant:      []string{c1, c2, c3},
 		}}
 
 		for _, tc := range tests {
@@ -146,6 +161,7 @@ var _ = Describe("Exceptions", func() {
 					api.AnnotationSelector:     tc.selector,
 					api.AnnotationTreeSelector: tc.treeSelector,
 					api.AnnotationNoneSelector: tc.noneSelector,
+					api.AnnotationAllSelector:  tc.allSelector,
 				})
 				for _, ns := range tc.want {
 					ns = ReplaceStrings(ns, names)
@@ -171,6 +187,7 @@ var _ = Describe("Exceptions", func() {
 			selector     string
 			treeSelector string
 			noneSelector string
+			allSelector  string
 			want         []string
 			notWant      []string
 		}{{
@@ -188,6 +205,11 @@ var _ = Describe("Exceptions", func() {
 			noneSelector: "true",
 			want:         []string{},
 			notWant:      []string{c1, c2, c3},
+		}, {
+			name:        "update allSelector",
+			allSelector: "true",
+			want:        []string{c1, c2, c3},
+			notWant:     []string{},
 		}}
 
 		for _, tc := range tests {
@@ -207,6 +229,7 @@ var _ = Describe("Exceptions", func() {
 				SetParent(ctx, names[c3], names[p])
 				tc.selector = ReplaceStrings(tc.selector, names)
 				tc.treeSelector = ReplaceStrings(tc.treeSelector, names)
+				tc.allSelector = ReplaceStrings(tc.allSelector, names)
 
 				// Create a Role and verify it's propagated
 				MakeObject(ctx, api.RoleResource, names[p], "testrole")
@@ -219,6 +242,7 @@ var _ = Describe("Exceptions", func() {
 					api.AnnotationSelector:     tc.selector,
 					api.AnnotationTreeSelector: tc.treeSelector,
 					api.AnnotationNoneSelector: tc.noneSelector,
+					api.AnnotationAllSelector:  tc.allSelector,
 				})
 				// make sure the changes are propagated
 				for _, ns := range tc.notWant {
@@ -723,6 +747,30 @@ var _ = Describe("Basic propagation", func() {
 			}
 			return nil
 		}).Should(Succeed(), "waiting for annot-a to be unpropagated")
+	})
+
+	It("should avoid propagating when no selector is set if the sync mode is 'AllowPropagate'", func() {
+		AddToHNCConfig(ctx, "", "secrets", api.AllowPropagate)
+		// Set tree as bar -> foo(root).
+		SetParent(ctx, barName, fooName)
+		MakeObject(ctx, "secrets", fooName, "foo-sec")
+		Eventually(HasObject(ctx, "secrets", fooName, "foo-sec")).Should(BeTrue())
+
+		// Ensure the object is not propagated
+		Consistently(HasObject(ctx, "secrets", barName, "foo-sec")).Should(BeFalse())
+
+		// Update the secret object with the treeSelector annotation
+		UpdateObjectWithAnnotations(ctx, "secrets", fooName, "foo-sec", map[string]string{
+			api.AnnotationTreeSelector: barName,
+		})
+
+		// Ensure the object is now propagated
+		Eventually(HasObject(ctx, "secrets", barName, "foo-sec")).Should(BeTrue())
+		Expect(ObjectInheritedFrom(ctx, "secrets", barName, "foo-sec")).Should(Equal(fooName))
+
+		// Remove the annotation from the secret and ensure the object is deleted from the descendant
+		UpdateObjectWithAnnotations(ctx, "secrets", fooName, "foo-sec", map[string]string{})
+		Eventually(HasObject(ctx, "secrets", barName, "foo-sec")).Should(BeFalse())
 	})
 })
 

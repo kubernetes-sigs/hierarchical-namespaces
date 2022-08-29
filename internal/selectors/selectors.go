@@ -15,24 +15,42 @@ import (
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
-func ShouldPropagate(inst *unstructured.Unstructured, nsLabels labels.Set) (bool, error) {
+// ShouldPropagate returns true if the given object should be propagated
+// based on the SynchronizationMode and on the selectors of the object.
+// Propagation will be done only with 'Propagate' or 'AllowPropagate' modes.
+// When selectors are set, 'AllowPropagate' follows the same logic as 'Propagate' mode,
+// when they are not set, then if 'Propagate' mode is used then propagate by default;
+// if 'AllowPropagate' mode is used then do not propagate by default.
+func ShouldPropagate(inst *unstructured.Unstructured, nsLabels labels.Set, mode api.SynchronizationMode) (bool, error) {
+	propIfNotExcluded := (mode == api.Propagate)
+
 	if sel, err := GetSelector(inst); err != nil {
 		return false, err
-	} else if sel != nil && !sel.Matches(nsLabels) {
-		return false, nil
+	} else if sel != nil && !sel.Empty() {
+		propIfNotExcluded = true
+		if !sel.Matches(nsLabels) {
+			return false, nil
+		}
 	}
 	if sel, err := GetTreeSelector(inst); err != nil {
 		return false, err
-	} else if sel != nil && !sel.Matches(nsLabels) {
-		return false, nil
+	} else if sel != nil && !sel.Empty() {
+		propIfNotExcluded = true
+		if !sel.Matches(nsLabels) {
+			return false, nil
+		}
 	}
 	if none, err := GetNoneSelector(inst); err != nil || none {
 		return false, err
 	}
+	if all, err := GetAllSelector(inst); err != nil || all {
+		return true, err
+	}
 	if excluded, err := isExcluded(inst); excluded {
 		return false, err
 	}
-	return true, nil
+
+	return propIfNotExcluded, nil
 }
 
 func GetSelectorAnnotation(inst *unstructured.Unstructured) string {
@@ -48,6 +66,11 @@ func GetTreeSelectorAnnotation(inst *unstructured.Unstructured) string {
 func GetNoneSelectorAnnotation(inst *unstructured.Unstructured) string {
 	annot := inst.GetAnnotations()
 	return annot[api.AnnotationNoneSelector]
+}
+
+func GetAllSelectorAnnotation(inst *unstructured.Unstructured) string {
+	annot := inst.GetAnnotations()
+	return annot[api.AnnotationAllSelector]
 }
 
 // GetTreeSelector is similar to a regular selector, except that it adds the LabelTreeDepthSuffix to every string
@@ -148,14 +171,27 @@ func GetNoneSelector(inst *unstructured.Unstructured) (bool, error) {
 	noneSelector, err := strconv.ParseBool(noneSelectorStr)
 	if err != nil {
 		// Returning false here in accordance to the Go standard
-		return false,
-			fmt.Errorf("invalid %s value: %w",
-				api.AnnotationNoneSelector,
-				err,
-			)
+		return false, fmt.Errorf("invalid %s value: %w", api.AnnotationNoneSelector, err)
 
 	}
 	return noneSelector, nil
+}
+
+// GetAllSelector returns true indicates that user do wants this object to be propagated
+func GetAllSelector(inst *unstructured.Unstructured) (bool, error) {
+	allSelectorStr := GetAllSelectorAnnotation(inst)
+	// Empty string is treated as 'false'. In other selector cases, the empty string is auto converted to
+	// a selector that matches everything.
+	if allSelectorStr == "" {
+		return false, nil
+	}
+	allSelector, err := strconv.ParseBool(allSelectorStr)
+	if err != nil {
+		// Returning false here in accordance to the Go standard
+		return false, fmt.Errorf("invalid %s value: %w", api.AnnotationAllSelector, err)
+
+	}
+	return allSelector, nil
 }
 
 // cmExclusionsByName are known (istio and kube-root) CA configmap which are excluded from propagation

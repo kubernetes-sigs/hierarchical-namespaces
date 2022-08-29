@@ -79,10 +79,10 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	if !config.IsManagedNamespace(req.Namespace) {
 		return webhooks.Allow("unmanaged namespace " + req.Namespace)
 	}
-	// Allow changes to the types that are not in propagate mode. This is to dynamically enable/disable
+	// Allow changes to the types that are not in Propagate or AllowPropagate mode. This is to dynamically enable/disable
 	// object webhooks based on the types configured in hncconfig. Since the current admission rules only
 	// apply to propagated objects, we can disable object webhooks on all other non-propagate-mode types.
-	if !v.isPropagateType(req.Kind) {
+	if !v.canPropagateType(req.Kind) {
 		return webhooks.Allow("Non-propagate-mode types")
 	}
 	// Finally, let the HNC SA do whatever it wants.
@@ -106,12 +106,26 @@ func (v *Validator) Handle(ctx context.Context, req admission.Request) admission
 	return resp
 }
 
+func (v *Validator) syncType(gvk metav1.GroupVersionKind) api.SynchronizationMode {
+	ts := v.Forest.GetTypeSyncerFromGroupKind(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind})
+	if ts == nil {
+		return api.Ignore
+	}
+	return ts.GetMode()
+}
+
 func (v *Validator) isPropagateType(gvk metav1.GroupVersionKind) bool {
+	return v.syncType(gvk) == api.Propagate
+}
+
+func (v *Validator) isAllowPropagateType(gvk metav1.GroupVersionKind) bool {
+	return v.syncType(gvk) == api.AllowPropagate
+}
+
+func (v *Validator) canPropagateType(gvk metav1.GroupVersionKind) bool {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
-
-	ts := v.Forest.GetTypeSyncerFromGroupKind(schema.GroupKind{Group: gvk.Group, Kind: gvk.Kind})
-	return ts != nil && ts.GetMode() == api.Propagate
+	return (v.isPropagateType(gvk) || v.isAllowPropagateType(gvk))
 }
 
 // handle implements the non-webhook-y businesss logic of this validator, allowing it to be more
@@ -142,6 +156,9 @@ func (v *Validator) handle(ctx context.Context, req *request) admission.Response
 		if err := validateNoneSelectorChange(inst, oldInst); err != nil {
 			return webhooks.DenyBadRequest(err)
 		}
+		if err := validateAllSelectorChange(inst, oldInst); err != nil {
+			return webhooks.DenyBadRequest(err)
+		}
 		if msg := validateSelectorUniqueness(inst, oldInst); msg != "" {
 			return webhooks.DenyBadRequest(errors.New(msg))
 		}
@@ -168,8 +185,10 @@ func validateSelectorAnnot(inst *unstructured.Unstructured) string {
 			continue
 		}
 		msg := "invalid HNC exceptions annotation: %v, should be one of the following: " +
-			api.AnnotationSelector + "; " + api.AnnotationTreeSelector + "; " +
-			api.AnnotationNoneSelector
+			api.AnnotationSelector +
+			"; " + api.AnnotationTreeSelector +
+			"; " + api.AnnotationNoneSelector +
+			"; " + api.AnnotationAllSelector
 		// If this annotation is part of HNC metagroup, we check if the prefix value is valid
 		if segs[0] != api.AnnotationPropagatePrefix {
 			return fmt.Sprintf(msg, key)
@@ -177,7 +196,8 @@ func validateSelectorAnnot(inst *unstructured.Unstructured) string {
 		// check if the suffix is valid by checking the whole annotation key
 		if key != api.AnnotationSelector &&
 			key != api.AnnotationTreeSelector &&
-			key != api.AnnotationNoneSelector {
+			key != api.AnnotationNoneSelector &&
+			key != api.AnnotationAllSelector {
 			return fmt.Sprintf(msg, key)
 		}
 	}
@@ -188,12 +208,14 @@ func validateSelectorUniqueness(inst, oldInst *unstructured.Unstructured) string
 	sel := selectors.GetSelectorAnnotation(inst)
 	treeSel := selectors.GetTreeSelectorAnnotation(inst)
 	noneSel := selectors.GetNoneSelectorAnnotation(inst)
+	allSel := selectors.GetAllSelectorAnnotation(inst)
 
 	oldSel := selectors.GetSelectorAnnotation(oldInst)
 	oldTreeSel := selectors.GetTreeSelectorAnnotation(oldInst)
 	oldNoneSel := selectors.GetNoneSelectorAnnotation(oldInst)
+	oldAllSel := selectors.GetAllSelectorAnnotation(oldInst)
 
-	isSelectorChange := oldSel != sel || oldTreeSel != treeSel || oldNoneSel != noneSel
+	isSelectorChange := oldSel != sel || oldTreeSel != treeSel || oldNoneSel != noneSel || oldAllSel != allSel
 	if !isSelectorChange {
 		return ""
 	}
@@ -206,6 +228,9 @@ func validateSelectorUniqueness(inst, oldInst *unstructured.Unstructured) string
 	}
 	if noneSel != "" {
 		found = append(found, api.AnnotationNoneSelector)
+	}
+	if allSel != "" {
+		found = append(found, api.AnnotationAllSelector)
 	}
 	if len(found) <= 1 {
 		return ""
@@ -241,6 +266,16 @@ func validateNoneSelectorChange(inst, oldInst *unstructured.Unstructured) error 
 		return nil
 	}
 	_, err := selectors.GetNoneSelector(inst)
+	return err
+}
+
+func validateAllSelectorChange(inst, oldInst *unstructured.Unstructured) error {
+	oldSelectorStr := selectors.GetAllSelectorAnnotation(oldInst)
+	newSelectorStr := selectors.GetAllSelectorAnnotation(inst)
+	if newSelectorStr == "" || oldSelectorStr == newSelectorStr {
+		return nil
+	}
+	_, err := selectors.GetAllSelector(inst)
 	return err
 }
 
@@ -347,7 +382,8 @@ func (v *Validator) hasConflict(inst *unstructured.Unstructured) (bool, []string
 			// If the user have chosen not to propagate the object to this descendant,
 			// there shouldn't be any conflict reported here
 			nsLabels := v.Forest.Get(inst.GetNamespace()).GetLabels()
-			if ok, _ := selectors.ShouldPropagate(inst, nsLabels); ok {
+			mode := v.syncType(metav1.GroupVersionKind(gvk))
+			if ok, _ := selectors.ShouldPropagate(inst, nsLabels, mode); ok {
 				conflicts = append(conflicts, desc)
 			}
 		}

@@ -127,14 +127,14 @@ func (v *Validator) checkForest(ts gvkSet) admission.Response {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
 
-	// Get types that are changed from other modes to "Propagate" mode.
+	// Get types that are changed from other modes to "Propagate" mode or "AllowPropagate" mode.
 	gvks := v.getNewPropagateTypes(ts)
 
 	// Check if user-created objects would be overwritten by these mode changes.
-	for gvk := range gvks {
-		conflicts := v.checkConflictsForGVK(gvk)
+	for gvk, mode := range gvks {
+		conflicts := v.checkConflictsForGVK(gvk, mode)
 		if len(conflicts) != 0 {
-			msg := fmt.Sprintf("Cannot update configuration because setting type %q to 'Propagate' mode would overwrite user-created object(s):\n", gvk)
+			msg := fmt.Sprintf("Cannot update configuration because setting type %q to 'Propagate' mode or 'AllowPropagate' mode would overwrite user-created object(s):\n", gvk)
 			msg += strings.Join(conflicts, "\n")
 			msg += "\nTo fix this, please rename or remove the conflicting objects first."
 			err := errors.New(msg)
@@ -147,17 +147,17 @@ func (v *Validator) checkForest(ts gvkSet) admission.Response {
 }
 
 // checkConflictsForGVK looks for conflicts from top down for each tree.
-func (v *Validator) checkConflictsForGVK(gvk schema.GroupVersionKind) []string {
+func (v *Validator) checkConflictsForGVK(gvk schema.GroupVersionKind, mode api.SynchronizationMode) []string {
 	conflicts := []string{}
 	for _, ns := range v.Forest.GetRoots() {
-		conflicts = append(conflicts, v.checkConflictsForTree(gvk, ancestorObjects{}, ns)...)
+		conflicts = append(conflicts, v.checkConflictsForTree(gvk, ancestorObjects{}, ns, mode)...)
 	}
 	return conflicts
 }
 
 // checkConflictsForTree check for all the gvk objects in the given namespaces, to see if they
 // will be potentially overwritten by the objects on the ancestor namespaces
-func (v *Validator) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancestorObjects, ns *forest.Namespace) []string {
+func (v *Validator) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancestorObjects, ns *forest.Namespace, mode api.SynchronizationMode) []string {
 	conflicts := []string{}
 	// make a local copy of the ancestorObjects so that the original copy doesn't get modified
 	objs := ao.copy()
@@ -167,7 +167,7 @@ func (v *Validator) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancest
 		for _, nnm := range objs[onm] {
 			// check if the existing ns will propagate this object to the current ns
 			inst := v.Forest.Get(nnm).GetSourceObject(gvk, onm)
-			if ok, _ := selectors.ShouldPropagate(inst, ns.GetLabels()); ok {
+			if ok, _ := selectors.ShouldPropagate(inst, ns.GetLabels(), mode); ok {
 				conflicts = append(conflicts, fmt.Sprintf("  Object %q in namespace %q would overwrite the one in %q", onm, nnm, ns.Name()))
 			}
 		}
@@ -178,26 +178,29 @@ func (v *Validator) checkConflictsForTree(gvk schema.GroupVersionKind, ao ancest
 	// it's impossible to get cycles from non-root.
 	for _, cnm := range ns.ChildNames() {
 		cns := v.Forest.Get(cnm)
-		conflicts = append(conflicts, v.checkConflictsForTree(gvk, objs, cns)...)
+		conflicts = append(conflicts, v.checkConflictsForTree(gvk, objs, cns, mode)...)
 	}
 	return conflicts
 }
 
 // getNewPropagateTypes returns a set of types that are changed from other modes
-// to `Propagate` mode.
+// to `Propagate` or `AllowPropagate` mode.
 func (v *Validator) getNewPropagateTypes(ts gvkSet) gvkSet {
-	// Get all "Propagate" mode types in the new configuration.
+	// Get all "Propagate" mode and "AllowPropagate" mode types in the new configuration.
 	newPts := gvkSet{}
 	for gvk, mode := range ts {
 		if mode == api.Propagate {
 			newPts[gvk] = api.Propagate
 		}
+		if mode == api.AllowPropagate {
+			newPts[gvk] = api.AllowPropagate
+		}
 	}
 
-	// Remove all existing "Propagate" mode types in the forest (current configuration).
+	// Remove all existing "Propagate" mode and "AllowPropagate" mode types in the forest (current configuration).
 	for _, t := range v.Forest.GetTypeSyncers() {
 		_, exist := newPts[t.GetGVK()]
-		if t.GetMode() == api.Propagate && exist {
+		if t.CanPropagate() && exist {
 			delete(newPts, t.GetGVK())
 		}
 	}

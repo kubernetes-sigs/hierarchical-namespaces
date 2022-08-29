@@ -27,8 +27,8 @@ import (
 )
 
 var setResourceCmd = &cobra.Command{
-	Use: fmt.Sprintf("set-resource RESOURCE [--group GROUP] [--force] --mode <%s|%s|%s>",
-		api.Propagate, api.Remove, api.Ignore),
+	Use: fmt.Sprintf("set-resource RESOURCE [--group GROUP] [--force] --mode <%s|%s|%s|%s>",
+		api.Propagate, api.Remove, api.Ignore, api.AllowPropagate),
 	Short: "Sets the HNC configuration of a specific resource",
 	Example: fmt.Sprintf("  # Set configuration of a core type\n" +
 		"  kubectl hns config set-resource secrets --mode Ignore\n\n" +
@@ -40,7 +40,7 @@ var setResourceCmd = &cobra.Command{
 		flags := cmd.Flags()
 		group, _ := flags.GetString("group")
 		modeStr, _ := flags.GetString("mode")
-		mode := api.SynchronizationMode(cases.Title(language.English).String(modeStr))
+		mode := normalizeMode(modeStr)
 		force, _ := flags.GetBool("force")
 		config := client.getHNCConfig()
 
@@ -48,8 +48,8 @@ var setResourceCmd = &cobra.Command{
 		for i := 0; i < len(config.Spec.Resources); i++ {
 			r := &config.Spec.Resources[i]
 			if r.Group == group && r.Resource == resource {
-				if r.Mode == api.Ignore && mode == api.Propagate && !force {
-					fmt.Printf("Switching directly from 'Ignore' to 'Propagate' mode could cause existing %q objects in "+
+				if r.Mode == api.Ignore && (mode == api.Propagate || mode == api.AllowPropagate) && !force {
+					fmt.Printf("Switching directly from 'Ignore' to 'Propagate' mode or 'AllowPropagate' mode could cause existing %q objects in "+
 						"child namespaces to be overwritten by objects from ancestor namespaces.\n", resource)
 					fmt.Println("If you are sure you want to proceed with this operation, use the '--force' flag.")
 					fmt.Println("If you are not sure and would like to see what source objects would be overwritten," +
@@ -78,7 +78,19 @@ var setResourceCmd = &cobra.Command{
 
 func newSetResourceCmd() *cobra.Command {
 	setResourceCmd.Flags().String("group", "", "The group of the resource; may be omitted for core resources (or explicitly set to the empty string)")
-	setResourceCmd.Flags().String("mode", "", "The synchronization mode: one of Propagate, Remove or Ignore")
-	setResourceCmd.Flags().BoolP("force", "f", false, "Allow the synchronization mode to be changed directly from Ignore to Propagate despite the dangers of doing so")
+	setResourceCmd.Flags().String("mode", "", "The synchronization mode: one of Propagate, Remove, Ignore and AllowPropagate")
+	setResourceCmd.Flags().BoolP("force", "f", false, "Allow the synchronization mode to be changed directly from Ignore to Propagate or AllowPropagate despite the dangers of doing so")
 	return setResourceCmd
+}
+
+// normalizeMode takes a user-input mode and returns
+// a SynchronizationMode in a format HNC expects
+func normalizeMode(modeStr string) api.SynchronizationMode {
+	mode := api.SynchronizationMode(cases.Title(language.English).String(modeStr))
+
+	if mode == "Allowpropagate" {
+		return api.AllowPropagate
+	}
+
+	return mode
 }

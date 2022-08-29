@@ -276,6 +276,12 @@ func CleanupTestNamespaces() {
 	cleanupNamespaces(nses...)
 }
 
+// CleanupTestResourceSyncMode changes the synchronization mode of resources
+// used in testing back to its default value
+func CleanupTestResourceSyncMode() {
+	MustRun("kubectl hns config set-resource secrets --mode Ignore")
+}
+
 // CleanupCRDIfExists checks whether the eetests.e2e.hnc.x-k8s.io CRD is present, if so, delete it.
 func CleanupTestCRDIfExists() {
 	crd := "eetests.e2e.hnc.x-k8s.io"
