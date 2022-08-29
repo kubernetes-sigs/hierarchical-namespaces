@@ -64,6 +64,7 @@ spec:
                       - Propagate
                       - Ignore
                       - Remove
+                      - AllowPropagate
                       type: string
                     resource:
                       description: Resource to be configured.

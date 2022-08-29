@@ -22,6 +22,7 @@ var _ = Describe("Issues", func() {
 
 	BeforeEach(func() {
 		CleanupTestNamespaces()
+		CleanupTestResourceSyncMode()
 	})
 
 	AfterEach(func() {
@@ -338,6 +339,52 @@ spec:
   foo: bar`
 		MustApplyYAML(eetestUpdated)
 		FieldShouldContainWithTimeout("eetests.e2e.hnc.x-k8s.io", nsChild, "eetest-sample", ".spec.foo", "bar", 30)
+	})
+
+	It("Should allow objects to be propagated only when a selector is set in AllowPropagate mode - issue #16", func() {
+		// create a simple structure and get an object propagated
+		CreateNamespace(nsParent)
+		CreateNamespace(nsChild)
+		MustRun("kubectl hns set", nsChild, "--parent", nsParent)
+
+		// creare secret on parent namespace
+		MustRun("kubectl -n", nsParent, "create secret generic my-creds --from-literal=password=iamteamb")
+
+		// after setting Propagate mode, the object shows up in the child namespace
+		MustRun("kubectl hns config set-resource secrets --mode Propagate --force")
+		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+
+		// after setting AllowPropagate mode, the object is removed from the child namespace
+		MustRun("kubectl hns config set-resource secrets --mode AllowPropagate --force")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+
+		// after adding a Selector, the object shows up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/select="+nsChild+".tree.hnc.x-k8s.io/depth")
+		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+		// after removing a Selector, the object does not show up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/select-")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+
+		// after adding a treeSelector, the object shows up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/treeSelect="+nsChild)
+		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+		// after removing a treeSelector, the object does not show up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/treeSelect-")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+
+		// after adding a noneSelector, the object does not show up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/none=true")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+		// after removing a noneSelector, the object does not show up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/none-")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+
+		// after adding a allSelector, the object shows up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/all=true")
+		RunShouldContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+		// after removing a allSelector, the object does not show up in the child namespace
+		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/all-")
+		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
 	})
 })
 

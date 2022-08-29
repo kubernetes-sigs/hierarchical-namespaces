@@ -246,11 +246,11 @@ func (v *Validator) getConflictingObjects(newParent, ns *forest.Namespace) []str
 	if newParent == nil {
 		return nil
 	}
-	// Traverse all the types with 'Propagate' mode to find any conflicts.
+	// Traverse all the types with 'Propagate' mode or 'AllowPropogate' mode to find any conflicts.
 	conflicts := []string{}
 	for _, t := range v.Forest.GetTypeSyncers() {
-		if t.GetMode() == api.Propagate {
-			conflicts = append(conflicts, v.getConflictingObjectsOfType(t.GetGVK(), newParent, ns)...)
+		if t.CanPropagate() {
+			conflicts = append(conflicts, v.getConflictingObjectsOfType(t.GetGVK(), t.GetMode(), newParent, ns)...)
 		}
 	}
 	return conflicts
@@ -258,7 +258,7 @@ func (v *Validator) getConflictingObjects(newParent, ns *forest.Namespace) []str
 
 // getConflictingObjectsOfType returns a list of namespaced objects if there's
 // any conflict between the new ancestors and the descendants.
-func (v *Validator) getConflictingObjectsOfType(gvk schema.GroupVersionKind, newParent, ns *forest.Namespace) []string {
+func (v *Validator) getConflictingObjectsOfType(gvk schema.GroupVersionKind, mode api.SynchronizationMode, newParent, ns *forest.Namespace) []string {
 	// Get all the source objects in the new ancestors that would be propagated
 	// into the descendants.
 	newAnsSrcObjs := make(map[string]bool)
@@ -266,7 +266,7 @@ func (v *Validator) getConflictingObjectsOfType(gvk schema.GroupVersionKind, new
 		// If the user has chosen not to propagate the object to this descendant,
 		// then it should not be included in conflict checks
 		o := v.Forest.Get(nnm.Namespace).GetSourceObject(gvk, nnm.Name)
-		if ok, _ := selectors.ShouldPropagate(o, o.GetLabels()); ok {
+		if ok, _ := selectors.ShouldPropagate(o, o.GetLabels(), mode); ok {
 			newAnsSrcObjs[nnm.Name] = true
 		}
 	}

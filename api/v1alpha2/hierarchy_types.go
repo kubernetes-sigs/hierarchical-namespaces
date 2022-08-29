@@ -37,6 +37,7 @@ const (
 	AnnotationSelector     = AnnotationPropagatePrefix + "/select"
 	AnnotationTreeSelector = AnnotationPropagatePrefix + "/treeSelect"
 	AnnotationNoneSelector = AnnotationPropagatePrefix + "/none"
+	AnnotationAllSelector  = AnnotationPropagatePrefix + "/all"
 
 	// LabelManagedByStandard will eventually replace our own managed-by annotation (we didn't know
 	// about this standard label when we invented our own).

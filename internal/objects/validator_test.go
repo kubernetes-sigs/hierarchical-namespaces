@@ -541,6 +541,34 @@ func TestUserChanges(t *testing.T) {
 			},
 		},
 	}, {
+		name: "Deny creation of object with invalid all annotation",
+		fail: true,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationAllSelector: "foo",
+					},
+				},
+			},
+		},
+	}, {
+		name: "Allow creation of object with valid all annotation",
+		fail: false,
+		inst: &unstructured.Unstructured{
+			Object: map[string]interface{}{
+				"apiVersion": "v1",
+				"kind":       "Pod",
+				"metadata": map[string]interface{}{
+					"annotations": map[string]interface{}{
+						api.AnnotationAllSelector: "true",
+					},
+				},
+			},
+		},
+	}, {
 		name: "Deny creation of object with invalid selector and valid treeSelect annotation",
 		fail: true,
 		inst: &unstructured.Unstructured{
@@ -752,8 +780,16 @@ func TestCreatingConflictSource(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			// Setup
+			// validator needs to know whether resource has Propagate mode or AllowPropagate mode
+			// in order to check for conflicts in propagation, hence a reconciler is
+			// initialized and is added to the forest
+			r := &Reconciler{
+				GVK:  schema.GroupVersionKind{Group: "", Version: "v1", Kind: "Secret"},
+				Mode: api.Propagate,
+			}
 			g := NewWithT(t)
 			f := foresttest.Create(tc.forest)
+			f.AddTypeSyncer(r)
 			foresttest.CreateSecret(tc.conflictInstName, tc.conflictNamespace, f)
 			v := &Validator{Forest: f}
 			op := k8sadm.Create

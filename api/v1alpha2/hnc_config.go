@@ -31,7 +31,7 @@ const (
 )
 
 // SynchronizationMode describes propagation mode of objects of the same kind.
-// The only three modes currently supported are "Propagate", "Ignore", and "Remove".
+// The only four modes currently supported are "Propagate", "AllowPropagate", "Ignore", and "Remove".
 // See detailed definition below. An unsupported mode will be treated as "ignore".
 type SynchronizationMode string
 
@@ -46,6 +46,10 @@ const (
 
 	// Remove all existing propagated copies.
 	Remove SynchronizationMode = "Remove"
+
+	// AllowPropagate allows propagation of objects from ancestors to descendants
+	// and deletes obsolete descendants only if a an annotation is set on the object
+	AllowPropagate SynchronizationMode = "AllowPropagate"
 )
 
 const (
@@ -94,7 +98,7 @@ type ResourceSpec struct {
 	// Synchronization mode of the kind. If the field is empty, it will be treated
 	// as "Propagate".
 	// +optional
-	// +kubebuilder:validation:Enum=Propagate;Ignore;Remove
+	// +kubebuilder:validation:Enum=Propagate;Ignore;Remove;AllowPropagate
 	Mode SynchronizationMode `json:"mode,omitempty"`
 }
 

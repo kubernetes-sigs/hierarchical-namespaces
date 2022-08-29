@@ -51,6 +51,9 @@ type TypeSyncer interface {
 	// GetMode gets the propagation mode of objects that are handled by the reconciler who implements the interface.
 	GetMode() api.SynchronizationMode
 
+	// CanPropagate returns true if Propagate mode or AllowPropagate mode is set
+	CanPropagate() bool
+
 	// GetNumPropagatedObjects returns the number of propagated objects on the apiserver.
 	GetNumPropagatedObjects() int
 }
