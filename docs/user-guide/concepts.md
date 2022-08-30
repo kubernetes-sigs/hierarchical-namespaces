@@ -319,10 +319,10 @@ application.
 for policy purposes.*
 
 <a name="basic-exceptions"/>
-
+ 
 ### Exceptions and propagation control
 
-By default, HNC propagates _all_ objects of a [specified type](how-to.md#admin-resources)
+HNC typically propagates _all_ objects of a [specified type](how-to.md#admin-resources)
 from ancestor namespaces to descendant namespaces. However, sometimes this is
 too restrictive, and you need to create ***exceptions*** to certain policies. For example:
 
@@ -351,6 +351,20 @@ from modifying the object, and will identify the objects that would have been
 overwritten by your actions. You can then rewrite the exception to safely
 exclude those objects, or else delete the conflicting objects to allow them to
 be replaced.
+
+#### (Beta in v1.1) Opt-in propagation
+The `Propagate` mode propagates all objects unless directed to otherwise via a selector,
+using exceptions. By contrast, opt-in propagation, as set by the `AllowPropagate` 
+mode, doesn't propagate objects unless directed to by a selector. That is, for an object 
+with a selector, its behaviour will be identical in both the `Propagate` and `AllowPropagate` modes; 
+the only difference in behaviours is for objects without a selector.
+
+For example:
+ 
+* A Secret exists on a namespace but we don't want this secret to be propagated
+to all subnamespaces by default but instead only to one namespace of our choosing. 
+So you can choose to propagate to that _one_ child namespace using `AllowPropagate`
+and exceptions.
 
 #### Built-in exceptions
 
