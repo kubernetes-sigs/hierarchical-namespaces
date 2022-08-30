@@ -366,7 +366,17 @@ can use any of the following annotations:
 
 * **`propagate.hnc.x-k8s.io/none`**: Setting `none` to `true` (case insensitive)
   will result in the object not propagating to _any_ descendant namespace. Any
-  other value will be rejected.
+  other value will be rejected. This is only useful in `Propagate`
+  [synchronization mode](#modify-the-resources-propagated-by-hnc).
+
+* **`propagate.hnc.x-k8s.io/all`**: Setting `all` to `true` (case insensitive)
+  will result in the object propagating to _any_ descendant namespace. Any
+  other value will be rejected. This is only useful in `AllowPropagate`
+  [synchronization mode](#modify-the-resources-propagated-by-hnc).
+
+Warning: only use one of the propagation annotations on any one object at a time. 
+Interactions between multiple propagation annotations is undefined and may change 
+from release to release.
 
 For example, consider a case with a parent namespace with three child
 namespaces, and the parent namespace has a secret called `my-secret`. To set
@@ -382,10 +392,16 @@ kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select=child1
 kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/select='!child2.tree.hnc.x-k8s.io/depth, !child3.tree.hnc.x-k8s.io/depth'
 ```
 
-To set `my-secret` not to propagate to any namespace, you can use:
+To set `my-secret` not to propagate to any namespace when the sync mode is `Propagate`, you can use:
 
 ```bash
 kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/none=true
+```
+
+To set `my-secret` to propagate to any namespace when the sync mode is `AllowPropagate`, you can use:
+
+```bash
+kubectl annotate secret my-secret -n parent propagate.hnc.x-k8s.io/all=true
 ```
 
 All these are equivalent to creating the object with the selector annotations:
@@ -677,6 +693,10 @@ The most important type of configuration is the way each object type
 
 * **Propagate:** propagates objects from ancestors to descendants and deletes
   obsolete descendants.
+* **AllowPropagate:** opt-in propagation - only propagates objects from ancestors 
+  to descendants and deletes obsolete descendants when at least one
+  [selector](#limit-the-propagation-of-an-object-to-descendant-namespaces) is set
+  on the object.
 * **Remove:** deletes all existing propagated copies, but does not touch source
   objects.
 * **Ignore:** stops modifying this resource. New or changed objects will not be
@@ -700,7 +720,7 @@ To configure an object resource using the kubectl plugin:
 
 ```
 # "--group" can be omitted if the resource is a core K8s resource
-kubectl hns config set-resource [resource] --group [group] --mode [Propagate|Remove|Ignore]
+kubectl-hns config set-resource RESOURCE [--group GROUP] [--force] --mode <Propagate|Remove|Ignore|AllowPropagate>
 ```
 
 For example:
@@ -737,20 +757,20 @@ spec:
       mode: Propagate     <<<
 ```
 
-Adding a new resource in the `Propagate` mode is potentially dangerous, since
-there could be existing objects of that resource type that would be overwritten
-by objects of the same name from ancestor namespaces. As a result, the HNS
-plugin will not allow you to add a new resource directly in the `Propagate`
-mode.  Instead, to do so safely:
+Adding a new resource in the `Propagate` mode or `AllowPropagate` mode is potentially 
+dangerous, since there could be existing objects of that resource type that 
+would be overwritten by objects of the same name from ancestor namespaces. 
+As a result, the HNS plugin will not allow you to add a new resource directly 
+in the `Propagate` mode or `AllowPropagate`.  Instead, to do so safely:
 
 * Add the new resource in the `Remove` mode. This will remove any propagated
   copies (of which there should be none) but will force HNC to start
   synchronizing all known source objects.
 * Wait until `kubectl hns config describe` looks like it's identified the
   correct number of objects of the newly added resource in its status.
-* Change the propagation mode from `Remove` to `Propagate`. HNC will then check
-  to see if any objects will be overwritten, and will not allow you to change
-  the propagation mode until all such conflicts are resolved.
+* Change the propagation mode from `Remove` to `Propagate` or `AllowPropagate`. 
+  HNC will then check to see if any objects will be overwritten, and will not 
+  allow you to change the propagation mode until all such conflicts are resolved.
 
 Alternatively, if you're certain you want to start propagating objects
 immediately, you can use the `--force` flag with `kubectl hns config
