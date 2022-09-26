@@ -165,7 +165,7 @@ func (v *Validator) handle(ctx context.Context, req *request) admission.Response
 
 		if yes, dnses := v.hasConflict(inst); yes {
 			dnsesStr := strings.Join(dnses, ",")
-			err := fmt.Errorf("would overwrite objects in the following descendant namespace(s): %s. To fix this, choose a different name for the object, or remove the conflicting objects from the listed namespaces", dnsesStr)
+			err := fmt.Errorf("would class with objects in the ancestors namespace(s): %s. To fix this, choose a different name for the object, or remove the conflicting objects from the listed namespaces", dnsesStr)
 			return webhooks.DenyConflict(req.gr(), req.name(), err)
 		}
 		return webhooks.Allow("source object")
@@ -359,8 +359,8 @@ func (v *Validator) isDeletingNS(ctx context.Context, ns string) (bool, error) {
 	return false, nil
 }
 
-// hasConflict checks if there's any conflicting objects in the descendants. Returns
-// true and a list of conflicting descendants, if yes.
+// hasConflict checks if there's any conflicting objects in the ancestors. Returns
+// true and a list of conflicting ancestors, if yes.
 func (v *Validator) hasConflict(inst *unstructured.Unstructured) (bool, []string) {
 	v.Forest.Lock()
 	defer v.Forest.Unlock()
@@ -373,18 +373,19 @@ func (v *Validator) hasConflict(inst *unstructured.Unstructured) (bool, []string
 
 	nm := inst.GetName()
 	gvk := inst.GroupVersionKind()
-	descs := v.Forest.Get(inst.GetNamespace()).DescendantNames()
+	ancs := v.Forest.Get(inst.GetNamespace()).GetAncestorSourceNames(gvk, nm)
+
 	conflicts := []string{}
 
 	// Get a list of conflicting descendants if there's any.
-	for _, desc := range descs {
-		if v.Forest.Get(desc).HasSourceObject(gvk, nm) {
+	for _, anc := range ancs {
+		if v.Forest.Get(anc.Name).HasSourceObject(gvk, nm) {
 			// If the user have chosen not to propagate the object to this descendant,
 			// there shouldn't be any conflict reported here
 			nsLabels := v.Forest.Get(inst.GetNamespace()).GetLabels()
 			mode := v.syncType(metav1.GroupVersionKind(gvk))
 			if ok, _ := selectors.ShouldPropagate(inst, nsLabels, mode); ok {
-				conflicts = append(conflicts, desc)
+				conflicts = append(conflicts, anc.Name)
 			}
 		}
 	}

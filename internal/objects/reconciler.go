@@ -111,7 +111,7 @@ func (r *Reconciler) OnChangeNamespace(log logr.Logger, ns *forest.Namespace) {
 	// Copy all information from the forest, as the lock will be released before the goroutines
 	// finish.
 	nsnm := ns.Name()
-	srcnms := ns.Parent().GetAncestorSourceNames(r.GVK, "")
+	srcnms := ns.Parent().GetAncestorSourceNamesWithLog(log, r.GVK, "")
 
 	// Enqueue all the current objects in the namespace because some of them may have been deleted.
 	go func() {
@@ -213,6 +213,7 @@ func (r *Reconciler) GetNumPropagatedObjects() int {
 
 // enqueueAllObjects enqueues all the current objects in all namespaces.
 func (r *Reconciler) enqueueAllObjects(ctx context.Context, log logr.Logger) error {
+
 	keys := r.Forest.GetNamespaceNames()
 	for _, ns := range keys {
 		// Enqueue all the current objects in the namespace.
@@ -323,7 +324,7 @@ func (r *Reconciler) syncMissingObject(log logr.Logger, inst *unstructured.Unstr
 	// If it's a source, it must have been deleted. Update the forest and enqueue all its
 	// descendants, but there's nothing else to do.
 	if ns.HasSourceObject(r.GVK, inst.GetName()) {
-		ns.DeleteSourceObject(r.GVK, inst.GetName())
+		ns.DeleteSourceObject(log, r.GVK, inst.GetName())
 		r.enqueueDescendants(log, inst, "source object is missing and must have been deleted")
 		return actionNop
 	}
@@ -369,7 +370,7 @@ func (r *Reconciler) syncObject(log logr.Logger, inst *unstructured.Unstructured
 
 	// If the object should be propagated, we will sync it as an propagated object.
 	if yes, srcInst := r.shouldSyncAsPropagated(log, inst); yes {
-		return r.syncPropagated(inst, srcInst)
+		return r.syncPropagated(log, inst, srcInst)
 	}
 
 	r.syncSource(log, inst)
@@ -411,34 +412,55 @@ func (r *Reconciler) getTopSourceToPropagate(log logr.Logger, inst *unstructured
 	ns := r.Forest.Get(inst.GetNamespace())
 	// Get all the source objects with the same name in the ancestors excluding
 	// itself from top down.
-	nnms := ns.Parent().GetAncestorSourceNames(r.GVK, inst.GetName())
+	nnms := ns.Parent().GetAncestorSourceNamesWithLog(log, r.GVK, inst.GetName())
 	for _, nnm := range nnms {
 		// If the source cannot propagate, ignore it.
 		// TODO: add a webhook rule to prevent e.g. removing a source finalizer that
 		//  would cause overwriting the source objects in the descendents.
 		//  See https://github.com/kubernetes-sigs/multi-tenancy/issues/1120
+		log.Info("Searching for object in namspace", "namespace", ns.Name(), "nmnName", nnm.Name)
 		obj := r.Forest.Get(nnm.Namespace).GetSourceObject(r.GVK, nnm.Name)
 		if !r.shouldPropagateSource(log, obj, inst.GetNamespace()) {
+			log.Info("Found object but it should not be propegated ", "parentobject", obj.GetName(), "namespace", ns.Name())
 			continue
 		}
 		return obj
 	}
+
+	log.Info("Unable to find source object in parent", "namespace", ns.Name(), "namespaceParent", ns.Parent())
 	return nil
 }
 
 // syncPropagated will determine whether to delete the obsolete copy or overwrite it with the source.
 // Or do nothing if it remains the same as the source object.
-func (r *Reconciler) syncPropagated(inst, srcInst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
+func (r *Reconciler) syncPropagated(log logr.Logger, inst, srcInst *unstructured.Unstructured) (syncAction, *unstructured.Unstructured) {
 	ns := r.Forest.Get(inst.GetNamespace())
+
+	// Look up existing object this is used later to prevent us deleting an object
+	// that hnc is not yet aware of. srcObj should never be nil but log if we end up
+	// in this state
+	srcObj := ns.GetSourceObject(r.GVK, inst.GetName())
 	// Delete this local source object from the forest if it exists. (This could
 	// only happen when we are trying to overwrite a conflicting source).
-	ns.DeleteSourceObject(r.GVK, inst.GetName())
+	ns.DeleteSourceObject(log, r.GVK, inst.GetName())
 	stats.OverwriteObject(r.GVK)
 
 	// If no source object exists, delete this object. This can happen when the source was deleted by
 	// users or the admin decided this type should no longer be propagated.
 	if srcInst == nil {
-		return actionRemove, nil
+		log.Info("Unable to find srcInst removing object", "namespace", ns.Name(), "namespaceParent", ns.Parent(), "inst", inst.GetName())
+
+		if srcObj == nil {
+			log.Info("src object not found for instance", "namespace", ns.Name(), "namespaceParent", ns.Parent(), "inst", inst.GetName(), "gvk", r.GVK)
+			return actionNop, nil
+		}
+
+		if srcObj.GetAnnotations()["hnc.x-k8s.io/delete"] == "true" {
+			log.Info("Found delete annotation on object removing", "namespace", ns.Name(), "namespaceParent", ns.Parent(), "inst", inst.GetName(), "gvk", r.GVK)
+			return actionRemove, nil
+		}
+		// Nothing more we can do here, make sure nothing else happens
+		return actionNop, nil
 	}
 
 	// If an object doesn't exist, assume it's been deleted or not yet created.
@@ -451,14 +473,17 @@ func (r *Reconciler) syncPropagated(inst, srcInst *unstructured.Unstructured) (s
 		!reflect.DeepEqual(canonical(inst), canonical(srcInst)) ||
 		inst.GetLabels()[api.LabelInheritedFrom] != srcInst.GetNamespace() {
 		metadata.SetLabel(inst, api.LabelInheritedFrom, srcInst.GetNamespace())
+
+		log.Info("src object doesn't exist creating", "namespace", ns.Name(), "namespaceParent", ns.Parent(), "inst", inst.GetName())
 		return actionWrite, srcInst
 	}
 
+	log.Info("src object exists on api server but not in forest", "namespace", ns.Name(), "namespaceParent", ns.Parent(), "inst", inst.GetName())
 	// The object already exists and doesn't need to be updated. This will typically happen when HNC
 	// is restarted - all the propagated objects already exist on the apiserver. Record that it exists
 	// for our statistics.
+	r.syncSource(log, inst)
 	r.recordPropagatedObject(inst.GetNamespace(), inst.GetName())
-
 	// Nothing more needs to be done.
 	return actionNop, nil
 }
@@ -472,9 +497,10 @@ func (r *Reconciler) syncSource(log logr.Logger, src *unstructured.Unstructured)
 	// all the source objects in the forests no matter if the mode is 'Propagate'
 	// or not, because HNCConfig webhook will also check the non-'Propagate' or non-'AllowPropagate' modes
 	// source objects in the forest to see if a mode change is allowed.
+	cleanSrc := cleanSource(src)
+	log.Info("Syncing source object", "namespace", src.GetNamespace(), "cleansource", cleanSrc)
 	ns := r.Forest.Get(src.GetNamespace())
-
-	ns.SetSourceObject(cleanSource(src))
+	ns.SetSourceObject(cleanSrc)
 
 	// Enqueue propagated copies for this possibly deleted source
 	r.enqueueDescendants(log, src, "modified source object")

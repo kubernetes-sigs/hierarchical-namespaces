@@ -1,6 +1,7 @@
 package forest
 
 import (
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,11 +29,25 @@ func (ns *Namespace) HasSourceObject(gvk schema.GroupVersionKind, oo string) boo
 }
 
 // DeleteSourceObject deletes a source object by name.
-func (ns *Namespace) DeleteSourceObject(gvk schema.GroupVersionKind, nm string) {
+func (ns *Namespace) DeleteSourceObject(log logr.Logger, gvk schema.GroupVersionKind, nm string) {
+
+	log.Info("Deleting source object in namespace", "namespace", ns.Name(), "gvk", gvk, "nm", nm)
 	delete(ns.sourceObjects[gvk], nm)
 	// Garbage collection
 	if len(ns.sourceObjects[gvk]) == 0 {
 		delete(ns.sourceObjects, gvk)
+	}
+
+	a := make(map[string]string)
+	a["hnc.x-k8s.io/delete"] = "true"
+	for _, dec := range ns.DescendantNames() {
+		sObj := ns.forest.Get(dec).GetSourceObject(gvk, nm)
+		if sObj != nil {
+			log.Info("Found object adding deletion annotation", "namespace", ns.Name(), "gvk", gvk, "nm", nm, "dec", dec)
+			sObj.SetAnnotations(a)
+			continue
+		}
+		log.Info("Source object not found", "namespace", ns.Name(), "gvk", gvk, "nm", nm, "dec", dec)
 	}
 }
 
@@ -79,6 +94,45 @@ func (ns *Namespace) GetAncestorSourceNames(gvk schema.GroupVersionKind, name st
 			}
 		}
 	}
+
+	return allNNMs
+}
+
+func (ns *Namespace) GetAncestorSourceNamesWithLog(log logr.Logger, gvk schema.GroupVersionKind, name string) []types.NamespacedName {
+	// The namespace could be nil when we use this function on "ns.Parent()" to
+	// get the source objects of the ancestors excluding itself without caring if
+	// the "ns.Parent()" is nil.
+	if ns == nil {
+		return nil
+	}
+
+	// Get the source objects in the ancestors from top down.
+	allNNMs := []types.NamespacedName{}
+
+	ancs := ns.AncestryNames()
+
+	log.Info("Looking for ancestors in namespace", "ancs", ns.AncestryNames(), "namespace", ns.Name())
+
+	for _, anc := range ancs {
+		myAnc := ns.forest.Get(anc)
+		log.Info("Looking for source names", "anc", anc, "namespace", ns.Name(), "gvk", gvk, "ancSourceObjects", myAnc.sourceObjects)
+		nnms := ns.forest.Get(anc).GetSourceNames(gvk)
+
+		if name == "" {
+			// Get all the source objects if the name is not specified.
+			allNNMs = append(allNNMs, nnms...)
+		} else {
+			log.Info("Found ancestors in namespace", "nnms", nnms, "namespace", ns.Name(), "name", name)
+			// If a name is specified, return the matching objects.
+			for _, o := range nnms {
+				if o.Name == name {
+					allNNMs = append(allNNMs, o)
+				}
+			}
+		}
+	}
+
+	log.Info("Returning allNNMs found", "allNNMs", allNNMs, "namespace", ns.Name())
 
 	return allNNMs
 }

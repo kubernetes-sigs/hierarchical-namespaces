@@ -276,12 +276,14 @@ func (r *Reconciler) syncWithForest(log logr.Logger, nsInst *corev1.Namespace, i
 	defer r.Forest.Unlock()
 	origNS := nsInst.DeepCopy()
 	origHC := inst.DeepCopy()
+	// This actually does a GetOrSet
 	ns := r.Forest.Get(nsInst.GetName())
 
 	// Clear all conditions; we'll re-add them if they're still relevant. But first, record whether
 	// this namespace (excluding ancestors) was halted, since if that changes, we'll need to notify
 	// other namespaces.
 	wasHalted := ns.IsHalted()
+	log.Info("Namespace wasHalted", "namespace", ns.Name(), "wasHalted", wasHalted)
 	ns.ClearConditions()
 	// We can figure out this condition pretty easily...
 	if deletingCRD {
@@ -443,10 +445,9 @@ func (r *Reconciler) syncParent(log logr.Logger, inst *api.HierarchyConfiguratio
 		log.Info("Setting ConditionActivitiesHalted: unmanaged namespace set as parent", "parent", inst.Spec.Parent)
 		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonIllegalParent, fmt.Sprintf("Parent %q is an unmanaged namespace", inst.Spec.Parent))
 	} else if curParent != nil && !curParent.Exists() {
-		log.Info("Setting ConditionActivitiesHalted: parent doesn't exist (or hasn't been synced yet)", "parent", inst.Spec.Parent)
+		log.Info("Setting ConditionActivitiesHalted: parent doesn't exist ( or hasn't been synced yet ) ", "parent", inst.Spec.Parent)
 		ns.SetCondition(api.ConditionActivitiesHalted, api.ReasonParentMissing, fmt.Sprintf("Parent %q does not exist", inst.Spec.Parent))
 	}
-
 	// If the parent hasn't changed, there's nothing more to do.
 	oldParent := ns.Parent()
 	if curParent == oldParent {
