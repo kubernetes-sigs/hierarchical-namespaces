@@ -75,14 +75,16 @@ func (v *Validator) handle(req *anchorRequest) admission.Response {
 	cnm := req.anchor.Name
 	cns := v.Forest.Get(cnm)
 
-	errStrs := validation.IsDNS1123Label(cnm)
-	if len(errStrs) != 0 {
-		fldPath := field.NewPath("metadata", "name")
-		msg := fmt.Sprintf("not a valid namespace name: %s", strings.Join(errStrs, "; "))
-		allErrs := field.ErrorList{
-			field.Invalid(fldPath, cnm, msg),
+	if req.op != k8sadm.Delete {
+		errStrs := validation.IsDNS1123Label(cnm)
+		if len(errStrs) != 0 {
+			fldPath := field.NewPath("metadata", "name")
+			msg := fmt.Sprintf("not a valid namespace name: %s", strings.Join(errStrs, "; "))
+			allErrs := field.ErrorList{
+				field.Invalid(fldPath, cnm, msg),
+			}
+			return webhooks.DenyInvalid(api.SubnamespaceAnchorGK, cnm, allErrs)
 		}
-		return webhooks.DenyInvalid(api.SubnamespaceAnchorGK, cnm, allErrs)
 	}
 
 	labelErrs := config.ValidateManagedLabels(req.anchor.Spec.Labels)

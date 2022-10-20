@@ -32,6 +32,7 @@ func TestCreateSubnamespaces(t *testing.T) {
 		{name: "for existing non-subns child", pnm: "a", cnm: "c", fail: true},
 		{name: "for existing subns", pnm: "a", cnm: "b"},
 		{name: "for non DNS label compliant child", pnm: "a", cnm: "child.01", fail: true},
+		{name: "with name more than 63 characters", pnm: "a", cnm: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", fail: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -43,6 +44,41 @@ func TestCreateSubnamespaces(t *testing.T) {
 			req := &anchorRequest{
 				anchor: anchor,
 				op:     k8sadm.Create,
+			}
+
+			// Test
+			got := v.handle(req)
+
+			// Report
+			logResult(t, got.AdmissionResponse.Result)
+			g.Expect(got.AdmissionResponse.Allowed).ShouldNot(Equal(tc.fail))
+		})
+	}
+}
+
+func TestDeleteSubnamespaces(t *testing.T) {
+	f := foresttest.Create("-Aa")
+	v := &Validator{Forest: f}
+
+	tests := []struct {
+		name string
+		pnm  string
+		cnm  string
+		fail bool
+	}{
+		{name: "for existing subns", pnm: "a", cnm: "b"},
+		{name: "with name more than 63 characters", pnm: "a", cnm: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup
+			g := NewWithT(t)
+			anchor := &api.SubnamespaceAnchor{}
+			anchor.ObjectMeta.Namespace = tc.pnm
+			anchor.ObjectMeta.Name = tc.cnm
+			req := &anchorRequest{
+				anchor: anchor,
+				op:     k8sadm.Delete,
 			}
 
 			// Test
