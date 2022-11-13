@@ -2,7 +2,6 @@ package webhooks
 
 import (
 	"fmt"
-	"os"
 
 	k8sadm "k8s.io/api/admission/v1"
 	authnv1 "k8s.io/api/authentication/v1"
@@ -11,6 +10,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 )
 
 // IsHNCServiceAccount is inspired by isGKServiceAccount from open-policy-agent/gatekeeper.
@@ -20,11 +21,7 @@ func IsHNCServiceAccount(user *authnv1.UserInfo) bool {
 		return false
 	}
 
-	ns, found := os.LookupEnv("POD_NAMESPACE")
-	if !found {
-		ns = "hnc-system"
-	}
-	saGroup := fmt.Sprintf("system:serviceaccounts:%s", ns)
+	saGroup := fmt.Sprintf("system:serviceaccounts:%s", config.GetHNCNamespace())
 	for _, g := range user.Groups {
 		if g == saGroup {
 			return true

@@ -31,7 +31,15 @@ var (
 	// this list is removed from all managed namespaces unless specifically specified by the HC of the
 	// namespace or one of its ancestors.
 	managedAnnotations []*regexp.Regexp
+
+	// hncNamespace is the namespace where hnc-manager and hnc resources deployed. It set by commandline argument,
+	// default to hnc-system.
+	hncNamespace string
 )
+
+func SetHNCNamespace(ns string) {
+	hncNamespace = ns
+}
 
 func SetNamespaces(regex string, excluded ...string) {
 	if regex == "" {
@@ -124,4 +132,9 @@ func IsManagedAnnotation(k string) bool {
 		}
 	}
 	return false
+}
+
+// GetHNCNamespace return the namespace where hnc-manager and hnc resources deployed
+func GetHNCNamespace() string {
+	return hncNamespace
 }

@@ -74,6 +74,7 @@ var (
 	includedNamespacesRegex string
 	webhooksOnly            bool
 	enableHRQ               bool
+	hncNamespace            string
 )
 
 // init preloads some global vars before main() starts. Since this is the top-level module, I'm not
@@ -151,6 +152,7 @@ func parseFlags() {
 	flag.Var(&managedNamespaceAnnots, "managed-namespace-annotation", "A regex indicating the annotations on namespaces that are managed by HNC. These annotations may only be set via the HierarchyConfiguration object. All regexes are implictly wrapped by \"^...$\". This argument can be specified multiple times. See the user guide for more information.")
 	flag.BoolVar(&webhooksOnly, "webhooks-only", false, "Disables the controllers so HNC can be run in HA webhook mode")
 	flag.BoolVar(&enableHRQ, "enable-hrq", false, "Enables hierarchical resource quotas")
+	flag.StringVar(&hncNamespace, "namespace", "hnc-system", "Namespace where hnc-manager and hnc resources deployed")
 	flag.Parse()
 
 	// Assign the array args to the configuration variables after the args are parsed.
@@ -166,6 +168,9 @@ func parseFlags() {
 		setupLog.Info("Cannot set both --webhooks-only and --no-webhooks")
 		os.Exit(1)
 	}
+
+	// Set hnc namespace
+	config.SetHNCNamespace(hncNamespace)
 }
 
 // enableMetrics returns a function to call from main() to export any remaining metrics when main()

@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"sigs.k8s.io/hierarchical-namespaces/internal/anchor"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hierarchyconfig"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hncconfig"
@@ -18,24 +19,24 @@ import (
 )
 
 const (
-	serviceName     = "hnc-webhook-service"
-	vwhName         = "hnc-validating-webhook-configuration"
-	mwhName         = "hnc-mutating-webhook-configuration"
-	caName          = "hnc-ca"
-	caOrganization  = "hnc"
-	secretNamespace = "hnc-system"
-	secretName      = "hnc-webhook-server-cert"
-	certDir         = "/tmp/k8s-webhook-server/serving-certs"
+	serviceName    = "hnc-webhook-service"
+	vwhName        = "hnc-validating-webhook-configuration"
+	mwhName        = "hnc-mutating-webhook-configuration"
+	caName         = "hnc-ca"
+	caOrganization = "hnc"
+	secretName     = "hnc-webhook-server-cert"
+	certDir        = "/tmp/k8s-webhook-server/serving-certs"
 )
-
-// DNSName is <service name>.<namespace>.svc
-var dnsName = fmt.Sprintf("%s.%s.svc", serviceName, secretNamespace)
 
 // ManageCerts creates all certs for webhooks. This function is called from main.go.
 func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretRefresh bool) error {
+	hncNamespace := config.GetHNCNamespace()
+	// DNSName is <service name>.<hncNamespace>.svc
+	dnsName := fmt.Sprintf("%s.%s.svc", serviceName, hncNamespace)
+
 	return cert.AddRotator(mgr, &cert.CertRotator{
 		SecretKey: types.NamespacedName{
-			Namespace: secretNamespace,
+			Namespace: hncNamespace,
 			Name:      secretName,
 		},
 		CertDir:        certDir,

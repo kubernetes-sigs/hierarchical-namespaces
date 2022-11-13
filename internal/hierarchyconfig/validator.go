@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -117,7 +116,7 @@ func (v *Validator) handle(ctx context.Context, log logr.Logger, req *request) a
 	// exists on the K8s server, we need to be able to update its status even though the rest of the
 	// object wouldn't pass legality. We should probably only give the HNC SA the ability to modify
 	// the _status_, though. TODO: https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/80.
-	if isHNCServiceAccount(req.ui) {
+	if webhooks.IsHNCServiceAccount(req.ui) {
 		return allow("HNC SA")
 	}
 
@@ -445,26 +444,6 @@ func (v *Validator) decodeRequest(in admission.Request) (*request, error) {
 		hc: hc,
 		ui: &in.UserInfo,
 	}, nil
-}
-
-// isHNCServiceAccount is inspired by isGKServiceAccount from open-policy-agent/gatekeeper.
-func isHNCServiceAccount(user *authnv1.UserInfo) bool {
-	if user == nil {
-		// useful for unit tests
-		return false
-	}
-
-	ns, found := os.LookupEnv("POD_NAMESPACE")
-	if !found {
-		ns = "hnc-system"
-	}
-	saGroup := fmt.Sprintf("system:serviceaccounts:%s", ns)
-	for _, g := range user.Groups {
-		if g == saGroup {
-			return true
-		}
-	}
-	return false
 }
 
 func (v *Validator) InjectClient(c client.Client) error {
