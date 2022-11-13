@@ -36,18 +36,12 @@ type usage struct {
 	subtree v1.ResourceList
 }
 
-// TryUseResources checks resource limits in the namespace and its ancestors
-// when given proposed absolute (not delta) resource usages in the namespace. If
-// the proposed resource usages are the same as the current usages, of course
-// it's allowed and we do nothing. If there are any changes in the usages, we
-// only check to see if the proposed changing usages are allowed. If any of them
-// exceed resource limits, it returns an error; otherwise, it returns nil.
-// Callers of this method are responsible for updating resource usage status of
-// the HierarchicalResourceQuota objects.
-//
-// If the proposed resource usages changes are allowed, the method also updates
-// in-memory local resource usages of the current namespace and the subtree
-// resource usages of its ancestors (including itself).
+// TryUseResources checks resource limits in the namespace and its ancestors when given proposed
+// absolute (not delta) resource usages in the namespace. If there are any changes in the usages, we
+// only check to see if any proposed increases take us over any limits. If any of them exceed
+// resource limits, it returns an error suitable to display to end users; otherwise, it updates the
+// in-memory usages of both this namespace as well as all its ancestors. Callers of this method are
+// responsible for updating resource usage status of the HierarchicalResourceQuota objects.
 //
 // TryUseResources is called by the HRQ admission controller to decide if a ResourceQuota.Status
 // update issued by the K8s ResourceQuota admission controller is allowed. Since UseResources()
@@ -62,38 +56,21 @@ type usage struct {
 // etcd) but the apiserver runs a cleanup process that occasionally syncs up actual usage with the
 // usage recorded in RQs. When the RQs are changed, we'll be updated too.
 //
-// Based on observations, the K8s ResourceQuota admission controller is called only
-// when a resource is consumed, not when a resource is released. Therefore, in most cases,
-// the proposed resource usages that the HRQ admission controller received should
-// be larger than in-memory resource usages.
+// Based on observations, the K8s ResourceQuota admission controller is called only when a resource
+// is consumed, not when a resource is released. Therefore, in most cases, the proposed resource
+// usages that the HRQ admission controller received should be larger than in-memory resource
+// usages. However, this function is robust to (that is, always allows) decreases as well, mainly
+// because it's easier to test - plus, who knows, the K8s behaviour may change in the future.
 //
-// The proposed usage can be smaller when in-memory resource usages are out of sync
-// with ResourceQuota.Status.Used. In this case, TryUseResources will still update
-// in-memory usages.
-//
-// For example, when a user deletes a pod that consumes
-// 100m cpu and immediately creates another pod that consumes 1m cpu in a namespace,
-// the HRQ ResourceQuota reconciler will be triggered by ResourceQuota.Status changes twice:
-// 1) when pod is deleted.
-// 2) when pod is created.
-// The HRQ ResourceQuota reconciler will compare `local` with ResourceQuota.Status.Used
-// and will update `local` (and `subtree` in namespace and its ancestors) if it
-// sees `local` is different from ResourceQuota.Status.Used.
-//
-// The HRQ admission coontroller will be triggered once when the pod is created.
-// If the HRQ admission coontroller locks the in-memory forest before step 1)
-// of the HRQ ResourceQuota reconciler, the HRQ admission controller will see proposed
-// usages are smaller than in-memory usages and will update in-memory usages.
-// When ResourceQuota reconciler receives the lock later, it will notice the
-// ResourceQuota.Status.Used is the same as in-memory usages and will not
-// update in-memory usages.
+// This may allow one weird case where a user may be allowed to use something they weren't supposed
+// to. Let's say you're well over your limit, and then in quick succession, some resources are
+// deleted, and some _fewer_ are added, but enough to still go over the limit. In that case, there's
+// a race condition between this function being called, and the RQ reconciler updating the baseline
+// resource usage. If this function wins, it will look like resource usage is decreasing, and will
+// be incorrectly allowed. If the RQ reconciler runs first, we'll see that the usage is incorrectly
+// _increasing_ and it will be disallowed. However, I think the simplicity of not trying to prevent
+// this (hopefully very unlikely) corner case is more valuable than trying to catch it.
 func (n *Namespace) TryUseResources(rl v1.ResourceList) error {
-	// The proposed resource usages are allowed if they are the same as current
-	// resource usages in the namespace.
-	if utils.Equals(rl, n.quotas.used.local) {
-		return nil
-	}
-
 	if err := n.canUseResources(rl); err != nil {
 		// At least one of the proposed usage exceeds resource limits.
 		return err
@@ -114,28 +91,32 @@ func (n *Namespace) TryUseResources(rl v1.ResourceList) error {
 func (n *Namespace) canUseResources(u v1.ResourceList) error {
 	// For each resource, delta = proposed usage - current usage.
 	delta := utils.Subtract(u, n.quotas.used.local)
-	delta = utils.OmitZeroQuantity(delta)
+	// Only consider *increasing* deltas; see comments to TryUseResources for details.
+	increases := utils.OmitLTEZero(delta)
 
 	for _, nsnm := range n.AncestryNames() {
 		ns := n.forest.Get(nsnm)
-		r := utils.Copy(ns.quotas.used.subtree)
-		r = utils.AddIfExists(delta, r)
-		allowed, nm, exceeded := checkLimits(ns.quotas.limits, r)
-		if !allowed {
-			// Construct the error message similar to the RQ exceeded quota error message -
-			// "exceeded quota: gke-hc-hrq, requested: configmaps=1, used: configmaps=2, limited: configmaps=2"
-			msg := fmt.Sprintf("exceeded hierarchical quota in namespace %q: %q", ns.name, nm)
-			for _, er := range exceeded {
-				rnm := er.String()
-				// Get the requested, used, limited quantity of the exceeded resource.
-				rq := delta[er]
-				uq := ns.quotas.used.subtree[er]
-				lq := ns.quotas.limits[nm][er]
-				msg += fmt.Sprintf(", requested: %s=%v, used: %s=%v, limited: %s=%v",
-					rnm, &rq, rnm, &uq, rnm, &lq)
-			}
-			return fmt.Errorf(msg)
+		// Use AddIfExists (not Add) because we want to ignore any resources that aren't increasing when
+		// checking against the limits.
+		proposed := utils.AddIfExists(increases, ns.quotas.used.subtree)
+		allowed, nm, exceeded := checkLimits(ns.quotas.limits, proposed)
+		if allowed {
+			continue
 		}
+
+		// Construct the error message similar to the RQ exceeded quota error message -
+		// "exceeded quota: gke-hc-hrq, requested: configmaps=1, used: configmaps=2, limited: configmaps=2"
+		msg := fmt.Sprintf("exceeded hierarchical quota in namespace %q: %q", ns.name, nm)
+		for _, er := range exceeded {
+			rnm := er.String()
+			// Get the requested, used, limited quantity of the exceeded resource.
+			rq := increases[er]
+			uq := ns.quotas.used.subtree[er]
+			lq := ns.quotas.limits[nm][er]
+			msg += fmt.Sprintf(", requested: %s=%v, used: %s=%v, limited: %s=%v",
+				rnm, &rq, rnm, &uq, rnm, &lq)
+		}
+		return fmt.Errorf(msg)
 	}
 
 	return nil
@@ -159,8 +140,10 @@ func (n *Namespace) canUseResources(u v1.ResourceList) error {
 //  usages to the new ancestors following a parent update
 func (n *Namespace) UseResources(newUsage v1.ResourceList) {
 	oldUsage := n.quotas.used.local
-	// We only consider limited usages.
-	newUsage = utils.CleanupUnneeded(newUsage, n.Limits())
+
+	// We only store the usages we care about
+	newUsage = utils.FilterUnlimited(newUsage, n.Limits())
+
 	// Early exit if there's no usages change. It's safe because the forest would
 	// remain unchanged and the caller would always enqueue all ancestor HRQs.
 	if utils.Equals(oldUsage, newUsage) {
@@ -181,7 +164,7 @@ func (n *Namespace) UseResources(newUsage v1.ResourceList) {
 
 		// Get the new subtree usage and remove no longer limited usages.
 		newSubUsg := utils.Add(delta, ns.quotas.used.subtree)
-		ns.UpdateSubtreeUsages(newSubUsg)
+		ns.quotas.used.subtree = utils.FilterUnlimited(newSubUsg, ns.Limits())
 	}
 }
 
@@ -236,9 +219,13 @@ func (n *Namespace) GetSubtreeUsages() v1.ResourceList {
 	return u
 }
 
-// UpdateSubtreeUsages sets the subtree resource usages.
-func (n *Namespace) UpdateSubtreeUsages(rl v1.ResourceList) {
-	n.quotas.used.subtree = utils.CleanupUnneeded(rl, n.Limits())
+// TestOnlySetSubtreeUsage overwrites the actual, calculated subtree usages and replaces them with
+// arbitrary garbage. Needless to say, you should never call this, unless you're testing HNC's
+// ability to recover from arbitrary garbage.
+//
+// The passed-in arg is used as-is, not copied. This is test code, so deal with it 😎
+func (n *Namespace) TestOnlySetSubtreeUsage(rl v1.ResourceList) {
+	n.quotas.used.subtree = rl
 }
 
 // RemoveLimits removes limits specified by the HierarchicalResourceQuota object

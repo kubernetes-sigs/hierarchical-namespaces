@@ -95,23 +95,16 @@ func Subtract(a v1.ResourceList, b v1.ResourceList) v1.ResourceList {
 	return result
 }
 
-// OmitZeroQuantity returns a list omitting zero quantity resources.
-func OmitZeroQuantity(a v1.ResourceList) v1.ResourceList {
+// OmitLTEZero returns a list omitting zero or negative quantity resources.
+func OmitLTEZero(a v1.ResourceList) v1.ResourceList {
 	for n, q := range a {
 		if q.IsZero() {
+			delete(a, n)
+		} else if q.AsApproximateFloat64() <= 0 {
 			delete(a, n)
 		}
 	}
 	return a
-}
-
-// Copy returns a deep copy of a ResourceList.
-func Copy(rl v1.ResourceList) v1.ResourceList {
-	rs := make(v1.ResourceList)
-	for k, v := range rl {
-		rs[k] = v.DeepCopy()
-	}
-	return rs
 }
 
 // Min returns the result of Min(a, b) (i.e., smallest resource quantity) for
@@ -136,23 +129,13 @@ func Min(a v1.ResourceList, b v1.ResourceList) v1.ResourceList {
 	return result
 }
 
-// Contains returns true if the specified item is in the list of items
-func Contains(items []v1.ResourceName, item v1.ResourceName) bool {
-	for _, i := range items {
-		if i == item {
-			return true
-		}
-	}
-	return false
+// FilterUnlimited cleans up the raw usages by omitting not limited usages.
+func FilterUnlimited(rawUsages v1.ResourceList, limits v1.ResourceList) v1.ResourceList {
+	return mask(rawUsages, resourceNames(limits))
 }
 
-// CleanupUnneeded cleans up the raw usages by omitting not limited usages.
-func CleanupUnneeded(rawUsages v1.ResourceList, limits v1.ResourceList) v1.ResourceList {
-	return Mask(rawUsages, ResourceNames(limits))
-}
-
-// ResourceNames returns a list of all resource names in the ResourceList
-func ResourceNames(resources v1.ResourceList) []v1.ResourceName {
+// resourceNames returns a list of all resource names in the ResourceList
+func resourceNames(resources v1.ResourceList) []v1.ResourceName {
 	result := []v1.ResourceName{}
 	for resourceName := range resources {
 		result = append(result, resourceName)
@@ -160,8 +143,8 @@ func ResourceNames(resources v1.ResourceList) []v1.ResourceName {
 	return result
 }
 
-// Mask returns a new resource list that only has the values with the specified names
-func Mask(resources v1.ResourceList, names []v1.ResourceName) v1.ResourceList {
+// mask returns a new resource list that only has the values with the specified names
+func mask(resources v1.ResourceList, names []v1.ResourceName) v1.ResourceList {
 	nameSet := toSet(names)
 	result := v1.ResourceList{}
 	for key, value := range resources {

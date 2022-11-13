@@ -230,7 +230,7 @@ var _ = Describe("HRQ reconciler tests", func() {
 func forestSetSubtreeUsages(ns string, args ...string) {
 	TestForest.Lock()
 	defer TestForest.Unlock()
-	TestForest.Get(ns).UpdateSubtreeUsages(argsToResourceList(0, args...))
+	TestForest.Get(ns).TestOnlySetSubtreeUsage(argsToResourceList(0, args...))
 }
 
 func getHRQStatus(ctx context.Context, ns, nm string) func() v1.ResourceList {

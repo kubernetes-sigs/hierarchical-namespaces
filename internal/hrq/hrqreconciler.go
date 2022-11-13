@@ -141,15 +141,9 @@ func (r *HierarchicalResourceQuotaReconciler) syncUsages(inst *api.HierarchicalR
 	}
 	ns := r.Forest.Get(inst.GetNamespace())
 
-	// Get all usage counts in this namespace
-	usages := ns.GetSubtreeUsages()
-
-	// Get the names of all resource types being limited by this particular HRQ
-	nms := utils.ResourceNames(inst.Spec.Hard)
-
 	// Filter the usages to only include the resource types being limited by this HRQ and write those
 	// usages back to the HRQ status.
-	inst.Status.Used = utils.Mask(usages, nms)
+	inst.Status.Used = utils.FilterUnlimited(ns.GetSubtreeUsages(), inst.Spec.Hard)
 }
 
 func isDeleted(inst *api.HierarchicalResourceQuota) bool {
