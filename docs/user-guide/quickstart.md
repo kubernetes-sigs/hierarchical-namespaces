@@ -209,8 +209,8 @@ simply use the config subcommand:
 kubectl hns config set-resource secrets --mode Propagate
 ```
 
-  Note: As of HNC v0.9+, the supported modes are `Propagate`, `Remove` and
-  `Ignore`. More may be added in the future; you can run `kubectl hns config
+  Note: As of HNC v1.0+, the supported modes are `Propagate`, `Remove`,
+  `Ignore` and `AllowPropagate`. More may be added in the future; you can run `kubectl hns config
   set-resource` for the latest documentation.
 
 Now, we should be able to verify that `my-creds` was propagated to `service-1`:
