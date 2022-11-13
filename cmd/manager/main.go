@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"contrib.go.opencensus.io/exporter/prometheus"
 	"contrib.go.opencensus.io/exporter/stackdriver"
@@ -75,6 +76,7 @@ var (
 	webhooksOnly            bool
 	enableHRQ               bool
 	hncNamespace            string
+	hrqSyncInterval         time.Duration
 )
 
 // init preloads some global vars before main() starts. Since this is the top-level module, I'm not
@@ -153,6 +155,7 @@ func parseFlags() {
 	flag.BoolVar(&webhooksOnly, "webhooks-only", false, "Disables the controllers so HNC can be run in HA webhook mode")
 	flag.BoolVar(&enableHRQ, "enable-hrq", false, "Enables hierarchical resource quotas")
 	flag.StringVar(&hncNamespace, "namespace", "hnc-system", "Namespace where hnc-manager and hnc resources deployed")
+	flag.DurationVar(&hrqSyncInterval, "hrq-sync-interval", 1*time.Minute, "Frequency to double-check that all HRQ usages are up-to-date (shouldn't be needed)")
 	flag.Parse()
 
 	// Assign the array args to the configuration variables after the args are parsed.
@@ -307,9 +310,10 @@ func startControllers(mgr ctrl.Manager, certsReady chan struct{}) {
 	f := forest.NewForest()
 
 	opts := setup.Options{
-		NoWebhooks:    noWebhooks,
-		MaxReconciles: maxReconciles,
-		HRQ:           enableHRQ,
+		NoWebhooks:      noWebhooks,
+		MaxReconciles:   maxReconciles,
+		HRQ:             enableHRQ,
+		HRQSyncInterval: hrqSyncInterval,
 	}
 	setup.Create(setupLog, mgr, f, opts)
 

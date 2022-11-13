@@ -51,10 +51,6 @@ var (
 	TestForest         *forest.Forest
 )
 
-const (
-	HRQSyncInterval = 5 * time.Second
-)
-
 func HNCRun(t *testing.T, title string) {
 	RunSpecs(t, title)
 }
@@ -107,11 +103,10 @@ func HNCBeforeSuite() {
 
 	By("creating reconcilers")
 	opts := setup.Options{
-		MaxReconciles:   100,
-		UseFakeClient:   true,
-		HNCCfgRefresh:   1 * time.Second, // so we don't have to wait as long
-		HRQ:             true,
-		HRQSyncInterval: HRQSyncInterval,
+		MaxReconciles: 100,
+		UseFakeClient: true,
+		HNCCfgRefresh: 1 * time.Second, // so we don't have to wait as long
+		HRQ:           true,
 	}
 	TestForest = forest.NewForest()
 	err = setup.CreateReconcilers(k8sManager, TestForest, opts)
@@ -139,4 +134,8 @@ func HNCAfterSuite() {
 	Expect(testEnv).ToNot(BeNil())
 	err := testEnv.Stop()
 	Expect(err).ToNot(HaveOccurred())
+}
+
+func TestCheckHRQDrift() bool {
+	return setup.TestOnlyCheckHRQDrift(TestForest)
 }

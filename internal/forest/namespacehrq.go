@@ -1,9 +1,12 @@
 package forest
 
 import (
+	"errors"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/hierarchical-namespaces/internal/hrq/utils"
 )
@@ -245,4 +248,53 @@ func (n *Namespace) UpdateLimits(nm string, l v1.ResourceList) bool {
 	}
 	n.quotas.limits[nm] = l
 	return true
+}
+
+// RectifySubtreeUsages ensures that the subtree usages of every namespaces is in sync with all of
+// its descendants. This should be ensured by the logic in UseResources, but bugs happen, so this is
+// an added level of safety. If any discrepancies are found, this function logs an error, updates
+// the corrected usages in-memory, and returns a list of affected HRQ objects so that they can be
+// re-reconciled to show the corrected usages.
+//
+// The forest lock must be held when calling this function.
+func (f *Forest) RectifySubtreeUsages(log logr.Logger) []types.NamespacedName {
+	// Recalculate all usages from scratch
+	usages := map[string]v1.ResourceList{}
+	for _, ns := range f.namespaces {
+		local := ns.quotas.used.local
+		// NB: AncestryNames includes the namespace itself
+		for _, anc := range ns.AncestryNames() {
+			if existing, ok := usages[anc]; ok {
+				usages[anc] = utils.Add(existing, local)
+			} else {
+				usages[anc] = local
+			}
+		}
+	}
+
+	// Look for any out-of-date HRQ usages
+	updated := []types.NamespacedName{}
+	for nm, ns := range f.namespaces {
+		have := ns.quotas.used.subtree
+		actual := utils.FilterUnlimited(usages[nm], ns.Limits())
+		if utils.Equals(have, actual) {
+			continue
+		}
+
+		// Oopsies.
+		err := errors.New("HRQ correctness error")
+		log.Error(err, "incrementally calculated usages are incorrect", "ns", nm, "incremental", have, "actual", actual)
+
+		// Update and return info so the reconciler can write back the corrected usages.
+		ns.quotas.used.subtree = actual
+		for hrq := range ns.quotas.limits {
+			// These are the names of the actual objects
+			updated = append(updated, types.NamespacedName{
+				Namespace: nm,
+				Name:      hrq,
+			})
+		}
+	}
+
+	return updated
 }
