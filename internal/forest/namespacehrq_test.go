@@ -151,35 +151,13 @@ func TestTryUseResources(t *testing.T) {
 		req:      testReq{ns: "bar", use: "secrets 1 pods 1"},
 		expected: usages{"foo": "secrets 2", "bar": "secrets 1 pods 1"},
 	}, {
-		// Note: we are expecting an error here because this is a unit test for
-		// the `TryUseResources` function. In reality, negative resource usage
-		// changes won't get an error since K8s resource quota admission
-		// controller is not called, thus neither our webhook nor this function
-		// will be called to prevent users from deleting exceeded resources.
-		name: "deny decrease if it still exceeds limits",
+		name: "allow decrease if it still exceeds limits",
 		setup: []testNS{
 			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
 			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 4"},
 		},
-		req: testReq{ns: "bar", use: "secrets 2"},
-		// In reality it won't show negative number since neither K8s rq validator
-		// nor our rq validator will be called to output this message.
-		error: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "-2", used: "5", limited: "2"}}}},
-		// Usages should not be updated.
-		expected: usages{"foo": "secrets 5", "bar": "secrets 4"},
-	}, {
-		// Note: we are expecting an error here for the same reason in the above test.
-		name: "deny decrease if it still exceeds limits, while not affecting other resource usages",
-		setup: []testNS{
-			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
-			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 4 pods 1"},
-		},
-		req: testReq{ns: "bar", use: "secrets 2 pods 1"},
-		// In reality it won't show negative number since neither K8s rq validator
-		// nor our rq validator will be called to output this message.
-		error: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "-2", used: "5", limited: "2"}}}},
-		// Usages should not be updated.
-		expected: usages{"foo": "secrets 5", "bar": "secrets 4 pods 1"},
+		req:      testReq{ns: "bar", use: "secrets 2"},
+		expected: usages{"foo": "secrets 3", "bar": "secrets 2"},
 	}}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -251,53 +229,33 @@ func TestCanUseResource(t *testing.T) {
 		req:  testReq{ns: "bar", use: "secrets 3 pods 1"},
 		want: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "2", used: "2", limited: "2"}}}},
 	}, {
-		// Note: we are expecting an error here because this is a unit test for
-		// the `CanUseResources` function. In reality, negative resource usage
-		// changes won't get an error since K8s resource quota admission
-		// controller is not called, thus neither our webhook nor this function
-		// will be called to prevent users from deleting exceeded resources.
-		name: "deny decrease exceeding local limit when has parent",
+		name: "allow decrease exceeding local limit when has parent",
 		setup: []testNS{
 			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
 			{nm: "bar", ancs: "foo", limits: "pods 2", local: "pods 4"},
 		},
 		req: testReq{ns: "bar", use: "pods 3"},
-		// In reality it won't show negative number since neither K8s rq validator
-		// nor our rq validator will be called to output this message.
-		want: []wantError{{ns: "bar", nm: "barHrq", exceeded: []exceeded{{name: "pods", requested: "-1", used: "4", limited: "2"}}}},
 	}, {
-		// Note: we are expecting an error here for the same reason in the above test.
-		name: "deny decrease exceeding local limit when has parent, while not affecting other resource usages",
+		name: "allow decrease exceeding local limit when has parent, while not affecting other resource usages",
 		setup: []testNS{
 			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
 			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 1 pods 4"},
 		},
 		req: testReq{ns: "bar", use: "secrets 1 pods 3"},
-		// In reality it won't show negative number since neither K8s rq validator
-		// nor our rq validator will be called to output this message.
-		want: []wantError{{ns: "bar", nm: "barHrq", exceeded: []exceeded{{name: "pods", requested: "-1", used: "4", limited: "2"}}}},
 	}, {
-		// Note: we are expecting an error here for the same reason in the above test.
-		name: "deny decrease exceeding parent limit when has parent",
+		name: "allow decrease exceeding parent limit when has parent",
 		setup: []testNS{
 			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
 			{nm: "bar", ancs: "foo", limits: "secrets 100", local: "secrets 4"},
 		},
 		req: testReq{ns: "bar", use: "secrets 3"},
-		// In reality it won't show negative number since neither K8s rq validator
-		// nor our rq validator will be called to output this message.
-		want: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "-1", used: "5", limited: "2"}}}},
 	}, {
-		// Note: we are expecting an error here for the same reason in the above test.
-		name: "deny decrease exceeding parent limit when has parent, while not affecting other resource usages",
+		name: "allow decrease exceeding parent limit when has parent, while not affecting other resource usages",
 		setup: []testNS{
 			{nm: "foo", limits: "secrets 2", local: "secrets 1"},
 			{nm: "bar", ancs: "foo", limits: "secrets 100 pods 2", local: "secrets 4 pods 2"},
 		},
 		req: testReq{ns: "bar", use: "secrets 3 pods 2"},
-		// In reality it won't show negative number since neither K8s rq validator
-		// nor our rq validator will be called to output this message.
-		want: []wantError{{ns: "foo", nm: "fooHrq", exceeded: []exceeded{{name: "secrets", requested: "-1", used: "5", limited: "2"}}}},
 	}, {
 		name: "deny multiple resources exceeding limits",
 		setup: []testNS{

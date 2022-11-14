@@ -225,39 +225,6 @@ func TestSubtract(t *testing.T) {
 	}
 }
 
-func TestCopy(t *testing.T) {
-	tests := []struct {
-		name string
-		in   v1.ResourceList
-		want v1.ResourceList
-	}{
-		{
-			name: "noKeys",
-			in:   v1.ResourceList{},
-			want: v1.ResourceList{},
-		},
-		{
-			name: "hasKeys",
-			in: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("100m"),
-				v1.ResourceMemory: resource.MustParse("1Gi"),
-				v1.ResourcePods:   resource.MustParse("1")},
-			want: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("100m"),
-				v1.ResourceMemory: resource.MustParse("1Gi"),
-				v1.ResourcePods:   resource.MustParse("1")},
-		},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := Copy(tc.in)
-			if result := Equals(tc.want, got); !result {
-				t.Errorf("%s want: %v, got: %v", tc.name, tc.want, got)
-			}
-		})
-	}
-}
-
 func TestMin(t *testing.T) {
 	type inputs struct {
 		a v1.ResourceList
@@ -365,53 +332,11 @@ func TestResourceNames(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		got := ResourceNames(tc.in)
+		got := resourceNames(tc.in)
 		sort.Slice(got, func(i, j int) bool { return got[i] < got[j] })
 		sort.Slice(tc.want, func(i, j int) bool { return tc.want[i] < tc.want[j] })
 
 		if !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("%s expected: %v, actual: %v", tc.name, tc.want, got)
-		}
-	}
-}
-
-func TestContains(t *testing.T) {
-	type inputs struct {
-		a []v1.ResourceName
-		b v1.ResourceName
-	}
-	tests := []struct {
-		name string
-		in   inputs
-		want bool
-	}{
-		{
-			name: "empty slice",
-			in: inputs{
-				a: []v1.ResourceName{},
-				b: v1.ResourceCPU,
-			},
-			want: false,
-		},
-		{
-			name: "does not contain",
-			in: inputs{
-				a: []v1.ResourceName{v1.ResourceMemory},
-				b: v1.ResourceCPU,
-			},
-			want: false,
-		},
-		{
-			name: "contains",
-			in: inputs{
-				a: []v1.ResourceName{v1.ResourceMemory, v1.ResourceCPU},
-				b: v1.ResourceCPU,
-			},
-			want: true,
-		},
-	}
-	for _, tc := range tests {
-		if got := Contains(tc.in.a, tc.in.b); got != tc.want {
 			t.Errorf("%s expected: %v, actual: %v", tc.name, tc.want, got)
 		}
 	}
@@ -475,7 +400,7 @@ func TestMask(t *testing.T) {
 		},
 	}
 	for _, tc := range tests {
-		if got := Mask(tc.in.a, tc.in.b); !Equals(tc.want, got) {
+		if got := mask(tc.in.a, tc.in.b); !Equals(tc.want, got) {
 			t.Errorf("%s expected: %v, actual: %v", tc.name, tc.want, got)
 		}
 	}
@@ -520,7 +445,7 @@ func TestToSet(t *testing.T) {
 	}
 }
 
-func TestCleanupUnneeded(t *testing.T) {
+func TestFilterUnlimited(t *testing.T) {
 	tests := []struct {
 		name   string
 		usages v1.ResourceList
@@ -568,7 +493,7 @@ func TestCleanupUnneeded(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := CleanupUnneeded(tc.usages, tc.limits)
+			got := FilterUnlimited(tc.usages, tc.limits)
 			if result := Equals(tc.want, got); !result {
 				t.Errorf("%s want: %v, got: %v", tc.name, tc.want, got)
 			}
