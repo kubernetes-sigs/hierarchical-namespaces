@@ -257,7 +257,7 @@ For example, you might want to propagate the following Kinds of builtin objects:
   too many resources. However, users with the ability to create subnamespaces
   can effectively work around this limitation by simply creating a new child
   namespace with the same quota, though efforts are underway to restrict this
-  behaviour ([see below](#basic-labels)).
+  behaviour ([see below](#basic-exceptions)).
 * **Secrets:** Allows Secrets, such as credentials, to be shared across multiple
   namespaces. This is useful if credentials owned by a team must be shared
   across different microservices, or different versions of the same
