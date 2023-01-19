@@ -67,7 +67,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// Get instance from apiserver. If the instance doesn't exist, do nothing and early exist because
 	// HCR watches anchor and (if applicable) has already updated the parent HC when this anchor was
 	// purged.
-	inst, err := r.getInstance(ctx, pnm, nm)
+	baseInst, err := r.getInstance(ctx, pnm, nm)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			log.Info("Anchor has been deleted")
@@ -75,6 +75,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		return ctrl.Result{}, err
 	}
+	inst := baseInst.DeepCopy()
 
 	// Anchors in unmanaged namespace should be ignored. Make sure it
 	// doesn't have any finalizers, otherwise, leave it alone.
@@ -82,7 +83,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		if controllerutil.ContainsFinalizer(inst, api.MetaGroup) {
 			log.Info("Removing finalizers from anchor in unmanaged namespace", "reason", why)
 			controllerutil.RemoveFinalizer(inst, api.MetaGroup)
-			return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+			return ctrl.Result{}, r.writeInstance(ctx, log, inst, baseInst)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -96,7 +97,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			log.Info("Setting forbidden state on anchor with unmanaged name", "reason", why)
 			inst.Status.State = api.Forbidden
 			controllerutil.RemoveFinalizer(inst, api.MetaGroup)
-			return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+			return ctrl.Result{}, r.writeInstance(ctx, log, inst, baseInst)
 		}
 		return ctrl.Result{}, nil
 	}
@@ -113,7 +114,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	// Handle the case where the anchor is being deleted.
 	if !inst.DeletionTimestamp.IsZero() {
 		// Stop reconciliation as anchor is being deleted
-		return ctrl.Result{}, r.onDeleting(ctx, log, inst, snsInst)
+		return ctrl.Result{}, r.onDeleting(ctx, log, inst, baseInst, snsInst)
 	}
 	// Add finalizers on all non-forbidden anchors to ensure it's not deleted until
 	// after the subnamespace is deleted.
@@ -125,14 +126,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			// Write the "Missing" state to the anchor status if the subnamespace
 			// cannot be created for some reason. Without it, the anchor status will
 			// remain empty by default.
-			if anchorErr := r.writeInstance(ctx, log, inst); anchorErr != nil {
+			if anchorErr := r.writeInstance(ctx, log, inst, baseInst); anchorErr != nil {
 				log.Error(anchorErr, "while setting anchor state", "state", api.Missing, "reason", err)
 			}
 			return ctrl.Result{}, err
 		}
 	}
 
-	return ctrl.Result{}, r.writeInstance(ctx, log, inst)
+	return ctrl.Result{}, r.writeInstance(ctx, log, inst, baseInst)
 }
 
 // onDeleting returns true if the anchor is in the process of being deleted, and handles all
@@ -144,7 +145,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 // There are several conditions where we skip step 1 - for example, if we're uninstalling HNC, or
 // if allowCascadingDeletion is disabled but the subnamespace has descendants (see
 // shouldDeleteSubns for details). In such cases, we move straight to step 2.
-func (r *Reconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) error {
+func (r *Reconciler) onDeleting(ctx context.Context, log logr.Logger, inst, baseInst *api.SubnamespaceAnchor, snsInst *corev1.Namespace) error {
 	// We handle deletions differently depending on whether _one_ anchor is being deleted (i.e., the
 	// user wants to delete the namespace) or whether the Anchor CRD is being deleted, which usually
 	// means HNC is being uninstalled and we shouldn't delete _any_ namespaces.
@@ -164,7 +165,7 @@ func (r *Reconciler) onDeleting(ctx context.Context, log logr.Logger, inst *api.
 	case r.shouldFinalizeAnchor(log, inst, snsInst):
 		log.V(1).Info("Unblocking deletion") // V(1) since we'll very shortly show an "anchor deleted" message
 		controllerutil.RemoveFinalizer(inst, api.MetaGroup)
-		return r.writeInstance(ctx, log, inst)
+		return r.writeInstance(ctx, log, inst, baseInst)
 	default:
 		// There's nothing to do; we're just waiting for something to happen. Print out a log message
 		// indicating what we're waiting for.
@@ -341,15 +342,20 @@ func (r *Reconciler) getInstance(ctx context.Context, pnm, nm string) (*api.Subn
 	return inst, nil
 }
 
-func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *api.SubnamespaceAnchor) error {
+func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst, baseInst *api.SubnamespaceAnchor) error {
 	if inst.CreationTimestamp.IsZero() {
 		if err := r.Create(ctx, inst); err != nil {
 			log.Error(err, "while creating on apiserver")
 			return err
 		}
 	} else {
-		if err := r.Update(ctx, inst); err != nil {
-			log.Error(err, "while updating on apiserver")
+		err := r.Patch(ctx, inst, client.MergeFrom(baseInst))
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				log.Info("Anchor has been deleted")
+				return nil
+			}
+			log.Error(err, "while updating apiserver")
 			return err
 		}
 	}
@@ -358,6 +364,7 @@ func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *a
 
 // deleteInstance deletes the anchor instance. Note: Make sure there's no
 // finalizers on the instance before calling this function.
+//
 //lint:ignore U1000 Ignore for now, as it may be used again in the future
 func (r *Reconciler) deleteInstance(ctx context.Context, inst *api.SubnamespaceAnchor) error {
 	if err := r.Delete(ctx, inst); err != nil {

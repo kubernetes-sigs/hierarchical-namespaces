@@ -108,7 +108,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm string) error {
 	// Get the namespace. Early exist if the namespace doesn't exist or is purged.
 	// If so, there must be no namespace label or HC instance to delete.
-	nsInst, err := r.getNamespace(ctx, nm)
+	baseNsInst, err := r.getNamespace(ctx, nm)
+	nsInst := baseNsInst.DeepCopy()
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil
@@ -118,17 +119,19 @@ func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm st
 
 	// Remove the "included-namespace" label on excluded namespace if it exists.
 	r.removeIncludedNamespaceLabel(log, nsInst)
-	if err := r.writeNamespace(ctx, log, nsInst); err != nil {
+	if err := r.writeNamespace(ctx, log, nsInst, baseNsInst); err != nil {
 		return err
 	}
 
 	// Don't delete the hierarchy config, since the admin might be enabling and disabling the regex and
 	// we don't want this to be destructive. Instead, just remove the finalizers if there are any so that
 	// users can delete it if they like.
-	inst, _, err := r.getSingleton(ctx, nm)
+	baseInst, _, err := r.getSingleton(ctx, nm)
 	if err != nil {
 		return err
 	}
+	inst := baseInst.DeepCopy()
+
 	// Remove the finalizers if there are any. Note that while getSingleton can return an invalid
 	// object (i.e. one without a name or namespace, if there's no singleton on the server), it can
 	// never do that if there are finalizers or children so this is safe to write back.
@@ -137,8 +140,14 @@ func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm st
 		controllerutil.RemoveFinalizer(inst, api.FinalizerHasSubnamespace)
 		inst.Status.Children = nil
 		stats.WriteHierConfig()
-		if err := r.Update(ctx, inst); err != nil {
-			log.Error(err, "while removing finalizers on unmanaged namespace")
+
+		err := r.Patch(ctx, inst, client.MergeFrom(baseInst))
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				log.Info("Singleton has been deleted")
+				return nil
+			}
+			log.Error(err, "while removing finalizers and children on unmanaged singleton")
 			return err
 		}
 	}
@@ -148,7 +157,7 @@ func (r *Reconciler) handleUnmanaged(ctx context.Context, log logr.Logger, nm st
 
 func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) error {
 	// Load the namespace and make a copy
-	nsInst, err := r.getNamespace(ctx, nm)
+	baseNsInst, err := r.getNamespace(ctx, nm)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// The namespace doesn't exist or is purged. Update the forest and exit.
@@ -159,22 +168,26 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 		return err
 	}
 
+	nsInst := baseNsInst.DeepCopy()
+
 	// Add the "included-namespace" label to the namespace if it doesn't exist. The
 	// excluded namespaces should be already skipped earlier.
 	r.addIncludedNamespaceLabel(log, nsInst)
 
 	// Get singleton from apiserver. If it doesn't exist, this will be a blank object (i.e. without
 	// the name or namespace set).
-	inst, deletingCRD, err := r.getSingleton(ctx, nm)
+	baseInst, deletingCRD, err := r.getSingleton(ctx, nm)
 	if err != nil {
 		return err
 	}
 	// Don't _create_ the singleton if its CRD is being deleted. But if the singleton is already
 	// _present_, we may need to update it to remove finalizers (see #824).
-	if deletingCRD && inst.CreationTimestamp.IsZero() {
+	if deletingCRD && baseInst.CreationTimestamp.IsZero() {
 		log.Info("HierarchyConfiguration CRD is being deleted; will not sync")
 		return nil
 	}
+
+	inst := baseInst.DeepCopy()
 
 	// Get a list of subnamespace anchors from apiserver.
 	anms, err := r.getAnchorNames(ctx, nm)
@@ -194,7 +207,7 @@ func (r *Reconciler) reconcile(ctx context.Context, log logr.Logger, nm string) 
 	r.syncWithForest(log, nsInst, inst, deletingCRD, anms, parentAnchor)
 
 	// Write the instances.
-	return r.writeInstances(ctx, log, inst, nsInst)
+	return r.writeInstances(ctx, log, inst, baseInst, nsInst, baseNsInst)
 }
 
 func (r *Reconciler) onMissingNamespace(log logr.Logger, nm string) {
@@ -687,19 +700,19 @@ func (r *Reconciler) enqueueAffected(log logr.Logger, reason string, affected ..
 	}()
 }
 
-func (r *Reconciler) writeInstances(ctx context.Context, log logr.Logger, newHC *api.HierarchyConfiguration, newNS *corev1.Namespace) error {
+func (r *Reconciler) writeInstances(ctx context.Context, log logr.Logger, newHC, baseHC *api.HierarchyConfiguration, newNS, baseNS *corev1.Namespace) error {
 	isDeletingNS := !newNS.DeletionTimestamp.IsZero()
-	if err := r.writeHierarchy(ctx, log, newHC, isDeletingNS); err != nil {
+	if err := r.writeHierarchy(ctx, log, newHC, baseHC, isDeletingNS); err != nil {
 		return err
 	}
 
-	if err := r.writeNamespace(ctx, log, newNS); err != nil {
+	if err := r.writeNamespace(ctx, log, newNS, baseNS); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst *api.HierarchyConfiguration, isDeletingNS bool) error {
+func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst, baseInst *api.HierarchyConfiguration, isDeletingNS bool) error {
 	// The inst's name will be blank if it wasn't on the apiserver and we didn't want to make any
 	// changes to it (e.g. no children, conditions, etc).
 	if inst.GetName() == "" {
@@ -720,7 +733,12 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst *
 		}
 	} else {
 		log.V(1).Info("Updating singleton on apiserver", "conditions", len(inst.Status.Conditions))
-		if err := r.Update(ctx, inst); err != nil {
+		err := r.Patch(ctx, inst, client.MergeFrom(baseInst))
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				log.Info("Singleton has been deleted")
+				return nil
+			}
 			log.Error(err, "while updating apiserver")
 			return err
 		}
@@ -729,11 +747,17 @@ func (r *Reconciler) writeHierarchy(ctx context.Context, log logr.Logger, inst *
 	return nil
 }
 
-func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, inst *corev1.Namespace) error {
+func (r *Reconciler) writeNamespace(ctx context.Context, log logr.Logger, inst, baseInst *corev1.Namespace) error {
 	// NB: HCR can't create namespaces, that's only in anchor reconciler
 	stats.WriteNamespace()
 	log.V(1).Info("Updating namespace on apiserver")
-	if err := r.Update(ctx, inst); err != nil {
+
+	err := r.Patch(ctx, inst, client.MergeFrom(baseInst))
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			log.Info("Namespace has been deleted")
+			return nil
+		}
 		log.Error(err, "while updating apiserver")
 		return err
 	}
