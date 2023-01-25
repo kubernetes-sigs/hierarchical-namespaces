@@ -327,6 +327,17 @@ func MakeObjectWithLabels(ctx context.Context, resource string, nsName,
 	createdObjects = append(createdObjects, inst)
 }
 
+// MakeSecrettWithType creates an empty Secret with type given kind in a specific namespace.
+func MakeSecrettWithType(ctx context.Context, nsName, name, scType string) {
+	inst := &unstructured.Unstructured{}
+	inst.SetGroupVersionKind(GVKs["secrets"])
+	inst.SetNamespace(nsName)
+	inst.SetName(name)
+	inst.UnstructuredContent()["type"] = scType
+	ExpectWithOffset(1, K8sClient.Create(ctx, inst)).Should(Succeed())
+	createdObjects = append(createdObjects, inst)
+}
+
 // UpdateObjectWithAnnotations gets an object given it's kind, nsName and name, adds the annotation
 // and updates this object
 func UpdateObjectWithAnnotations(ctx context.Context, resource, nsName, name string, a map[string]string) {
