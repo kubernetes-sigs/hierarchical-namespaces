@@ -309,7 +309,7 @@ func (r *Reconciler) syncRemovedReconcilers(ctx context.Context) error {
 			continue
 		}
 		// The type does not exist in the Spec. Ignore subsequent reconciliations.
-		r.Log.Info("Resource config removed, will no longer update objects", "gvk", ts.GetGVK())
+		r.Log.V(1).Info("Resource config removed, will no longer update objects", "gvk", ts.GetGVK())
 		if err := ts.SetMode(ctx, r.Log, api.Ignore); err != nil {
 			return err // retry the reconciliation
 		}
