@@ -222,11 +222,22 @@ var exclusionByAnnotations = []ExclusionByAnnotationsSpec{
 	{Key: "openshift.io/description"},
 }
 
+// scExclusionsByType are known (Helm) type of Secret which are excluded from propagation.
+var scExclusionsByType = []string{"helm.sh/release.v1"}
+
 // isExcluded returns true to indicate that this object is excluded from being propagated
 func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 	name := inst.GetName()
 	kind := inst.GetKind()
 	group := inst.GroupVersionKind().Group
+
+	// exclusion by Secret type
+	for _, excludedSecretType := range scExclusionsByType {
+		if group == "" && kind == "Secret" && inst.UnstructuredContent()["type"] == excludedSecretType {
+			return true, nil
+		}
+	}
+
 	// exclusion by name
 	for _, excludedResourceName := range cmExclusionsByName {
 		if group == "" && kind == "ConfigMap" && name == excludedResourceName {

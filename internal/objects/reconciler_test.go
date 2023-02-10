@@ -435,6 +435,17 @@ var _ = Describe("Basic propagation", func() {
 		Eventually(HasObject(ctx, "configmaps", barName, "kube-root-ca.crt")).Should(BeFalse())
 	})
 
+	It("should not propagate builtin exclusions by Secret Type", func() {
+		SetParent(ctx, barName, fooName)
+		MakeSecrettWithType(ctx, fooName, "gets-propagated", "Opaque")
+		MakeSecrettWithType(ctx, fooName, "helm-secret", "helm.sh/release.v1")
+		AddToHNCConfig(ctx, "", "secrets", api.Propagate)
+
+		// We expect normal secrets to be propagated, but builtin exclusions not to be.
+		Eventually(HasObject(ctx, "secrets", barName, "gets-propagated")).Should(BeTrue())
+		Eventually(HasObject(ctx, "secrets", barName, "helm-secret")).Should(BeFalse())
+	})
+
 	It("should not propagate builtin exclusions by labels", func() {
 		SetParent(ctx, barName, fooName)
 		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-blocked", map[string]string{"cattle.io/creator": "norman"})
