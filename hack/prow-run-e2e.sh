@@ -54,7 +54,7 @@ echo "Starting script at $(date +%Y-%m-%d\ %H:%M:%S)"
 # done.
 echo
 echo Installing and starting Kind...
-go install sigs.k8s.io/kind@v0.12.0
+go install sigs.k8s.io/kind@v0.17.0
 kind create cluster --name hnc-e2e
 
 echo

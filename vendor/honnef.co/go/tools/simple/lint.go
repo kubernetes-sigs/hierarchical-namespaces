@@ -13,6 +13,7 @@ import (
 
 	"honnef.co/go/tools/analysis/code"
 	"honnef.co/go/tools/analysis/edit"
+	"honnef.co/go/tools/analysis/facts/purity"
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/analysis/report"
 	"honnef.co/go/tools/go/ast/astutil"
@@ -68,7 +69,7 @@ var (
 				[(AssignStmt (IndexExpr dst key) "=" (IndexExpr src key))])
 			(ForStmt
 				(AssignStmt key@(Ident _) ":=" (IntegerLiteral "0"))
-				(BinaryExpr key "<" (CallExpr (Function "len") [src]))
+				(BinaryExpr key "<" (CallExpr (Symbol "len") [src]))
 				(IncDecStmt key "++")
 				[(AssignStmt (IndexExpr dst key) "=" (IndexExpr src key))]))`)
 )
@@ -175,20 +176,20 @@ func CheckLoopCopy(pass *analysis.Pass) (interface{}, error) {
 				report.ShortRange(),
 				report.Fixes(edit.Fix("replace loop with assignment", edit.ReplaceWithNode(pass.Fset, node, r))))
 		} else {
-			opts := []report.Option{
-				report.ShortRange(),
-				report.FilterGenerated(),
-			}
 			tv, err := types.Eval(pass.Fset, pass.Pkg, node.Pos(), "copy")
 			if err == nil && tv.IsBuiltin() {
+				to := "to"
+				from := "from"
 				src := m.State["src"].(ast.Expr)
 				if TsrcArray {
+					from = "from[:]"
 					src = &ast.SliceExpr{
 						X: src,
 					}
 				}
 				dst := m.State["dst"].(ast.Expr)
 				if TdstArray {
+					to = "to[:]"
 					dst = &ast.SliceExpr{
 						X: dst,
 					}
@@ -198,9 +199,13 @@ func CheckLoopCopy(pass *analysis.Pass) (interface{}, error) {
 					Fun:  &ast.Ident{Name: "copy"},
 					Args: []ast.Expr{dst, src},
 				}
-				opts = append(opts, report.Fixes(edit.Fix("replace loop with call to copy()", edit.ReplaceWithNode(pass.Fset, node, r))))
+				opts := []report.Option{
+					report.ShortRange(),
+					report.FilterGenerated(),
+					report.Fixes(edit.Fix("replace loop with call to copy()", edit.ReplaceWithNode(pass.Fset, node, r))),
+				}
+				report.Report(pass, node, fmt.Sprintf("should use copy(%s, %s) instead of a loop", to, from), opts...)
 			}
-			report.Report(pass, node, "should use copy() instead of a loop", opts...)
 		}
 	}
 	code.Preorder(pass, fn, (*ast.ForStmt)(nil), (*ast.RangeStmt)(nil))
@@ -232,7 +237,7 @@ func CheckIfBoolCmp(pass *analysis.Pass) (interface{}, error) {
 			other = expr.X
 		}
 
-		ok := typeutil.All(pass.TypesInfo.TypeOf(other), func(term *typeparams.Term) bool {
+		ok := typeutil.All(pass.TypesInfo.TypeOf(other), func(term *types.Term) bool {
 			basic, ok := term.Type().Underlying().(*types.Basic)
 			return ok && basic.Kind() == types.Bool
 		})
@@ -385,7 +390,7 @@ func CheckStringsContains(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkBytesCompareQ  = pattern.MustParse(`(BinaryExpr (CallExpr (Function "bytes.Compare") args) op@(Or "==" "!=") (IntegerLiteral "0"))`)
+	checkBytesCompareQ  = pattern.MustParse(`(BinaryExpr (CallExpr (Symbol "bytes.Compare") args) op@(Or "==" "!=") (IntegerLiteral "0"))`)
 	checkBytesCompareRe = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "bytes") (Ident "Equal")) args)`)
 	checkBytesCompareRn = pattern.MustParse(`(UnaryExpr "!" (CallExpr (SelectorExpr (Ident "bytes") (Ident "Equal")) args))`)
 )
@@ -597,12 +602,11 @@ func negate(expr ast.Expr) ast.Expr {
 
 // CheckRedundantNilCheckWithLen checks for the following redundant nil-checks:
 //
-//   if x == nil || len(x) == 0 {}
-//   if x != nil && len(x) != 0 {}
-//   if x != nil && len(x) == N {} (where N != 0)
-//   if x != nil && len(x) > N {}
-//   if x != nil && len(x) >= N {} (where N != 0)
-//
+//	if x == nil || len(x) == 0 {}
+//	if x != nil && len(x) != 0 {}
+//	if x != nil && len(x) == N {} (where N != 0)
+//	if x != nil && len(x) > N {}
+//	if x != nil && len(x) >= N {} (where N != 0)
 func CheckRedundantNilCheckWithLen(pass *analysis.Pass) (interface{}, error) {
 	isConstZero := func(expr ast.Expr) (isConst bool, isZero bool) {
 		_, ok := expr.(*ast.BasicLit)
@@ -659,8 +663,7 @@ func CheckRedundantNilCheckWithLen(pass *analysis.Pass) (interface{}, error) {
 		if !ok {
 			return
 		}
-		yxFun, ok := yx.Fun.(*ast.Ident)
-		if !ok || yxFun.Name != "len" || len(yx.Args) != 1 {
+		if !code.IsCallTo(pass, yx, "len") {
 			return
 		}
 		yxArg, ok := yx.Args[knowledge.Arg("len.v")].(*ast.Ident)
@@ -706,7 +709,7 @@ func CheckRedundantNilCheckWithLen(pass *analysis.Pass) (interface{}, error) {
 		// finally check that xx type is one of array, slice, map or chan
 		// this is to prevent false positive in case if xx is a pointer to an array
 		typ := pass.TypesInfo.TypeOf(xx)
-		ok = typeutil.All(typ, func(term *typeparams.Term) bool {
+		ok = typeutil.All(typ, func(term *types.Term) bool {
 			switch term.Type().Underlying().(type) {
 			case *types.Slice:
 				return true
@@ -716,7 +719,7 @@ func CheckRedundantNilCheckWithLen(pass *analysis.Pass) (interface{}, error) {
 				return true
 			case *types.Pointer:
 				return false
-			case *typeparams.TypeParam:
+			case *types.TypeParam:
 				return false
 			default:
 				lint.ExhaustiveTypeSwitch(term.Type().Underlying())
@@ -767,22 +770,44 @@ func refersTo(pass *analysis.Pass, expr ast.Expr, ident types.Object) bool {
 }
 
 var checkLoopAppendQ = pattern.MustParse(`
+(Or
 	(RangeStmt
 		(Ident "_")
 		val@(Object _)
 		_
 		x
-		[(AssignStmt [lhs] "=" [(CallExpr (Builtin "append") [lhs val])])]) `)
+		[(AssignStmt [lhs] "=" [(CallExpr (Builtin "append") [lhs val])])])
+	(RangeStmt
+		idx@(Ident _)
+		nil
+		_
+		x
+		[(AssignStmt [lhs] "=" [(CallExpr (Builtin "append") [lhs (IndexExpr x idx)])])])
+	(RangeStmt
+		idx@(Ident _)
+		nil
+		_
+		x
+		[(AssignStmt val@(Object _) ":=" (IndexExpr x idx))
+		(AssignStmt [lhs] "=" [(CallExpr (Builtin "append") [lhs val])])]))`)
 
 func CheckLoopAppend(pass *analysis.Pass) (interface{}, error) {
+	pure := pass.ResultOf[purity.Analyzer].(purity.Result)
+
 	fn := func(node ast.Node) {
 		m, ok := code.Match(pass, checkLoopAppendQ, node)
 		if !ok {
 			return
 		}
 
-		val := m.State["val"].(types.Object)
-		if refersTo(pass, m.State["lhs"].(ast.Expr), val) {
+		val, ok := m.State["val"].(types.Object)
+		if ok && refersTo(pass, m.State["lhs"].(ast.Expr), val) {
+			return
+		}
+
+		if m.State["idx"] != nil && code.MayHaveSideEffects(pass, m.State["x"].(ast.Expr), pure) {
+			// When using an index-based loop, x gets evaluated repeatedly and thus should be pure.
+			// This doesn't matter for value-based loops, because x only gets evaluated once.
 			return
 		}
 
@@ -817,7 +842,7 @@ func CheckLoopAppend(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkTimeSinceQ = pattern.MustParse(`(CallExpr (SelectorExpr (CallExpr (Function "time.Now") []) (Function "(time.Time).Sub")) [arg])`)
+	checkTimeSinceQ = pattern.MustParse(`(CallExpr (SelectorExpr (CallExpr (Symbol "time.Now") []) (Symbol "(time.Time).Sub")) [arg])`)
 	checkTimeSinceR = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "time") (Ident "Since")) [arg])`)
 )
 
@@ -834,7 +859,7 @@ func CheckTimeSince(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkTimeUntilQ = pattern.MustParse(`(CallExpr (Function "(time.Time).Sub") [(CallExpr (Function "time.Now") [])])`)
+	checkTimeUntilQ = pattern.MustParse(`(CallExpr (Symbol "(time.Time).Sub") [(CallExpr (Symbol "time.Now") [])])`)
 	checkTimeUntilR = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "time") (Ident "Until")) [arg])`)
 )
 
@@ -986,7 +1011,7 @@ func CheckSimplerStructConversion(pass *analysis.Pass) (interface{}, error) {
 				return
 			}
 			// All fields must be initialized from the same object
-			if ident != nil && ident.Obj != id.Obj {
+			if ident != nil && pass.TypesInfo.ObjectOf(ident) != pass.TypesInfo.ObjectOf(id) {
 				return
 			}
 			typ2, _ = t.(*types.Named)
@@ -1047,7 +1072,7 @@ func CheckTrim(pass *analysis.Pass) (interface{}, error) {
 
 		switch node1 := node1.(type) {
 		case *ast.Ident:
-			return node1.Obj == node2.(*ast.Ident).Obj
+			return pass.TypesInfo.ObjectOf(node1) == pass.TypesInfo.ObjectOf(node2.(*ast.Ident))
 		case *ast.SelectorExpr, *ast.IndexExpr:
 			return astutil.Equal(node1, node2)
 		case *ast.BasicLit:
@@ -1373,7 +1398,7 @@ func CheckDeclareAssign(pass *analysis.Pass) (interface{}, error) {
 			}
 			for _, lhs := range assign.Lhs {
 				if oident, ok := lhs.(*ast.Ident); ok {
-					if oident.Obj == ident.Obj {
+					if pass.TypesInfo.ObjectOf(oident) == pass.TypesInfo.ObjectOf(ident) {
 						num++
 					}
 				}
@@ -1414,7 +1439,7 @@ func CheckDeclareAssign(pass *analysis.Pass) (interface{}, error) {
 			if !ok {
 				continue
 			}
-			if vspec.Names[0].Obj != ident.Obj {
+			if pass.TypesInfo.ObjectOf(vspec.Names[0]) != pass.TypesInfo.ObjectOf(ident) {
 				continue
 			}
 
@@ -1488,30 +1513,6 @@ func CheckRedundantBreak(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-func isStringer(T types.Type, msCache *typeutil.MethodSetCache) bool {
-	ms := msCache.MethodSet(T)
-	sel := ms.Lookup(nil, "String")
-	if sel == nil {
-		return false
-	}
-	fn, ok := sel.Obj().(*types.Func)
-	if !ok {
-		// should be unreachable
-		return false
-	}
-	sig := fn.Type().(*types.Signature)
-	if sig.Params().Len() != 0 {
-		return false
-	}
-	if sig.Results().Len() != 1 {
-		return false
-	}
-	if !typeutil.IsType(sig.Results().At(0).Type(), "string") {
-		return false
-	}
-	return true
-}
-
 func isFormatter(T types.Type, msCache *typeutil.MethodSetCache) bool {
 	// TODO(dh): this function also exists in staticcheck/lint.go – deduplicate.
 
@@ -1537,7 +1538,7 @@ func isFormatter(T types.Type, msCache *typeutil.MethodSetCache) bool {
 	return true
 }
 
-var checkRedundantSprintfQ = pattern.MustParse(`(CallExpr (Function "fmt.Sprintf") [format arg])`)
+var checkRedundantSprintfQ = pattern.MustParse(`(CallExpr (Symbol "fmt.Sprintf") [format arg])`)
 
 func CheckRedundantSprintf(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
@@ -1571,7 +1572,7 @@ func CheckRedundantSprintf(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 
-		if isStringer(typ, &irpkg.Prog.MethodSets) {
+		if types.Implements(typ, knowledge.Interfaces["fmt.Stringer"]) {
 			replacement := &ast.CallExpr{
 				Fun: &ast.SelectorExpr{
 					X:   arg,
@@ -1609,7 +1610,7 @@ func CheckRedundantSprintf(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkErrorsNewSprintfQ = pattern.MustParse(`(CallExpr (Function "errors.New") [(CallExpr (Function "fmt.Sprintf") args)])`)
+	checkErrorsNewSprintfQ = pattern.MustParse(`(CallExpr (Symbol "errors.New") [(CallExpr (Symbol "fmt.Sprintf") args)])`)
 	checkErrorsNewSprintfR = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "fmt") (Ident "Errorf")) args)`)
 )
 
@@ -1643,11 +1644,11 @@ func CheckNilCheckAroundRange(pass *analysis.Pass) (interface{}, error) {
 		if !ok {
 			return
 		}
-		ok = typeutil.All(m.State["x"].(types.Object).Type(), func(term *typeparams.Term) bool {
+		ok = typeutil.All(m.State["x"].(types.Object).Type(), func(term *types.Term) bool {
 			switch term.Type().Underlying().(type) {
 			case *types.Slice, *types.Map:
 				return true
-			case *typeparams.TypeParam, *types.Chan, *types.Pointer:
+			case *types.TypeParam, *types.Chan, *types.Pointer:
 				return false
 			default:
 				lint.ExhaustiveTypeSwitch(term.Type().Underlying())
@@ -1923,7 +1924,7 @@ func CheckUnnecessaryGuard(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkElaborateSleepQ = pattern.MustParse(`(SelectStmt (CommClause (UnaryExpr "<-" (CallExpr (Function "time.After") [arg])) body))`)
+	checkElaborateSleepQ = pattern.MustParse(`(SelectStmt (CommClause (UnaryExpr "<-" (CallExpr (Symbol "time.After") [arg])) body))`)
 	checkElaborateSleepR = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "time") (Ident "Sleep")) [arg])`)
 )
 
@@ -1953,16 +1954,16 @@ var (
 		(Or
 			(CallExpr
 				fn@(Or
-					(Function "fmt.Print")
-					(Function "fmt.Sprint")
-					(Function "fmt.Println")
-					(Function "fmt.Sprintln"))
-				[(CallExpr (Function "fmt.Sprintf") f:_)])
+					(Symbol "fmt.Print")
+					(Symbol "fmt.Sprint")
+					(Symbol "fmt.Println")
+					(Symbol "fmt.Sprintln"))
+				[(CallExpr (Symbol "fmt.Sprintf") f:_)])
 			(CallExpr
 				fn@(Or
-					(Function "fmt.Fprint")
-					(Function "fmt.Fprintln"))
-				[_ (CallExpr (Function "fmt.Sprintf") f:_)]))`)
+					(Symbol "fmt.Fprint")
+					(Symbol "fmt.Fprintln"))
+				[_ (CallExpr (Symbol "fmt.Sprintf") f:_)]))`)
 
 	checkTestingErrorSprintfQ = pattern.MustParse(`
 		(CallExpr
@@ -1979,11 +1980,11 @@ var (
 						"Print"
 						"Println"
 						"Skip")))
-			[(CallExpr (Function "fmt.Sprintf") args)])`)
+			[(CallExpr (Symbol "fmt.Sprintf") args)])`)
 
 	checkLogSprintfQ = pattern.MustParse(`
 		(CallExpr
-			(Function
+			(Symbol
 				(Or
 					"log.Fatal"
 					"log.Fatalln"
@@ -1991,7 +1992,7 @@ var (
 					"log.Panicln"
 					"log.Print"
 					"log.Println"))
-			[(CallExpr (Function "fmt.Sprintf") args)])`)
+			[(CallExpr (Symbol "fmt.Sprintf") args)])`)
 
 	checkSprintfMapping = map[string]struct {
 		recv        string
@@ -2106,8 +2107,8 @@ func CheckPrintSprintf(pass *analysis.Pass) (interface{}, error) {
 var checkSprintLiteralQ = pattern.MustParse(`
 	(CallExpr
 		fn@(Or
-			(Function "fmt.Sprint")
-			(Function "fmt.Sprintf"))
+			(Symbol "fmt.Sprint")
+			(Symbol "fmt.Sprintf"))
 		[lit@(BasicLit "STRING" _)])`)
 
 func CheckSprintLiteral(pass *analysis.Pass) (interface{}, error) {

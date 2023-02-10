@@ -20,8 +20,10 @@ import (
 
 	"honnef.co/go/tools/analysis/code"
 	"honnef.co/go/tools/analysis/edit"
-	"honnef.co/go/tools/analysis/facts"
+	"honnef.co/go/tools/analysis/facts/deprecated"
+	"honnef.co/go/tools/analysis/facts/generated"
 	"honnef.co/go/tools/analysis/facts/nilness"
+	"honnef.co/go/tools/analysis/facts/purity"
 	"honnef.co/go/tools/analysis/facts/typedness"
 	"honnef.co/go/tools/analysis/lint"
 	"honnef.co/go/tools/analysis/report"
@@ -500,51 +502,6 @@ func checkPrintfCallImpl(carg *Argument, f ir.Value, args []ir.Value) {
 		return ok && basic.Info()&info != 0
 	}
 
-	isStringer := func(T types.Type, ms *types.MethodSet) bool {
-		sel := ms.Lookup(nil, "String")
-		if sel == nil {
-			return false
-		}
-		fn, ok := sel.Obj().(*types.Func)
-		if !ok {
-			// should be unreachable
-			return false
-		}
-		sig := fn.Type().(*types.Signature)
-		if sig.Params().Len() != 0 {
-			return false
-		}
-		if sig.Results().Len() != 1 {
-			return false
-		}
-		if !typeutil.IsType(sig.Results().At(0).Type(), "string") {
-			return false
-		}
-		return true
-	}
-	isError := func(T types.Type, ms *types.MethodSet) bool {
-		sel := ms.Lookup(nil, "Error")
-		if sel == nil {
-			return false
-		}
-		fn, ok := sel.Obj().(*types.Func)
-		if !ok {
-			// should be unreachable
-			return false
-		}
-		sig := fn.Type().(*types.Signature)
-		if sig.Params().Len() != 0 {
-			return false
-		}
-		if sig.Results().Len() != 1 {
-			return false
-		}
-		if !typeutil.IsType(sig.Results().At(0).Type(), "string") {
-			return false
-		}
-		return true
-	}
-
 	isFormatter := func(T types.Type, ms *types.MethodSet) bool {
 		sel := ms.Lookup(nil, "Format")
 		if sel == nil {
@@ -567,18 +524,16 @@ func checkPrintfCallImpl(carg *Argument, f ir.Value, args []ir.Value) {
 		return true
 	}
 
-	seen := map[types.Type]bool{}
+	var seen typeutil.Map[struct{}]
 	var checkType func(verb rune, T types.Type, top bool) bool
 	checkType = func(verb rune, T types.Type, top bool) bool {
 		if top {
-			for k := range seen {
-				delete(seen, k)
-			}
+			seen = typeutil.Map[struct{}]{}
 		}
-		if seen[T] {
+		if _, ok := seen.At(T); ok {
 			return true
 		}
-		seen[T] = true
+		seen.Set(T, struct{}{})
 		if int(verb) >= len(verbs) {
 			// Unknown verb
 			return true
@@ -596,7 +551,7 @@ func checkPrintfCallImpl(carg *Argument, f ir.Value, args []ir.Value) {
 			return true
 		}
 
-		if flags&isString != 0 && (isStringer(T, ms) || isError(T, ms)) {
+		if flags&isString != 0 && (types.Implements(T, knowledge.Interfaces["fmt.Stringer"]) || types.Implements(T, knowledge.Interfaces["error"])) {
 			// Check for stringer early because we're about to dereference
 			return true
 		}
@@ -652,7 +607,7 @@ func checkPrintfCallImpl(carg *Argument, f ir.Value, args []ir.Value) {
 					return true
 				}
 			}
-			if isStringer(T, ms) || isError(T, ms) {
+			if types.Implements(T, knowledge.Interfaces["fmt.Stringer"]) || types.Implements(T, knowledge.Interfaces["error"]) {
 				return true
 			}
 		}
@@ -897,6 +852,13 @@ func checkUnsupportedMarshalXML(call *Call) {
 			} else {
 				arg.Invalid(fmt.Sprintf("trying to marshal unsupported type %s, via %s", typ, err.Path))
 			}
+		case *fakexml.CyclicTypeError:
+			typ := types.TypeString(err.Type, types.RelativeTo(arg.Value.Value.Parent().Pkg.Pkg))
+			if err.Path == "x" {
+				arg.Invalid(fmt.Sprintf("trying to marshal cyclic type %s", typ))
+			} else {
+				arg.Invalid(fmt.Sprintf("trying to marshal cyclic type %s, via %s", typ, err.Path))
+			}
 		case *fakexml.TagPathError:
 			// Vet does a better job at reporting this error, because it can flag the actual struct tags, not just the call to Marshal
 		default:
@@ -1027,7 +989,8 @@ func CheckTemplate(pass *analysis.Pass) (interface{}, error) {
 		}
 		if err != nil {
 			// TODO(dominikh): whitelist other parse errors, if any
-			if strings.Contains(err.Error(), "unexpected") {
+			if strings.Contains(err.Error(), "unexpected") ||
+				strings.Contains(err.Error(), "bad character") {
 				report.Report(pass, call.Args[knowledge.Arg("(*text/template.Template).Parse.text")], err.Error())
 			}
 		}
@@ -1037,7 +1000,7 @@ func CheckTemplate(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkTimeSleepConstantPatternQ   = pattern.MustParse(`(CallExpr (Function "time.Sleep") lit@(IntegerLiteral value))`)
+	checkTimeSleepConstantPatternQ   = pattern.MustParse(`(CallExpr (Symbol "time.Sleep") lit@(IntegerLiteral value))`)
 	checkTimeSleepConstantPatternRns = pattern.MustParse(`(BinaryExpr duration "*" (SelectorExpr (Ident "time") (Ident "Nanosecond")))`)
 	checkTimeSleepConstantPatternRs  = pattern.MustParse(`(BinaryExpr duration "*" (SelectorExpr (Ident "time") (Ident "Second")))`)
 )
@@ -1074,7 +1037,7 @@ var checkWaitgroupAddQ = pattern.MustParse(`
 		(CallExpr
 			(FuncLit
 				_
-				call@(CallExpr (Function "(*sync.WaitGroup).Add") _):_) _))`)
+				call@(CallExpr (Symbol "(*sync.WaitGroup).Add") _):_) _))`)
 
 func CheckWaitgroupAdd(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
@@ -1333,7 +1296,7 @@ func CheckLhsRhsIdentical(pass *analysis.Pass) (interface{}, error) {
 			// no terms, so floats are a possibility
 			return true
 		}
-		return tset.Any(func(term *typeparams.Term) bool {
+		return tset.Any(func(term *types.Term) bool {
 			switch typ := term.Type().Underlying().(type) {
 			case *types.Basic:
 				kind := typ.Kind()
@@ -1591,7 +1554,7 @@ func CheckEarlyDefer(pass *analysis.Pass) (interface{}, error) {
 			if !ok {
 				continue
 			}
-			if ident.Obj != lhs.Obj {
+			if pass.TypesInfo.ObjectOf(ident) != pass.TypesInfo.ObjectOf(lhs) {
 				continue
 			}
 			if sel.Sel.Name != "Close" {
@@ -1789,7 +1752,7 @@ func CheckUnreadVariableValues(pass *analysis.Pass) (interface{}, error) {
 		if node == nil {
 			continue
 		}
-		if gen, ok := code.Generator(pass, node.Pos()); ok && gen == facts.Goyacc {
+		if gen, ok := code.Generator(pass, node.Pos()); ok && gen == generated.Goyacc {
 			// Don't flag unused values in code generated by goyacc.
 			// There may be hundreds of those due to the way the state
 			// machine is constructed.
@@ -2122,7 +2085,7 @@ func CheckLoopCondition(pass *analysis.Pass) (interface{}, error) {
 			if !ok {
 				return true
 			}
-			if x.Obj != lhs.Obj {
+			if pass.TypesInfo.ObjectOf(x) != pass.TypesInfo.ObjectOf(lhs) {
 				return true
 			}
 			if _, ok := loop.Post.(*ast.IncDecStmt); !ok {
@@ -2262,13 +2225,13 @@ func CheckIneffectiveLoop(pass *analysis.Pass) (interface{}, error) {
 		if body == nil {
 			return
 		}
-		labels := map[*ast.Object]ast.Stmt{}
+		labels := map[types.Object]ast.Stmt{}
 		ast.Inspect(body, func(node ast.Node) bool {
 			label, ok := node.(*ast.LabeledStmt)
 			if !ok {
 				return true
 			}
-			labels[label.Label.Obj] = label.Stmt
+			labels[pass.TypesInfo.ObjectOf(label.Label)] = label.Stmt
 			return true
 		})
 
@@ -2280,7 +2243,7 @@ func CheckIneffectiveLoop(pass *analysis.Pass) (interface{}, error) {
 				body = node.Body
 				loop = node
 			case *ast.RangeStmt:
-				ok := typeutil.All(pass.TypesInfo.TypeOf(node.X), func(term *typeparams.Term) bool {
+				ok := typeutil.All(pass.TypesInfo.TypeOf(node.X), func(term *types.Term) bool {
 					switch term.Type().Underlying().(type) {
 					case *types.Slice, *types.Chan, *types.Basic, *types.Pointer, *types.Array:
 						return true
@@ -2320,11 +2283,11 @@ func CheckIneffectiveLoop(pass *analysis.Pass) (interface{}, error) {
 				case *ast.BranchStmt:
 					switch stmt.Tok {
 					case token.BREAK:
-						if stmt.Label == nil || labels[stmt.Label.Obj] == loop {
+						if stmt.Label == nil || labels[pass.TypesInfo.ObjectOf(stmt.Label)] == loop {
 							unconditionalExit = stmt
 						}
 					case token.CONTINUE:
-						if stmt.Label == nil || labels[stmt.Label.Obj] == loop {
+						if stmt.Label == nil || labels[pass.TypesInfo.ObjectOf(stmt.Label)] == loop {
 							unconditionalExit = nil
 							return false
 						}
@@ -2346,7 +2309,7 @@ func CheckIneffectiveLoop(pass *analysis.Pass) (interface{}, error) {
 						unconditionalExit = nil
 						return false
 					case token.CONTINUE:
-						if branch.Label != nil && labels[branch.Label.Obj] != loop {
+						if branch.Label != nil && labels[pass.TypesInfo.ObjectOf(branch.Label)] != loop {
 							return true
 						}
 						unconditionalExit = nil
@@ -2365,7 +2328,7 @@ func CheckIneffectiveLoop(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-var checkNilContextQ = pattern.MustParse(`(CallExpr fun@(Function _) (Builtin "nil"):_)`)
+var checkNilContextQ = pattern.MustParse(`(CallExpr fun@(Symbol _) (Builtin "nil"):_)`)
 
 func CheckNilContext(pass *analysis.Pass) (interface{}, error) {
 	todo := &ast.CallExpr{
@@ -2406,13 +2369,16 @@ func CheckNilContext(pass *analysis.Pass) (interface{}, error) {
 }
 
 var (
-	checkSeekerQ = pattern.MustParse(`(CallExpr fun@(SelectorExpr _ (Ident "Seek")) [arg1@(SelectorExpr (Ident "io") (Ident (Or "SeekStart" "SeekCurrent" "SeekEnd"))) arg2])`)
+	checkSeekerQ = pattern.MustParse(`(CallExpr fun@(SelectorExpr _ (Ident "Seek")) [arg1@(SelectorExpr _ (Symbol (Or "io.SeekStart" "io.SeekCurrent" "io.SeekEnd"))) arg2])`)
 	checkSeekerR = pattern.MustParse(`(CallExpr fun [arg2 arg1])`)
 )
 
 func CheckSeeker(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
-		if _, edits, ok := code.MatchAndEdit(pass, checkSeekerQ, checkSeekerR, node); ok {
+		if m, edits, ok := code.MatchAndEdit(pass, checkSeekerQ, checkSeekerR, node); ok {
+			if !code.IsMethod(pass, m.State["fun"].(*ast.SelectorExpr), "Seek", knowledge.Signatures["(io.Seeker).Seek"]) {
+				return
+			}
 			report.Report(pass, node, "the first argument of io.Seeker is the offset, but an io.Seek* constant is being used instead",
 				report.Fixes(edit.Fix("swap arguments", edits...)))
 		}
@@ -2845,21 +2811,6 @@ func CheckInfiniteRecursion(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-func objectName(obj types.Object) string {
-	if obj == nil {
-		return "<nil>"
-	}
-	var name string
-	if obj.Pkg() != nil && obj.Pkg().Scope().Lookup(obj.Name()) == obj {
-		s := obj.Pkg().Path()
-		if s != "" {
-			name += s + "."
-		}
-	}
-	name += obj.Name()
-	return name
-}
-
 func CheckLeakyTimeTick(pass *analysis.Pass) (interface{}, error) {
 	for _, fn := range pass.ResultOf[buildir.Analyzer].(*buildir.IR).SrcFuncs {
 		if code.IsMainLike(pass) || code.IsInTest(pass, fn) {
@@ -2948,7 +2899,7 @@ func CheckRepeatedIfElse(pass *analysis.Pass) (interface{}, error) {
 func CheckSillyBitwiseOps(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
 		binop := node.(*ast.BinaryExpr)
-		if !typeutil.All(pass.TypesInfo.TypeOf(binop), func(term *typeparams.Term) bool {
+		if !typeutil.All(pass.TypesInfo.TypeOf(binop), func(term *types.Term) bool {
 			b, ok := term.Type().Underlying().(*types.Basic)
 			if !ok {
 				return false
@@ -3058,8 +3009,8 @@ func CheckNonOctalFileMode(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-func CheckPureFunctions(pass *analysis.Pass) (interface{}, error) {
-	pure := pass.ResultOf[facts.Purity].(facts.PurityResult)
+func CheckSideEffectFreeCalls(pass *analysis.Pass) (interface{}, error) {
+	pure := pass.ResultOf[purity.Analyzer].(purity.Result)
 
 fnLoop:
 	for _, fn := range pass.ResultOf[buildir.Analyzer].(*buildir.IR).SrcFuncs {
@@ -3104,7 +3055,7 @@ fnLoop:
 						// special case for benchmarks in the fmt package
 						continue
 					}
-					report.Report(pass, ins, fmt.Sprintf("%s is a pure function but its return value is ignored", callee.Object().Name()))
+					report.Report(pass, ins, fmt.Sprintf("%s doesn't have side effects and its return value is ignored", callee.Object().Name()))
 				}
 			}
 		}
@@ -3113,19 +3064,92 @@ fnLoop:
 }
 
 func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
-	deprs := pass.ResultOf[facts.Deprecated].(facts.DeprecatedResult)
+	deprs := pass.ResultOf[deprecated.Analyzer].(deprecated.Result)
 
 	// Selectors can appear outside of function literals, e.g. when
 	// declaring package level variables.
 
-	isStdlib := func(obj types.Object) bool {
+	isStdlibPath := func(path string) bool {
 		// Modules with no dot in the first path element are reserved for the standard library and tooling.
 		// This is the best we can currently do.
 		// Nobody tells us which import paths are part of the standard library.
 		//
 		// We check the entire path instead of just the first path element, because the standard library doesn't contain paths with any dots, anyway.
 
-		return !strings.Contains(obj.Pkg().Path(), ".")
+		return !strings.Contains(path, ".")
+	}
+
+	handleDeprecation := func(depr *deprecated.IsDeprecated, node ast.Node, deprecatedObjName string, pkgPath string, tfn types.Object) {
+		// Note: gopls doesn't correctly run analyzers on
+		// dependencies, so we'll never be able to find deprecated
+		// objects in imported code. We've experimented with
+		// lifting the stdlib handling out of the general check,
+		// to at least work for deprecated objects in the stdlib,
+		// but we gave up on that, because we wouldn't have access
+		// to the deprecation message.
+		std, ok := knowledge.StdlibDeprecations[deprecatedObjName]
+		if !ok && isStdlibPath(pkgPath) {
+			// Deprecated object in the standard library, but we don't know the details of the deprecation.
+			// Don't flag it at all, to avoid flagging an object that was deprecated in 1.N when targeting 1.N-1.
+			// See https://staticcheck.io/issues/1108 for the background on this.
+			return
+		}
+		if ok {
+			switch std.AlternativeAvailableSince {
+			case knowledge.DeprecatedNeverUse:
+				// This should never be used, regardless of the
+				// targeted Go version. Examples include insecure
+				// cryptography or inherently broken APIs.
+				//
+				// We always want to flag these.
+			case knowledge.DeprecatedUseNoLonger:
+				// This should no longer be used. Using it with
+				// older Go versions might still make sense.
+				if !code.IsGoVersion(pass, std.DeprecatedSince) {
+					return
+				}
+			default:
+				if std.AlternativeAvailableSince < 0 {
+					panic(fmt.Sprintf("unhandled case %d", std.AlternativeAvailableSince))
+				}
+				// Look for the first available alternative, not the first
+				// version something was deprecated in. If a function was
+				// deprecated in Go 1.6, an alternative has been available
+				// already in 1.0, and we're targeting 1.2, it still
+				// makes sense to use the alternative from 1.0, to be
+				// future-proof.
+				if !code.IsGoVersion(pass, std.AlternativeAvailableSince) {
+					return
+				}
+			}
+		}
+
+		if tfn != nil {
+			if _, ok := deprs.Objects[tfn]; ok {
+				// functions that are deprecated may use deprecated
+				// symbols
+				return
+			}
+		}
+
+		if ok {
+			switch std.AlternativeAvailableSince {
+			case knowledge.DeprecatedNeverUse:
+				report.Report(pass, node,
+					fmt.Sprintf("%s has been deprecated since Go 1.%d because it shouldn't be used: %s",
+						report.Render(pass, node), std.DeprecatedSince, depr.Msg))
+			case std.DeprecatedSince, knowledge.DeprecatedUseNoLonger:
+				report.Report(pass, node,
+					fmt.Sprintf("%s has been deprecated since Go 1.%d: %s",
+						report.Render(pass, node), std.DeprecatedSince, depr.Msg))
+			default:
+				report.Report(pass, node,
+					fmt.Sprintf("%s has been deprecated since Go 1.%d and an alternative has been available since Go 1.%d: %s",
+						report.Render(pass, node), std.DeprecatedSince, std.AlternativeAvailableSince, depr.Msg))
+			}
+		} else {
+			report.Report(pass, node, fmt.Sprintf("%s is deprecated: %s", report.Render(pass, node), depr.Msg))
+		}
 	}
 
 	var tfn types.Object
@@ -3142,6 +3166,8 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
 		if fn, ok := node.(*ast.FuncDecl); ok {
 			tfn = pass.TypesInfo.ObjectOf(fn.Name)
 		}
+
+		// FIXME(dh): this misses dot-imported objects
 		sel, ok := node.(*ast.SelectorExpr)
 		if !ok {
 			return true
@@ -3154,76 +3180,31 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
 		if obj.Pkg() == nil {
 			return true
 		}
-		if pass.Pkg == obj.Pkg() || obj.Pkg().Path()+"_test" == pass.Pkg.Path() {
-			// Don't flag stuff in our own package
+
+		if obj.Pkg() == pass.Pkg {
+			// A package is allowed to use its own deprecated objects
+			return true
+		}
+
+		// A package "foo" has two related packages "foo_test" and "foo.test", for external tests and the package main
+		// generated by 'go test' respectively. "foo_test" can import and use "foo", "foo.test" imports and uses "foo"
+		// and "foo_test".
+
+		if strings.TrimSuffix(pass.Pkg.Path(), "_test") == obj.Pkg().Path() {
+			// foo_test (the external tests of foo) can use objects from foo.
+			return true
+		}
+		if strings.TrimSuffix(pass.Pkg.Path(), ".test") == obj.Pkg().Path() {
+			// foo.test (the main package of foo's tests) can use objects from foo.
+			return true
+		}
+		if strings.TrimSuffix(pass.Pkg.Path(), ".test") == strings.TrimSuffix(obj.Pkg().Path(), "_test") {
+			// foo.test (the main package of foo's tests) can use objects from foo's external tests.
 			return true
 		}
 
 		if depr, ok := deprs.Objects[obj]; ok {
-			// Note: gopls doesn't correctly run analyzers on
-			// dependencies, so we'll never be able to find deprecated
-			// objects in imported code. We've experimented with
-			// lifting the stdlib handling out of the general check,
-			// to at least work for deprecated objects in the stdlib,
-			// but we gave up on that, because we wouldn't have access
-			// to the deprecation message.
-			std, ok := knowledge.StdlibDeprecations[code.SelectorName(pass, sel)]
-			if !ok && isStdlib(obj) {
-				// Deprecated object in the standard library, but we don't know the details of the deprecation.
-				// Don't flag it at all, to avoid flagging an object that was deprecated in 1.N when targeting 1.N-1.
-				// See https://staticcheck.io/issues/1108 for the background on this.
-				return true
-			}
-			if ok {
-				switch std.AlternativeAvailableSince {
-				case knowledge.DeprecatedNeverUse:
-					// This should never be used, regardless of the
-					// targeted Go version. Examples include insecure
-					// cryptography or inherently broken APIs.
-					//
-					// We always want to flag these.
-				case knowledge.DeprecatedUseNoLonger:
-					// This should no longer be used. Using it with
-					// older Go versions might still make sense.
-					if !code.IsGoVersion(pass, std.DeprecatedSince) {
-						return true
-					}
-				default:
-					if std.AlternativeAvailableSince < 0 {
-						panic(fmt.Sprintf("unhandled case %d", std.AlternativeAvailableSince))
-					}
-					// Look for the first available alternative, not the first
-					// version something was deprecated in. If a function was
-					// deprecated in Go 1.6, an alternative has been available
-					// already in 1.0, and we're targeting 1.2, it still
-					// makes sense to use the alternative from 1.0, to be
-					// future-proof.
-					if !code.IsGoVersion(pass, std.AlternativeAvailableSince) {
-						return true
-					}
-				}
-			}
-
-			if tfn != nil {
-				if _, ok := deprs.Objects[tfn]; ok {
-					// functions that are deprecated may use deprecated
-					// symbols
-					return true
-				}
-			}
-
-			if ok {
-				if std.AlternativeAvailableSince == knowledge.DeprecatedNeverUse {
-					report.Report(pass, sel, fmt.Sprintf("%s has been deprecated since Go 1.%d because it shouldn't be used: %s", report.Render(pass, sel), std.DeprecatedSince, depr.Msg))
-				} else if std.AlternativeAvailableSince == std.DeprecatedSince || std.AlternativeAvailableSince == knowledge.DeprecatedUseNoLonger {
-					report.Report(pass, sel, fmt.Sprintf("%s has been deprecated since Go 1.%d: %s", report.Render(pass, sel), std.DeprecatedSince, depr.Msg))
-				} else {
-					report.Report(pass, sel, fmt.Sprintf("%s has been deprecated since Go 1.%d and an alternative has been available since Go 1.%d: %s", report.Render(pass, sel), std.DeprecatedSince, std.AlternativeAvailableSince, depr.Msg))
-				}
-			} else {
-				report.Report(pass, sel, fmt.Sprintf("%s is deprecated: %s", report.Render(pass, sel), depr.Msg))
-			}
-			return true
+			handleDeprecation(depr, sel, code.SelectorName(pass, sel), obj.Pkg().Path(), tfn)
 		}
 		return true
 	}
@@ -3242,11 +3223,25 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
 		if depr, ok := deprs.Packages[imp]; ok {
 			if path == "github.com/golang/protobuf/proto" {
 				gen, ok := code.Generator(pass, spec.Path.Pos())
-				if ok && gen == facts.ProtocGenGo {
+				if ok && gen == generated.ProtocGenGo {
 					return
 				}
 			}
-			report.Report(pass, spec, fmt.Sprintf("package %s is deprecated: %s", path, depr.Msg))
+
+			if strings.TrimSuffix(pass.Pkg.Path(), "_test") == path {
+				// foo_test can import foo
+				return
+			}
+			if strings.TrimSuffix(pass.Pkg.Path(), ".test") == path {
+				// foo.test can import foo
+				return
+			}
+			if strings.TrimSuffix(pass.Pkg.Path(), ".test") == strings.TrimSuffix(path, "_test") {
+				// foo.test can import foo_test
+				return
+			}
+
+			handleDeprecation(depr, spec.Path, path, path, nil)
 		}
 	}
 	pass.ResultOf[inspect.Analyzer].(*inspector.Inspector).Nodes(nil, fn)
@@ -3459,7 +3454,7 @@ func CheckMapBytesKey(pass *analysis.Pass) (interface{}, error) {
 				}
 				tset := typeutil.NewTypeSet(conv.X.Type())
 				// If at least one of the types is []byte, then it's more efficient to inline the conversion
-				if !tset.Any(func(term *typeparams.Term) bool {
+				if !tset.Any(func(term *types.Term) bool {
 					s, ok := term.Type().Underlying().(*types.Slice)
 					return ok && s.Elem().Underlying() == types.Universe.Lookup("byte").Type()
 				}) {
@@ -3509,7 +3504,7 @@ func CheckRangeStringRunes(pass *analysis.Pass) (interface{}, error) {
 }
 
 func CheckSelfAssignment(pass *analysis.Pass) (interface{}, error) {
-	pure := pass.ResultOf[facts.Purity].(facts.PurityResult)
+	pure := pass.ResultOf[purity.Analyzer].(purity.Result)
 
 	fn := func(node ast.Node) {
 		assign := node.(*ast.AssignStmt)
@@ -3748,7 +3743,7 @@ func CheckTimerResetReturnValue(pass *analysis.Pass) (interface{}, error) {
 var (
 	checkToLowerToUpperComparisonQ = pattern.MustParse(`
 	(BinaryExpr
-		(CallExpr fun@(Function (Or "strings.ToLower" "strings.ToUpper")) [a])
+		(CallExpr fun@(Symbol (Or "strings.ToLower" "strings.ToUpper")) [a])
  		tok@(Or "==" "!=")
  		(CallExpr fun [b]))`)
 	checkToLowerToUpperComparisonR = pattern.MustParse(`(CallExpr (SelectorExpr (Ident "strings") (Ident "EqualFold")) [a b])`)
@@ -3930,22 +3925,23 @@ func checkJSONTag(pass *analysis.Pass, field *ast.Field, tag string) {
 	//lint:ignore SA9003 TODO(dh): should we flag empty tags?
 	if len(tag) == 0 {
 	}
+	if i := strings.Index(tag, ",format:"); i >= 0 {
+		tag = tag[:i]
+	}
 	fields := strings.Split(tag, ",")
 	for _, r := range fields[0] {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("!#$%&()*+-./:<=>?@[]^_{|}~ ", r) {
 			report.Report(pass, field.Tag, fmt.Sprintf("invalid JSON field name %q", fields[0]))
 		}
 	}
-	var co, cs, ci int
+	options := make(map[string]int)
 	for _, s := range fields[1:] {
 		switch s {
-		case "omitempty":
-			co++
 		case "":
 			// allow stuff like "-,"
 		case "string":
-			cs++
 			// only for string, floating point, integer and bool
+			options[s]++
 			tset := typeutil.NewTypeSet(pass.TypesInfo.TypeOf(field.Type))
 			if len(tset.Terms) == 0 {
 				// TODO(dh): improve message, call out the use of type parameters
@@ -3962,20 +3958,23 @@ func checkJSONTag(pass *analysis.Pass, field *ast.Field, tag string) {
 					}
 				}
 			}
-		case "inline":
-			ci++
+		case "omitzero", "omitempty", "nocase", "inline", "unknown":
+			options[s]++
 		default:
 			report.Report(pass, field.Tag, fmt.Sprintf("unknown JSON option %q", s))
 		}
 	}
-	if co > 1 {
-		report.Report(pass, field.Tag, `duplicate JSON option "omitempty"`)
+	var duplicates []string
+	for option, n := range options {
+		if n > 1 {
+			duplicates = append(duplicates, option)
+		}
 	}
-	if cs > 1 {
-		report.Report(pass, field.Tag, `duplicate JSON option "string"`)
-	}
-	if ci > 1 {
-		report.Report(pass, field.Tag, `duplicate JSON option "inline"`)
+	if len(duplicates) > 0 {
+		sort.Strings(duplicates)
+		for _, option := range duplicates {
+			report.Report(pass, field.Tag, fmt.Sprintf("duplicate JSON option %q", option))
+		}
 	}
 }
 
@@ -4030,12 +4029,12 @@ func CheckImpossibleTypeAssertion(pass *analysis.Pass) (interface{}, error) {
 
 				ms := msc.MethodSet(left)
 				for i := 0; i < righti.NumMethods(); i++ {
-					mr := righti.Method(i)
+					mr := righti.Method(i).Origin()
 					sel := ms.Lookup(mr.Pkg(), mr.Name())
 					if sel == nil {
 						continue
 					}
-					ml := sel.Obj().(*types.Func)
+					ml := sel.Obj().(*types.Func).Origin()
 					if types.AssignableTo(ml.Type(), mr.Type()) {
 						continue
 					}
@@ -4169,7 +4168,7 @@ func CheckMaybeNil(pass *analysis.Pass) (interface{}, error) {
 					ptr = instr.Addr
 				case *ir.IndexAddr:
 					ptr = instr.X
-					if typeutil.All(ptr.Type(), func(term *typeparams.Term) bool {
+					if typeutil.All(ptr.Type(), func(term *types.Term) bool {
 						if _, ok := term.Type().Underlying().(*types.Slice); ok {
 							return true
 						}
@@ -4585,6 +4584,14 @@ func CheckTypedNilInterface(pass *analysis.Pass) (interface{}, error) {
 					default:
 						panic("unreachable")
 					}
+
+					terms, err := typeparams.NormalTerms(x.X.Type())
+					if len(terms) == 0 || err != nil {
+						// Type is a type parameter with no type terms (or we couldn't determine the terms). Such a type
+						// _can_ be nil when put in an interface value.
+						continue
+					}
+
 					if report.HasRange(x.X) {
 						report.Report(pass, binop, fmt.Sprintf("this comparison is %s true", qualifier),
 							report.Related(x.X, "the lhs of the comparison gets its value from here and has a concrete type"))
@@ -4965,6 +4972,10 @@ func CheckTypeAssertionShadowingElse(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 		irfn := ir.EnclosingFunction(irpkg, path)
+		if irfn == nil {
+			// For example for functions named "_", because we don't generate IR for them.
+			return
+		}
 
 		shadoweeIR, isAddr := irfn.ValueForExpr(m.State["obj"].(*ast.Ident))
 		if shadoweeIR == nil || isAddr {
@@ -5017,7 +5028,7 @@ func CheckTypeAssertionShadowingElse(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-var ineffectiveSortQ = pattern.MustParse(`(AssignStmt target@(Ident _) "=" (CallExpr typ@(Function (Or "sort.Float64Slice" "sort.IntSlice" "sort.StringSlice")) [target]))`)
+var ineffectiveSortQ = pattern.MustParse(`(AssignStmt target@(Ident _) "=" (CallExpr typ@(Symbol (Or "sort.Float64Slice" "sort.IntSlice" "sort.StringSlice")) [target]))`)
 
 func CheckIneffectiveSort(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
@@ -5066,7 +5077,7 @@ func CheckIneffectiveSort(pass *analysis.Pass) (interface{}, error) {
 
 var ineffectiveRandIntQ = pattern.MustParse(`
 	(CallExpr
-		(Function
+		(Symbol
 			name@(Or
 				"math/rand.Int31n"
 				"math/rand.Int63n"
@@ -5096,7 +5107,9 @@ var allocationNilCheckQ = pattern.MustParse(`(IfStmt _ cond@(BinaryExpr lhs op@(
 
 func CheckAllocationNilCheck(pass *analysis.Pass) (interface{}, error) {
 	irpkg := pass.ResultOf[buildir.Analyzer].(*buildir.IR).Pkg
-	fn := func(node ast.Node) {
+
+	var path []ast.Node
+	fn := func(node ast.Node, stack []ast.Node) {
 		m, ok := code.Match(pass, allocationNilCheckQ, node)
 		if !ok {
 			return
@@ -5107,12 +5120,15 @@ func CheckAllocationNilCheck(pass *analysis.Pass) (interface{}, error) {
 			return
 		}
 		lhs := m.State["lhs"].(ast.Expr)
-		path, exact := astutil.PathEnclosingInterval(code.File(pass, lhs), lhs.Pos(), lhs.Pos())
-		if !exact {
-			// TODO(dh): when can this happen?
-			return
+		path = path[:0]
+		for i := len(stack) - 1; i >= 0; i-- {
+			path = append(path, stack[i])
 		}
 		irfn := ir.EnclosingFunction(irpkg, path)
+		if irfn == nil {
+			// For example for functions named "_", because we don't generate IR for them.
+			return
+		}
 		v, isAddr := irfn.ValueForExpr(lhs)
 		if isAddr {
 			return
@@ -5208,8 +5224,7 @@ func CheckAllocationNilCheck(pass *analysis.Pass) (interface{}, error) {
 				report.Report(pass, cond, fallback)
 			}
 		}
-
 	}
-	code.Preorder(pass, fn, (*ast.IfStmt)(nil))
+	code.PreorderStack(pass, fn, (*ast.IfStmt)(nil))
 	return nil, nil
 }

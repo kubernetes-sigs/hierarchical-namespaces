@@ -2,8 +2,8 @@ package hrq
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
-	"math/rand"
 	"strings"
 
 	"github.com/go-logr/logr"

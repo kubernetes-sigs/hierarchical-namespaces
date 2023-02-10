@@ -273,7 +273,8 @@ func AddToHNCConfig(ctx context.Context, group, resource string, mode api.Synchr
 }
 
 // HasObject returns true if a namespace contains a specific object of the given kind.
-//  The kind and its corresponding GVK should be included in the GVKs map.
+//
+//	The kind and its corresponding GVK should be included in the GVKs map.
 func HasObject(ctx context.Context, resource string, nsName, name string) func() bool {
 	// `Eventually` only works with a fn that doesn't take any args.
 	return func() bool {

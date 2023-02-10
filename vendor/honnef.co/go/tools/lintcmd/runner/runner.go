@@ -2,7 +2,7 @@
 // of on-disk caching to reduce overall memory usage and to speed up
 // repeat runs.
 //
-// Public API
+// # Public API
 //
 // A Runner maps a list of analyzers and package patterns to a list of
 // results. Results provide access to diagnostics, directives, errors
@@ -12,7 +12,7 @@
 // that requires access to the loaded representation of a package has
 // to occur inside analyzers.
 //
-// Planning and execution
+// # Planning and execution
 //
 // Analyzing packages is split into two phases: planning and
 // execution.
@@ -38,7 +38,7 @@
 // execution of individual analyzers is bounded by the same semaphore
 // as executing packages.
 //
-// Parallelism
+// # Parallelism
 //
 // Actions are executed in parallel where the dependency graph allows.
 // Overall parallelism is bounded by a semaphore, sized according to
@@ -56,7 +56,7 @@
 // the dependency graph. A lot of inter-connected packages will see
 // less parallelism than a lot of independent packages.
 //
-// Caching
+// # Caching
 //
 // The runner caches facts, directives and diagnostics in a
 // content-addressable cache that is designed after Go's own cache.
@@ -118,7 +118,6 @@ import (
 	"go/token"
 	"go/types"
 	"io"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"runtime"
@@ -210,7 +209,7 @@ func serializeDirective(dir lint.Directive, fset *token.FileSet) SerializedDirec
 type ResultData struct {
 	Directives  []SerializedDirective
 	Diagnostics []Diagnostic
-	Unused      unused.SerializedResult
+	Unused      unused.Result
 }
 
 func (r Result) Load() (ResultData, error) {
@@ -231,20 +230,14 @@ func (r Result) Load() (ResultData, error) {
 	return out, err
 }
 
-type Want struct {
-	Position token.Position
-	Comment  string
-}
-
 // TestData contains extra information about analysis runs that is only available in test mode.
 type TestData struct {
-	// Wants contains a list of '// want' comments extracted from Go files.
-	// These comments are used in unit tests.
-	Wants []Want
 	// Facts contains facts produced by analyzers for a package.
 	// Unlike vetx, this list only contains facts specific to this package,
 	// not all facts for the transitive closure of dependencies.
 	Facts []TestFact
+	// List of files that were part of the package.
+	Files []string
 }
 
 // LoadTest returns data relevant to testing.
@@ -634,8 +627,8 @@ func (r *subrunner) do(act action) error {
 
 		if r.TestMode {
 			out := TestData{
-				Wants: result.wants,
 				Facts: result.testFacts,
+				Files: result.lpkg.GoFiles,
 			}
 			a.testData, err = r.writeCacheGob(a, "testdata", out)
 			if err != nil {
@@ -666,7 +659,7 @@ func (r *Runner) writeCacheReader(a *packageAction, kind string, rs io.ReadSeeke
 }
 
 func (r *Runner) writeCacheGob(a *packageAction, kind string, data interface{}) (string, error) {
-	f, err := ioutil.TempFile("", "staticcheck")
+	f, err := os.CreateTemp("", "staticcheck")
 	if err != nil {
 		return "", err
 	}
@@ -684,14 +677,13 @@ func (r *Runner) writeCacheGob(a *packageAction, kind string, data interface{}) 
 type packageActionResult struct {
 	facts   []gobFact
 	diags   []Diagnostic
-	unused  unused.SerializedResult
+	unused  unused.Result
 	dirs    []lint.Directive
 	lpkg    *loader.Package
 	skipped bool
 
 	// Only set when using test mode
 	testFacts []TestFact
-	wants     []Want
 }
 
 func (r *subrunner) doUncached(a *packageAction) (packageActionResult, error) {
@@ -727,41 +719,9 @@ func (r *subrunner) doUncached(a *packageAction) (packageActionResult, error) {
 	}
 	res, err := r.runAnalyzers(a, pkg)
 
-	var wants []Want
-	if r.TestMode {
-		// Extract 'want' comments from parsed Go files.
-		for _, f := range pkg.Syntax {
-			for _, cgroup := range f.Comments {
-				for _, c := range cgroup.List {
-
-					text := strings.TrimPrefix(c.Text, "//")
-					if text == c.Text { // not a //-comment.
-						text = strings.TrimPrefix(text, "/*")
-						text = strings.TrimSuffix(text, "*/")
-					}
-
-					// Hack: treat a comment of the form "//...// want..."
-					// or "/*...// want... */
-					// as if it starts at 'want'.
-					// This allows us to add comments on comments,
-					// as required when testing the buildtag analyzer.
-					if i := strings.Index(text, "// want"); i >= 0 {
-						text = text[i+len("// "):]
-					}
-
-					posn := pkg.Fset.Position(c.Pos())
-					wants = append(wants, Want{Position: posn, Comment: text})
-				}
-			}
-		}
-
-		// TODO(dh): add support for non-Go files
-	}
-
 	return packageActionResult{
 		facts:     res.facts,
 		testFacts: res.testFacts,
-		wants:     wants,
 		diags:     res.diagnostics,
 		unused:    res.unused,
 		dirs:      dirs,
@@ -1041,7 +1001,7 @@ func (ar *analyzerRunner) do(act action) error {
 type analysisResult struct {
 	facts       []gobFact
 	diagnostics []Diagnostic
-	unused      unused.SerializedResult
+	unused      unused.Result
 
 	// Only set when using test mode
 	testFacts []TestFact
@@ -1106,12 +1066,12 @@ func (r *subrunner) runAnalyzers(pkgAct *packageAction, pkg *loader.Package) (an
 		}
 	}
 
-	var unusedResult unused.SerializedResult
+	var unusedResult unused.Result
 	for _, a := range all {
 		if a != root && a.Analyzer.Name == "U1000" && !a.failed {
 			// TODO(dh): figure out a clean abstraction, instead of
 			// special-casing U1000.
-			unusedResult = unused.Serialize(a.Pass, a.Result.(unused.Result), pkg.Fset)
+			unusedResult = a.Result.(unused.Result)
 		}
 
 		for key, fact := range a.ObjectFacts {

@@ -132,12 +132,12 @@ func (n *Namespace) canUseResources(u v1.ResourceList) error {
 // UseResources can be called in the following scenarios:
 //   - Called by the HRQ admission controller when a request is allowed
 //   - Called by the HRQ ResourceQuota reconciler when it observes `local`
-//  usages are different from ResourceQuota.Status.Used
+//     usages are different from ResourceQuota.Status.Used
 //   - Called by the HRQ Namespace reconciler to remove `local` usages of a
-//  namespace from the subtree usages of the previous ancestors of the namespace.
+//     namespace from the subtree usages of the previous ancestors of the namespace.
 //   - Called by the SetParent to remove `local` usages of a namespace from
-//  the subtree usages of the previous ancestors of the namespace and add the
-//  usages to the new ancestors following a parent update
+//     the subtree usages of the previous ancestors of the namespace and add the
+//     usages to the new ancestors following a parent update
 func (n *Namespace) UseResources(newUsage v1.ResourceList) {
 	oldUsage := n.quotas.used.local
 

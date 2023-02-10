@@ -39,14 +39,14 @@ type HRQEnqueuer interface {
 
 // ResourceQuotaReconciler reconciles singleton RQ per namespace, which represents the HRQ in this
 // and any ancestor namespaces. The reconciler is called on two occasions:
-// 1. The HRQ in this or an ancestor namespace has changed. This can either be because an HRQ has
-//    been modified (in which case, the HRQR will call EnqueueSubtree) or because the ancestors of
-//    this namespace have changed (in which case, the NSR will call OnChangeNamespace). Either way,
-//    this will typically result in the limits being updated.
-// 2. The K8s apiserver has modified the usage of this RQ, typically in response to a resource being
-//    _released_ but it's also possible to observe increasing usage here as well (see go/hnc-hrq for
-//    details). In such cases, we basically just need to enqueue the HRQs in all ancestor namespaces
-//    so that they can update their usages as well.
+//  1. The HRQ in this or an ancestor namespace has changed. This can either be because an HRQ has
+//     been modified (in which case, the HRQR will call EnqueueSubtree) or because the ancestors of
+//     this namespace have changed (in which case, the NSR will call OnChangeNamespace). Either way,
+//     this will typically result in the limits being updated.
+//  2. The K8s apiserver has modified the usage of this RQ, typically in response to a resource being
+//     _released_ but it's also possible to observe increasing usage here as well (see go/hnc-hrq for
+//     details). In such cases, we basically just need to enqueue the HRQs in all ancestor namespaces
+//     so that they can update their usages as well.
 type ResourceQuotaReconciler struct {
 	client.Client
 	eventRecorder record.EventRecorder
@@ -198,10 +198,10 @@ func (r *ResourceQuotaReconciler) deleteSingleton(ctx context.Context, log logr.
 // syncWithForest syncs limits and resource usages of in-memory `hrq` objects of
 // current namespace and its ancestors with the ResourceQuota object of the
 // namespace. Specifically, it performs following tasks:
-// - Syncs `ResourceQuota.Spec.Hard` with `hrq.hard` of the current namespace
-//   and its ancestors.
-// - Updates `hrq.used.local` of the current namespace and `hrq.used.subtree`
-//   of the current namespace and its ancestors based on `ResourceQuota.Status.Used`.
+//   - Syncs `ResourceQuota.Spec.Hard` with `hrq.hard` of the current namespace
+//     and its ancestors.
+//   - Updates `hrq.used.local` of the current namespace and `hrq.used.subtree`
+//     of the current namespace and its ancestors based on `ResourceQuota.Status.Used`.
 func (r *ResourceQuotaReconciler) syncWithForest(log logr.Logger, inst *v1.ResourceQuota) bool {
 	r.Forest.Lock()
 	defer r.Forest.Unlock()

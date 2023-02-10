@@ -32,10 +32,10 @@ type RQEnqueuer interface {
 
 // HierarchicalResourceQuotaReconciler reconciles a HierarchicalResourceQuota object. It has three key
 // purposes:
-// 1. Update the in-memory forest with all the limits defined in the HRQ spec, so that they can be
-//    used during admission control to reject requests.
-// 2. Write all the usages from the in-memory forest back to the HRQ status.
-// 3. Enqueue all relevant RQs when an HRQ changes.
+//  1. Update the in-memory forest with all the limits defined in the HRQ spec, so that they can be
+//     used during admission control to reject requests.
+//  2. Write all the usages from the in-memory forest back to the HRQ status.
+//  3. Enqueue all relevant RQs when an HRQ changes.
 type HierarchicalResourceQuotaReconciler struct {
 	client.Client
 	Log logr.Logger
