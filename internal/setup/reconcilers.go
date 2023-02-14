@@ -16,6 +16,11 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/hrq"
 )
 
+var (
+	// hrqrForTesting is used by TestOnlyCheckHRQDrift
+	hrqrForTesting *hrq.HierarchicalResourceQuotaReconciler
+)
+
 type Options struct {
 	MaxReconciles   int
 	UseFakeClient   bool
@@ -89,6 +94,7 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 			RQR:    rqr,
 		}
 		rqr.HRQR = hrqr
+		hrqrForTesting = hrqr
 		f.AddListener(hrqr)
 
 		if err := rqr.SetupWithManager(mgr); err != nil {
@@ -101,7 +107,7 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 
 		// Create a periodic checker to make sure the forest is not out-of-sync.
 		if opts.HRQSyncInterval != 0 {
-			go detectIncrementalHRQUsageDrift(f, opts.HRQSyncInterval, hrqr)
+			go watchHRQDrift(f, opts.HRQSyncInterval, hrqr)
 		}
 	}
 
@@ -118,13 +124,27 @@ func CreateReconcilers(mgr ctrl.Manager, f *forest.Forest, opts Options) error {
 	return nil
 }
 
-func detectIncrementalHRQUsageDrift(f *forest.Forest, forestSyncInterval time.Duration, hrqr *hrq.HierarchicalResourceQuotaReconciler) {
+func watchHRQDrift(f *forest.Forest, forestSyncInterval time.Duration, hrqr *hrq.HierarchicalResourceQuotaReconciler) {
 	syncTicker := time.NewTicker(forestSyncInterval)
 	for {
 		<-syncTicker.C
-		// If there's any out-of-sync, enqueue the affected HRQs to update usages.
-		// If not, nothing will be enqueued.
-		//hrqr.Enqueue(hrqr.Log, "recover out-of-sync usages", f.CheckSubtreeUsages())
-		hrqr.Log.Info("TODO: recover out-of-sync usages")
+		checkHRQDrift(f, hrqr)
 	}
+}
+
+func checkHRQDrift(f *forest.Forest, hrqr *hrq.HierarchicalResourceQuotaReconciler) bool {
+	f.Lock()
+	defer f.Unlock()
+	found := false
+	for _, nsnm := range f.RectifySubtreeUsages(hrqr.Log) {
+		found = true
+		hrqr.Enqueue(hrqr.Log, "usage out-of-sync", nsnm.Namespace, nsnm.Name)
+	}
+	return found
+}
+
+// TestOnlyCheckHRQDrift is used in the integ tests to invoke the checker at exactly the right time
+// to verify that it works as expected.
+func TestOnlyCheckHRQDrift(f *forest.Forest) bool {
+	return checkHRQDrift(f, hrqrForTesting)
 }

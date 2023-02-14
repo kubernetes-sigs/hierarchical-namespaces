@@ -122,35 +122,33 @@ var _ = Describe("HRQ reconciler tests", func() {
 		Eventually(getRQSpec(ctx, barName)).Should(equalRL("secrets", "100", "cpu", "50"))
 	})
 
-	XIt("should recover if the subtree usages are out of sync in the forest and in reality", func() {
-		setHRQ(ctx, fooHRQName, fooName, "secrets", "6", "pods", "3")
-		setHRQ(ctx, barHRQName, barName, "secrets", "100", "cpu", "50")
-		// Simulate the K8s ResourceQuota controller to update usages.
-		updateRQUsage(ctx, fooName, "secrets", "0", "pods", "0")
-		updateRQUsage(ctx, barName, "secrets", "0", "cpu", "0", "pods", "0")
+	It("should recover if the subtree usages are out of sync in the forest and in reality", func() {
+		setHRQ(ctx, fooHRQName, fooName, "secrets", "100")
+		setHRQ(ctx, barHRQName, barName, "secrets", "100")
 
-		// Consume 10 secrets in bar.
+		// Consume 10 secrets in bar and verified that they're used
 		updateRQUsage(ctx, barName, "secrets", "10")
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "10"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "10"))
 
-		// Get the expected bar local usages and foo subtree usages in the forest.
-		Eventually(forestGetLocalUsages(barName)).Should(equalRL("secrets", "10", "cpu", "0", "pods", "0"))
-		Eventually(forestGetSubtreeUsages(fooName)).Should(equalRL("secrets", "10", "pods", "0"))
+		// If we do the check now, it shouldn't find anything
+		Expect(TestCheckHRQDrift()).Should(Equal(false))
 
-		// Introduce a bug to make the foo subtree usages in the forest out-of-sync.
-		// 10 secrets are consumed in reality while the forest has 9.
-		forestSetSubtreeUsages(fooName, "secrets", "9", "pods", "0")
-		// Verify the subtree secret usages is updated from 10 to 9.
-		Eventually(forestGetSubtreeUsages(fooName)).Should(equalRL("secrets", "9", "pods", "0"))
+		// Introduce a bug to make the foo subtree usages in the forest out-of-sync. Pretend that we
+		// somehow dropped a secret.
+		forestOverrideSubtreeUsages(fooName, "secrets", "9")
 
-		// Now consume 1 more secret (11 compared with previous 10).
+		// Now use an additional secret in the child. The parent should still be out-of-sync by one.
 		updateRQUsage(ctx, barName, "secrets", "11")
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "10"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "11"))
 
-		// We should eventually get 11 secrets subtree usages in the forest.
-		// Note: without the recalculation of subtree usages from scratch in the HRQ
-		// reconciler, we would get an incremental update to 10 according to the
-		// calculation in "UseResources()": 9 + (11 - 10), which is still out-of-sync.
-		Eventually(forestGetSubtreeUsages(fooName), HRQSyncInterval).Should(equalRL("secrets", "11", "pods", "0"))
-		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "11", "pods", "0"))
+		// Run the checker and make sure it finds something
+		Expect(TestCheckHRQDrift()).Should(Equal(true))
+
+		// And everything should be in sync again
+		Eventually(getHRQUsed(ctx, fooName, fooHRQName)).Should(equalRL("secrets", "11"))
+		Eventually(getHRQUsed(ctx, barName, barHRQName)).Should(equalRL("secrets", "11"))
 	})
 
 	It("should enqueue subtree even if the newly created HRQ has the same `spec.hard` and `status.hard`", func() {
@@ -227,7 +225,7 @@ var _ = Describe("HRQ reconciler tests", func() {
 	})
 })
 
-func forestSetSubtreeUsages(ns string, args ...string) {
+func forestOverrideSubtreeUsages(ns string, args ...string) {
 	TestForest.Lock()
 	defer TestForest.Unlock()
 	TestForest.Get(ns).TestOnlySetSubtreeUsage(argsToResourceList(0, args...))
