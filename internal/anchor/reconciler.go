@@ -358,6 +358,7 @@ func (r *Reconciler) writeInstance(ctx context.Context, log logr.Logger, inst *a
 
 // deleteInstance deletes the anchor instance. Note: Make sure there's no
 // finalizers on the instance before calling this function.
+//
 //lint:ignore U1000 Ignore for now, as it may be used again in the future
 func (r *Reconciler) deleteInstance(ctx context.Context, inst *api.SubnamespaceAnchor) error {
 	if err := r.Delete(ctx, inst); err != nil {

@@ -447,6 +447,7 @@ func setTypeConfig(ctx context.Context, group, resource string, mode api.Synchro
 
 // updateTypeConfig is like setTypeConfig but it doesn't wait to confirm that the change was
 // successful.
+//
 //lint:ignore U1000 Ignore for now, as it may be used again in the future
 func updateTypeConfig(ctx context.Context, group, resource string, mode api.SynchronizationMode) {
 	updateTypeConfigWithOffset(ctx, 1, group, resource, mode)

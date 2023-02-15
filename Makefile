@@ -82,6 +82,12 @@ CONTROLLER_GEN ?= ${CURDIR}/bin/controller-gen
 
 STATICCHECK ?= ${CURDIR}/bin/staticcheck
 
+# This really could be left blank, and setup-envtest would just download the
+# latest. But we may as well make it hermetic-ish by always downloading the
+# same version. I doubt the version matters much (or at all).
+ENVTEST_K8S_VERSION ?= 1.26.0
+SETUP_ENVTEST ?= ${CURDIR}/bin/setup-envtest
+
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 GOBIN ?= $(shell go env GOPATH)/bin
 
@@ -100,12 +106,9 @@ all: test docker-build
 # Run tests
 test: build test-only
 
-test-only:
-	@echo
-	@echo "If tests fail due to no matches for kind \"CustomResourceDefinition\" in version \"apiextensions.k8s.io/v1\","
-	@echo "please remove the old kubebuilder and reinstall it - https://book.kubebuilder.io/quick-start.html#installation"
-	@echo
-	go test ${DIRS} -coverprofile cover.out
+test-only: build-setup-envtest
+	KUBEBUILDER_ASSETS="$(shell ${SETUP_ENVTEST} use ${ENVTEST_K8S_VERSION} --bin-dir ${CURDIR}/bin -p path)" \
+		go test ${DIRS} -coverprofile cover.out
 
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet staticcheck manifests
@@ -160,7 +163,7 @@ run: build
 #
 # We build the full manifest last so that the kustomization.yaml file is still
 # there in case you want to rerun it manually.
-manifests: controller-gen
+manifests: build-controller-gen
 	@echo "Building manifests with image ${HNC_IMG}"
 	@# See the comment above about the 'paths' arguments
 	$(CONTROLLER_GEN) crd rbac:roleName=manager-role webhook paths="./api/..." paths="./cmd/..." paths="./internal/..." output:crd:artifacts:config=config/crd/bases
@@ -189,6 +192,8 @@ manifests: controller-gen
 
 # Run go fmt against code
 fmt:
+	@echo "Go version (for logging posterity):"
+	@go version
 	gofmt -l -w ${GOFMT_DIRS}
 
 # check-fmt: Checks gofmt/go fmt has been ran. gofmt -l lists files whose formatting differs from gofmt's, so it fails if there are unformatted go code.
@@ -206,10 +211,11 @@ staticcheck: build-staticcheck
 	$(STATICCHECK) ${DIRS}
 
 build-staticcheck:
+	@echo "If this next step fails, try updating honnef.co/go/tools in go.mod"
 	go build -o $(STATICCHECK) honnef.co/go/tools/cmd/staticcheck
 
 # Generate code
-generate: controller-gen
+generate: build-controller-gen
 	$(CONTROLLER_GEN) object:headerFile=./hack/boilerplate.go.txt paths=./api/...
 
 check-generate: generate
@@ -219,8 +225,11 @@ check-generate: generate
 
 # Use the version of controller-gen that's checked into vendor/ (see
 # hack/tools.go to see how it got there).
-controller-gen:
+build-controller-gen:
 	go build -o $(CONTROLLER_GEN) sigs.k8s.io/controller-tools/cmd/controller-gen
+
+build-setup-envtest:
+	go build -o $(SETUP_ENVTEST) sigs.k8s.io/controller-runtime/tools/setup-envtest
 
 ###################### DEPLOYABLE ARTIFACTS AND ACTIONS #########################
 

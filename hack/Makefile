@@ -16,7 +16,7 @@ PROW_TMP := $(shell mktemp -d)
 #
 # Also, when you do this, please also upgrade the version of Kind we download
 # in prow-run-e2e.sh in this directory.
-KRTE_IMG ?= gcr.io/k8s-staging-test-infra/krte:v20220322-c5eee43783-master
+KRTE_IMG ?= gcr.io/k8s-staging-test-infra/krte:v20230207-ce569a5e37-master
 
 # The variant of HNC to test; this can be default, ha, or omitted (defaults to
 # "default"). See prow-run-e2e.sh for details.

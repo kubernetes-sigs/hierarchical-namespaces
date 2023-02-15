@@ -24,7 +24,6 @@ import (
 	"honnef.co/go/tools/internal/passes/buildir"
 	"honnef.co/go/tools/pattern"
 
-	"golang.org/x/exp/typeparams"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
@@ -417,9 +416,9 @@ func CheckErrorStrings(pass *analysis.Pass) (interface{}, error) {
 					continue
 				}
 				for _, c := range word[n:] {
-					if unicode.IsUpper(c) {
-						// Word is probably an initialism or
-						// multi-word function name
+					if unicode.IsUpper(c) || unicode.IsDigit(c) {
+						// Word is probably an initialism or multi-word function name. Digits cover elliptic curves like
+						// P384.
 						continue instrLoop
 					}
 				}
@@ -649,15 +648,48 @@ func CheckHTTPStatusCodes(pass *analysis.Pass) (interface{}, error) {
 }
 
 func CheckDefaultCaseOrder(pass *analysis.Pass) (interface{}, error) {
+	hasFallthrough := func(clause ast.Stmt) bool {
+		// A valid fallthrough statement may be used only as the final non-empty statement in a case clause. Thus we can
+		// easily avoid falsely matching fallthroughs in nested switches by not descending into blocks.
+
+		body := clause.(*ast.CaseClause).Body
+		for i := len(body) - 1; i >= 0; i-- {
+			last := body[i]
+			switch stmt := last.(type) {
+			case *ast.EmptyStmt:
+				// Fallthrough may be followed by empty statements
+			case *ast.BranchStmt:
+				return stmt.Tok == token.FALLTHROUGH
+			default:
+				return false
+			}
+		}
+
+		return false
+	}
+
 	fn := func(node ast.Node) {
 		stmt := node.(*ast.SwitchStmt)
 		list := stmt.Body.List
+		defaultIdx := -1
 		for i, c := range list {
-			if c.(*ast.CaseClause).List == nil && i != 0 && i != len(list)-1 {
-				report.Report(pass, c, "default case should be first or last in switch statement", report.FilterGenerated())
+			if c.(*ast.CaseClause).List == nil {
+				defaultIdx = i
 				break
 			}
 		}
+
+		if defaultIdx == -1 || defaultIdx == 0 || defaultIdx == len(list)-1 {
+			// No default case, or it's the first or last case
+			return
+		}
+
+		if hasFallthrough(list[defaultIdx-1]) || hasFallthrough(list[defaultIdx]) {
+			// We either fall into or out of this case; don't mess with the order
+			return
+		}
+
+		report.Report(pass, list[defaultIdx], "default case should be first or last in switch statement", report.FilterGenerated())
 	}
 	code.Preorder(pass, fn, (*ast.SwitchStmt)(nil))
 	return nil, nil
@@ -813,7 +845,7 @@ func CheckExportedFunctionDocs(pass *analysis.Pass) (interface{}, error) {
 			switch T := T.(type) {
 			case *ast.IndexExpr:
 				ident = T.X.(*ast.Ident)
-			case *typeparams.IndexListExpr:
+			case *ast.IndexListExpr:
 				ident = T.X.(*ast.Ident)
 			case *ast.Ident:
 				ident = T
@@ -874,6 +906,11 @@ func CheckExportedTypeDocs(pass *analysis.Pass) (interface{}, error) {
 				if !ok {
 					return false
 				}
+			}
+
+			// Check comment before we strip articles in case the type's name is an article.
+			if strings.HasPrefix(text, node.Name.Name+" ") {
+				return false
 			}
 
 			s := text

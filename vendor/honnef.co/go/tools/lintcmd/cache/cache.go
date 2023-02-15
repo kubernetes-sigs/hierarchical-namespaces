@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -51,7 +50,6 @@ type Cache struct {
 // to share a cache directory (for example, if the directory were stored
 // in a network file system). File locking is notoriously unreliable in
 // network file systems and may not suffice to protect the cache.
-//
 func Open(dir string) (*Cache, error) {
 	info, err := os.Stat(dir)
 	if err != nil {
@@ -247,7 +245,7 @@ func (c *Cache) GetBytes(id ActionID) ([]byte, Entry, error) {
 	if err != nil {
 		return nil, entry, err
 	}
-	data, _ := ioutil.ReadFile(c.OutputFile(entry.OutputID))
+	data, _ := os.ReadFile(c.OutputFile(entry.OutputID))
 	if sha256.Sum256(data) != entry.OutputID {
 		return nil, entry, &entryNotFoundError{Err: errors.New("bad checksum")}
 	}

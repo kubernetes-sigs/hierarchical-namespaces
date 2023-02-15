@@ -29,8 +29,9 @@ import (
 
 // A linter lints Go source code.
 type linter struct {
-	Analyzers map[string]*lint.Analyzer
-	Runner    *runner.Runner
+	analyzers map[string]*lint.Analyzer
+	cache     *cache.Cache
+	opts      options
 }
 
 func computeSalt() ([]byte, error) {
@@ -57,7 +58,7 @@ func computeSalt() ([]byte, error) {
 	}
 }
 
-func newLinter(cfg config.Config) (*linter, error) {
+func newLinter(opts options) (*linter, error) {
 	c, err := cache.Default()
 	if err != nil {
 		return nil, err
@@ -67,30 +68,100 @@ func newLinter(cfg config.Config) (*linter, error) {
 		return nil, fmt.Errorf("could not compute salt for cache: %s", err)
 	}
 	c.SetSalt(salt)
-	r, err := runner.New(cfg, c)
-	if err != nil {
-		return nil, err
+
+	analyzers := make(map[string]*lint.Analyzer, len(opts.analyzers))
+	for _, a := range opts.analyzers {
+		analyzers[a.Analyzer.Name] = a
 	}
-	r.FallbackGoVersion = defaultGoVersion()
+
 	return &linter{
-		Runner: r,
+		cache:     c,
+		analyzers: analyzers,
+		opts:      opts,
 	}, nil
 }
 
-type LintResult struct {
-	CheckedFiles []string
-	Diagnostics  []diagnostic
-	Warnings     []string
+type lintResult struct {
+	checkedFiles []string
+	diagnostics  []diagnostic
+	warnings     []string
 }
 
-func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, error) {
-	var out LintResult
+type options struct {
+	config                   config.Config
+	analyzers                []*lint.Analyzer
+	patterns                 []string
+	lintTests                bool
+	goVersion                string
+	printAnalyzerMeasurement func(analysis *analysis.Analyzer, pkg *loader.PackageSpec, d time.Duration)
+}
 
-	as := make([]*analysis.Analyzer, 0, len(l.Analyzers))
-	for _, a := range l.Analyzers {
+func (l *linter) run(bconf buildConfig) (lintResult, error) {
+	cfg := &packages.Config{}
+	if l.opts.lintTests {
+		cfg.Tests = true
+	}
+
+	cfg.BuildFlags = bconf.Flags
+	cfg.Env = append(os.Environ(), bconf.Envs...)
+
+	r, err := runner.New(l.opts.config, l.cache)
+	if err != nil {
+		return lintResult{}, err
+	}
+	r.FallbackGoVersion = defaultGoVersion()
+	r.GoVersion = l.opts.goVersion
+	r.Stats.PrintAnalyzerMeasurement = l.opts.printAnalyzerMeasurement
+
+	printStats := func() {
+		// Individual stats are read atomically, but overall there
+		// is no synchronisation. For printing rough progress
+		// information, this doesn't matter.
+		switch r.Stats.State() {
+		case runner.StateInitializing:
+			fmt.Fprintln(os.Stderr, "Status: initializing")
+		case runner.StateLoadPackageGraph:
+			fmt.Fprintln(os.Stderr, "Status: loading package graph")
+		case runner.StateBuildActionGraph:
+			fmt.Fprintln(os.Stderr, "Status: building action graph")
+		case runner.StateProcessing:
+			fmt.Fprintf(os.Stderr, "Packages: %d/%d initial, %d/%d total; Workers: %d/%d\n",
+				r.Stats.ProcessedInitialPackages(),
+				r.Stats.InitialPackages(),
+				r.Stats.ProcessedPackages(),
+				r.Stats.TotalPackages(),
+				r.ActiveWorkers(),
+				r.TotalWorkers(),
+			)
+		case runner.StateFinalizing:
+			fmt.Fprintln(os.Stderr, "Status: finalizing")
+		}
+	}
+	if len(infoSignals) > 0 {
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, infoSignals...)
+		defer signal.Stop(ch)
+		go func() {
+			for range ch {
+				printStats()
+			}
+		}()
+	}
+	res, err := l.lint(r, cfg, l.opts.patterns)
+	for i := range res.diagnostics {
+		res.diagnostics[i].buildName = bconf.Name
+	}
+	return res, err
+}
+
+func (l *linter) lint(r *runner.Runner, cfg *packages.Config, patterns []string) (lintResult, error) {
+	var out lintResult
+
+	as := make([]*analysis.Analyzer, 0, len(l.analyzers))
+	for _, a := range l.analyzers {
 		as = append(as, a.Analyzer)
 	}
-	results, err := l.Runner.Run(cfg, as, patterns)
+	results, err := r.Run(cfg, as, patterns)
 	if err != nil {
 		return out, err
 	}
@@ -103,8 +174,8 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, erro
 		}
 	}
 
-	analyzerNames := make([]string, 0, len(l.Analyzers))
-	for name := range l.Analyzers {
+	analyzerNames := make([]string, 0, len(l.analyzers))
+	for name := range l.analyzers {
 		analyzerNames = append(analyzerNames, name)
 	}
 	used := map[unusedKey]bool{}
@@ -114,10 +185,10 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, erro
 			panic("package has errors but isn't marked as failed")
 		}
 		if res.Failed {
-			out.Diagnostics = append(out.Diagnostics, failed(res)...)
+			out.diagnostics = append(out.diagnostics, failed(res)...)
 		} else {
 			if res.Skipped {
-				out.Warnings = append(out.Warnings, fmt.Sprintf("skipped package %s because it is too large", res.Package))
+				out.warnings = append(out.warnings, fmt.Sprintf("skipped package %s because it is too large", res.Package))
 				continue
 			}
 
@@ -125,7 +196,7 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, erro
 				continue
 			}
 
-			out.CheckedFiles = append(out.CheckedFiles, res.Package.GoFiles...)
+			out.checkedFiles = append(out.checkedFiles, res.Package.GoFiles...)
 			allowedAnalyzers := filterAnalyzerNames(analyzerNames, res.Config.Checks)
 			resd, err := res.Load()
 			if err != nil {
@@ -138,15 +209,20 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, erro
 			}
 			// OPT move this code into the 'success' function.
 			for i, diag := range filtered {
-				a := l.Analyzers[diag.Category]
+				a := l.analyzers[diag.Category]
 				// Some diag.Category don't map to analyzers, such as "staticcheck"
 				if a != nil {
-					filtered[i].MergeIf = a.Doc.MergeIf
+					filtered[i].mergeIf = a.Doc.MergeIf
 				}
 			}
-			out.Diagnostics = append(out.Diagnostics, filtered...)
+			out.diagnostics = append(out.diagnostics, filtered...)
 
 			for _, obj := range resd.Unused.Used {
+				// Note: a side-effect of this code is that fields in instantiated structs are handled correctly. Even
+				// if only an instantiated field is marked as used, we will not flag the generic field, because it has
+				// the same position as the instance. At some point this won't be necessary anymore because we'll be
+				// able to make use of the Go 1.19+ Origin methods.
+
 				// FIXME(dh): pick the object whose filename does not include $GOROOT
 				key := unusedKey{
 					pkgPath: res.Package.PkgPath,
@@ -175,24 +251,16 @@ func (l *linter) Lint(cfg *packages.Config, patterns []string) (LintResult, erro
 	}
 
 	for _, uo := range unuseds {
-		if uo.obj.Kind == "type param" {
-			// We don't currently flag unused type parameters on used objects, and flagging them on unused objects isn't
-			// useful.
-			continue
-		}
 		if used[uo.key] {
 			continue
 		}
-		if uo.obj.InGenerated {
-			continue
-		}
-		out.Diagnostics = append(out.Diagnostics, diagnostic{
+		out.diagnostics = append(out.diagnostics, diagnostic{
 			Diagnostic: runner.Diagnostic{
 				Position: uo.obj.DisplayPosition,
 				Message:  fmt.Sprintf("%s %s is unused", uo.obj.Kind, uo.obj.Name),
 				Category: "U1000",
 			},
-			MergeIf: lint.MergeIfAll,
+			mergeIf: lint.MergeIfAll,
 		})
 	}
 
@@ -231,8 +299,8 @@ func filterIgnored(diagnostics []diagnostic, res runner.ResultData, allowedAnaly
 	for _, ig := range ignores {
 		for i := range diagnostics {
 			diag := &diagnostics[i]
-			if ig.Match(*diag) {
-				diag.Severity = severityIgnored
+			if ig.match(*diag) {
+				diag.severity = severityIgnored
 			}
 		}
 
@@ -252,7 +320,7 @@ func filterIgnored(diagnostics []diagnostic, res runner.ResultData, allowedAnaly
 }
 
 type ignore interface {
-	Match(diag diagnostic) bool
+	match(diag diagnostic) bool
 }
 
 type lineIgnore struct {
@@ -263,7 +331,7 @@ type lineIgnore struct {
 	Pos     token.Position
 }
 
-func (li *lineIgnore) Match(p diagnostic) bool {
+func (li *lineIgnore) match(p diagnostic) bool {
 	pos := p.Position
 	if pos.Filename != li.File || pos.Line != li.Line {
 		return false
@@ -290,7 +358,7 @@ type fileIgnore struct {
 	Checks []string
 }
 
-func (fi *fileIgnore) Match(p diagnostic) bool {
+func (fi *fileIgnore) match(p diagnostic) bool {
 	if p.Position.Filename != fi.File {
 		return false
 	}
@@ -326,9 +394,9 @@ func (s severity) String() string {
 // diagnostic represents a diagnostic in some source code.
 type diagnostic struct {
 	runner.Diagnostic
-	Severity  severity
-	MergeIf   lint.MergeStrategy
-	BuildName string
+	severity  severity
+	mergeIf   lint.MergeStrategy
+	buildName string
 }
 
 func (p diagnostic) equal(o diagnostic) bool {
@@ -336,14 +404,14 @@ func (p diagnostic) equal(o diagnostic) bool {
 		p.End == o.End &&
 		p.Message == o.Message &&
 		p.Category == o.Category &&
-		p.Severity == o.Severity &&
-		p.MergeIf == o.MergeIf &&
-		p.BuildName == o.BuildName
+		p.severity == o.severity &&
+		p.mergeIf == o.mergeIf &&
+		p.buildName == o.buildName
 }
 
 func (p *diagnostic) String() string {
-	if p.BuildName != "" {
-		return fmt.Sprintf("%s [%s] (%s)", p.Message, p.BuildName, p.Category)
+	if p.buildName != "" {
+		return fmt.Sprintf("%s [%s] (%s)", p.Message, p.buildName, p.Category)
 	} else {
 		return fmt.Sprintf("%s (%s)", p.Message, p.Category)
 	}
@@ -390,7 +458,7 @@ func failed(res runner.Result) []diagnostic {
 					Message:  msg,
 					Category: "compile",
 				},
-				Severity: severityError,
+				severity: severityError,
 			}
 			diagnostics = append(diagnostics, diag)
 		case error:
@@ -400,7 +468,7 @@ func failed(res runner.Result) []diagnostic {
 					Message:  e.Error(),
 					Category: "compile",
 				},
-				Severity: severityError,
+				severity: severityError,
 			}
 			diagnostics = append(diagnostics, diag)
 		}
@@ -418,7 +486,7 @@ type unusedKey struct {
 
 type unusedPair struct {
 	key unusedKey
-	obj unused.SerializedObject
+	obj unused.Object
 }
 
 func success(allowedAnalyzers map[string]bool, res runner.ResultData) []diagnostic {
@@ -499,79 +567,4 @@ func parsePos(pos string) (token.Position, int, error) {
 		Line:     line,
 		Column:   col,
 	}, len(parts[0]), nil
-}
-
-type options struct {
-	Config      config.Config
-	BuildConfig BuildConfig
-
-	LintTests                bool
-	GoVersion                string
-	PrintAnalyzerMeasurement func(analysis *analysis.Analyzer, pkg *loader.PackageSpec, d time.Duration)
-}
-
-func doLint(as []*lint.Analyzer, paths []string, opt *options) (LintResult, error) {
-	if opt == nil {
-		opt = &options{}
-	}
-
-	l, err := newLinter(opt.Config)
-	if err != nil {
-		return LintResult{}, err
-	}
-	analyzers := make(map[string]*lint.Analyzer, len(as))
-	for _, a := range as {
-		analyzers[a.Analyzer.Name] = a
-	}
-	l.Analyzers = analyzers
-	l.Runner.GoVersion = opt.GoVersion
-	l.Runner.Stats.PrintAnalyzerMeasurement = opt.PrintAnalyzerMeasurement
-
-	cfg := &packages.Config{}
-	if opt.LintTests {
-		cfg.Tests = true
-	}
-
-	cfg.BuildFlags = opt.BuildConfig.Flags
-	cfg.Env = append(os.Environ(), opt.BuildConfig.Envs...)
-
-	printStats := func() {
-		// Individual stats are read atomically, but overall there
-		// is no synchronisation. For printing rough progress
-		// information, this doesn't matter.
-		switch l.Runner.Stats.State() {
-		case runner.StateInitializing:
-			fmt.Fprintln(os.Stderr, "Status: initializing")
-		case runner.StateLoadPackageGraph:
-			fmt.Fprintln(os.Stderr, "Status: loading package graph")
-		case runner.StateBuildActionGraph:
-			fmt.Fprintln(os.Stderr, "Status: building action graph")
-		case runner.StateProcessing:
-			fmt.Fprintf(os.Stderr, "Packages: %d/%d initial, %d/%d total; Workers: %d/%d\n",
-				l.Runner.Stats.ProcessedInitialPackages(),
-				l.Runner.Stats.InitialPackages(),
-				l.Runner.Stats.ProcessedPackages(),
-				l.Runner.Stats.TotalPackages(),
-				l.Runner.ActiveWorkers(),
-				l.Runner.TotalWorkers(),
-			)
-		case runner.StateFinalizing:
-			fmt.Fprintln(os.Stderr, "Status: finalizing")
-		}
-	}
-	if len(infoSignals) > 0 {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, infoSignals...)
-		defer signal.Stop(ch)
-		go func() {
-			for range ch {
-				printStats()
-			}
-		}()
-	}
-	res, err := l.Lint(cfg, paths)
-	for i := range res.Diagnostics {
-		res.Diagnostics[i].BuildName = opt.BuildConfig.Name
-	}
-	return res, err
 }

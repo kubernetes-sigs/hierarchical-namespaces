@@ -13,6 +13,7 @@ import (
 	"honnef.co/go/tools/analysis/report"
 	"honnef.co/go/tools/go/ast/astutil"
 	"honnef.co/go/tools/go/types/typeutil"
+	"honnef.co/go/tools/knowledge"
 	"honnef.co/go/tools/pattern"
 
 	"golang.org/x/tools/go/analysis"
@@ -423,12 +424,12 @@ func CheckIfElseToSwitch(pass *analysis.Pass) (interface{}, error) {
 }
 
 var stringsReplaceAllQ = pattern.MustParse(`(Or
-	(CallExpr fn@(Function "strings.Replace") [_ _ _ lit@(IntegerLiteral "-1")])
-	(CallExpr fn@(Function "strings.SplitN") [_ _ lit@(IntegerLiteral "-1")])
-	(CallExpr fn@(Function "strings.SplitAfterN") [_ _ lit@(IntegerLiteral "-1")])
-	(CallExpr fn@(Function "bytes.Replace") [_ _ _ lit@(IntegerLiteral "-1")])
-	(CallExpr fn@(Function "bytes.SplitN") [_ _ lit@(IntegerLiteral "-1")])
-	(CallExpr fn@(Function "bytes.SplitAfterN") [_ _ lit@(IntegerLiteral "-1")]))`)
+	(CallExpr fn@(Symbol "strings.Replace") [_ _ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "strings.SplitN") [_ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "strings.SplitAfterN") [_ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "bytes.Replace") [_ _ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "bytes.SplitN") [_ _ lit@(IntegerLiteral "-1")])
+	(CallExpr fn@(Symbol "bytes.SplitAfterN") [_ _ lit@(IntegerLiteral "-1")]))`)
 
 func CheckStringsReplaceAll(pass *analysis.Pass) (interface{}, error) {
 	// XXX respect minimum Go version
@@ -469,7 +470,7 @@ func CheckStringsReplaceAll(pass *analysis.Pass) (interface{}, error) {
 	return nil, nil
 }
 
-var mathPowQ = pattern.MustParse(`(CallExpr (Function "math.Pow") [x (IntegerLiteral n)])`)
+var mathPowQ = pattern.MustParse(`(CallExpr (Symbol "math.Pow") [x (IntegerLiteral n)])`)
 
 func CheckMathPow(pass *analysis.Pass) (interface{}, error) {
 	fn := func(node ast.Node) {
@@ -781,7 +782,7 @@ func CheckTimeEquality(pass *analysis.Pass) (interface{}, error) {
 var byteSlicePrintingQ = pattern.MustParse(`
 	(Or
 		(CallExpr
-			(Function (Or
+			(Symbol (Or
 				"fmt.Print"
 				"fmt.Println"
 				"fmt.Sprint"
@@ -799,36 +800,13 @@ var byteSlicePrintingQ = pattern.MustParse(`
 				"(*log.Logger).Print"
 				"(*log.Logger).Println")) args)
 
-		(CallExpr (Function (Or
+		(CallExpr (Symbol (Or
 			"fmt.Fprint"
 			"fmt.Fprintln")) _:args))`)
 
 var byteSlicePrintingR = pattern.MustParse(`(CallExpr (Ident "string") [arg])`)
 
 func CheckByteSlicePrinting(pass *analysis.Pass) (interface{}, error) {
-	isStringer := func(T types.Type, ms *types.MethodSet) bool {
-		sel := ms.Lookup(nil, "String")
-		if sel == nil {
-			return false
-		}
-		fn, ok := sel.Obj().(*types.Func)
-		if !ok {
-			// should be unreachable
-			return false
-		}
-		sig := fn.Type().(*types.Signature)
-		if sig.Params().Len() != 0 {
-			return false
-		}
-		if sig.Results().Len() != 1 {
-			return false
-		}
-		if !typeutil.IsType(sig.Results().At(0).Type(), "string") {
-			return false
-		}
-		return true
-	}
-
 	fn := func(node ast.Node) {
 		m, ok := code.Match(pass, byteSlicePrintingQ, node)
 		if !ok {
@@ -838,10 +816,8 @@ func CheckByteSlicePrinting(pass *analysis.Pass) (interface{}, error) {
 		for _, arg := range args {
 			T := pass.TypesInfo.TypeOf(arg)
 			if typeutil.IsType(T.Underlying(), "[]byte") {
-				ms := types.NewMethodSet(T)
-
 				// don't convert arguments that implement fmt.Stringer
-				if isStringer(T, ms) {
+				if types.Implements(T, knowledge.Interfaces["fmt.Stringer"]) {
 					continue
 				}
 
@@ -861,9 +837,9 @@ var (
 		(CallExpr (ArrayType nil (Ident "byte"))
 			(CallExpr
 				fn@(Or
-					(Function "fmt.Sprint")
-					(Function "fmt.Sprintf")
-					(Function "fmt.Sprintln"))
+					(Symbol "fmt.Sprint")
+					(Symbol "fmt.Sprintf")
+					(Symbol "fmt.Sprintln"))
 				args)
 	))`)
 
@@ -872,32 +848,10 @@ var (
 		(SelectorExpr recv (Ident "WriteString"))
 		(CallExpr
 			fn@(Or
-				(Function "fmt.Sprint")
-				(Function "fmt.Sprintf")
-				(Function "fmt.Sprintln"))
+				(Symbol "fmt.Sprint")
+				(Symbol "fmt.Sprintf")
+				(Symbol "fmt.Sprintln"))
 			args))`)
-
-	writerInterface = types.NewInterfaceType([]*types.Func{
-		types.NewFunc(token.NoPos, nil, "Write", types.NewSignature(nil,
-			types.NewTuple(types.NewVar(token.NoPos, nil, "", types.NewSlice(types.Typ[types.Byte]))),
-			types.NewTuple(
-				types.NewVar(token.NoPos, nil, "", types.Typ[types.Int]),
-				types.NewVar(token.NoPos, nil, "", types.Universe.Lookup("error").Type()),
-			),
-			false,
-		)),
-	}, nil).Complete()
-
-	stringWriterInterface = types.NewInterfaceType([]*types.Func{
-		types.NewFunc(token.NoPos, nil, "WriteString", types.NewSignature(nil,
-			types.NewTuple(types.NewVar(token.NoPos, nil, "", types.Universe.Lookup("string").Type())),
-			types.NewTuple(
-				types.NewVar(token.NoPos, nil, "", types.Typ[types.Int]),
-				types.NewVar(token.NoPos, nil, "", types.Universe.Lookup("error").Type()),
-			),
-			false,
-		)),
-	}, nil).Complete()
 )
 
 func CheckWriteBytesSprintf(pass *analysis.Pass) (interface{}, error) {
@@ -905,7 +859,7 @@ func CheckWriteBytesSprintf(pass *analysis.Pass) (interface{}, error) {
 		if m, ok := code.Match(pass, checkWriteBytesSprintfQ, node); ok {
 			recv := m.State["recv"].(ast.Expr)
 			recvT := pass.TypesInfo.TypeOf(recv)
-			if !types.Implements(recvT, writerInterface) {
+			if !types.Implements(recvT, knowledge.Interfaces["io.Writer"]) {
 				return
 			}
 
@@ -925,12 +879,12 @@ func CheckWriteBytesSprintf(pass *analysis.Pass) (interface{}, error) {
 		} else if m, ok := code.Match(pass, checkWriteStringSprintfQ, node); ok {
 			recv := m.State["recv"].(ast.Expr)
 			recvT := pass.TypesInfo.TypeOf(recv)
-			if !types.Implements(recvT, stringWriterInterface) {
+			if !types.Implements(recvT, knowledge.Interfaces["io.StringWriter"]) {
 				return
 			}
 			// The type needs to implement both StringWriter and Writer.
 			// If it doesn't implement Writer, then we cannot pass it to fmt.Fprint.
-			if !types.Implements(recvT, writerInterface) {
+			if !types.Implements(recvT, knowledge.Interfaces["io.Writer"]) {
 				return
 			}
 

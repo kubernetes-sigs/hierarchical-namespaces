@@ -24,7 +24,7 @@ import (
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
-//hcUpdates struct stores name of namespaces against type of flag passed
+// hcUpdates struct stores name of namespaces against type of flag passed
 type hcUpdates struct {
 	root     bool
 	parent   string
