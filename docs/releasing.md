@@ -52,10 +52,9 @@ $ git checkout -b <branch name>
 $ git push upstream <branch name>
 ```
 
-Do _not_ create a pull request for this branch! Instead, if you're a repo
-administrator, go to the Github UI and mark the branch as protected, which will
-prevent people from deleting it by accident. Otherwise, ask a repo admin to do
-this for you.
+Do _not_ create a pull request for this branch! Any branch of the form `vX.Y`
+will automatically be protected thanks to the rules configured on the Github
+project.
 
 ## Create a release
 
