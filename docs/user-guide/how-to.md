@@ -421,9 +421,9 @@ EOF
 
 <a name="use-managed-labels"/>
 
-### (Beta) Add a label or annotation to all namespaces in a subtree
+### Add a label or annotation to all namespaces in a subtree
 
-***Managed labels and annotations are new in HNC v1.0; please use with caution.***
+***Managed labels and annotations are beta in HNC v1.0 and GA in HNC v1.1+.***
 
 If your administrator has [created managed labels or
 annotations](#admin-managed-labels), you may set them on any _full_ namespace
@@ -482,7 +482,7 @@ and webhooks) that were only introduced in v1.16.
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
-_Note: HNC has **experimental** support for HA deployments in v1.0. Please
+_Note: HNC has **experimental** support for HA deployments in v1.0+. Please
 contact us on Slack to discuss if you want to try it out._
 
 #### Prerequisites
@@ -768,9 +768,10 @@ in the `Propagate` mode or `AllowPropagate`.  Instead, to do so safely:
   synchronizing all known source objects.
 * Wait until `kubectl hns config describe` looks like it's identified the
   correct number of objects of the newly added resource in its status.
-* Change the propagation mode from `Remove` to `Propagate` or `AllowPropagate`. 
-  HNC will then check to see if any objects will be overwritten, and will not 
-  allow you to change the propagation mode until all such conflicts are resolved.
+* Change the propagation mode from `Remove` to `Propagate` or `AllowPropagate`.
+  HNC will then check to see if any objects will be overwritten, and will not
+  allow you to change the propagation mode until all such conflicts are
+  resolved.
 
 Alternatively, if you're certain you want to start propagating objects
 immediately, you can use the `--force` flag with `kubectl hns config
@@ -779,10 +780,9 @@ edit the `config` object directly, which will bypass this protection.
 
 <a name="admin-managed-labels"/>
 
-### (Beta) Ask HNC to manage certain labels and annotations
+### Ask HNC to manage certain labels and annotations
 
-***Managed labels and annotations are new in HNC v1.0; please use with
-caution.***
+***Managed labels and annotations are beta in HNC v1.0 and GA in HNC v1.1+.***
 
 See [here](concepts.md#admin-managed-labels) for the background on managed
 labels and annotations. In order to get HNC to manage a label or annotation, use

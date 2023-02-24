@@ -315,11 +315,12 @@ whichever labels they like. However, HNC will overwrite any changes made to
 these labels, so other applications can trust these labels for policy
 application.
 
-*Note: in HNC v1.0, [managed labels](#admin-managed-labels) may also be trusted
-for policy purposes.*
+If tree labels are too restrictive for your purposes, you can also use [managed
+labels](#admin-managed-labels), which require more work to set up but are also
+managed by HNC and are therefore suitable for policy use.
 
 <a name="basic-exceptions"/>
- 
+
 ### Exceptions and propagation control
 
 HNC typically propagates _all_ objects of a [specified type](how-to.md#admin-resources)
@@ -327,15 +328,15 @@ from ancestor namespaces to descendant namespaces. However, sometimes this is
 too restrictive, and you need to create ***exceptions*** to certain policies. For example:
 
 * A ResourceQuota was propagated to many children, but one child namespace now
-has higher requirements than the rest. Rather than getting rid of the quota in
-the parent namespace, or raising the limit for everyone, you can stop the
-quota in the parent from being propagated to that _one_ child namespace,
-allowing you to replace it with another, more suitable quota.
+  has higher requirements than the rest. Rather than getting rid of the quota in
+  the parent namespace, or raising the limit for everyone, you can stop the
+  quota in the parent from being propagated to that _one_ child namespace,
+  allowing you to replace it with another, more suitable quota.
 
 * A RoleBinding allows any user to create subnamespaces under one namespace, but
-we don’t want to allow those users to create additional levels of hierarchy
-underneath those subnamespaces. So you can stop the role binding from being
-propagated to _any_ child namespace.
+  we don’t want to allow those users to create additional levels of hierarchy
+  underneath those subnamespaces. So you can stop the role binding from being
+  propagated to _any_ child namespace.
 
 Exceptions are defined using [annotations on the objects
 themselves](how-to.md#use-limit-propagation).  As a result, anyone who can edit
@@ -353,18 +354,19 @@ exclude those objects, or else delete the conflicting objects to allow them to
 be replaced.
 
 #### (Beta in v1.1) Opt-in propagation
-The `Propagate` mode propagates all objects unless directed to otherwise via a selector,
-using exceptions. By contrast, opt-in propagation, as set by the `AllowPropagate` 
-mode, doesn't propagate objects unless directed to by a selector. That is, for an object 
-with a selector, its behaviour will be identical in both the `Propagate` and `AllowPropagate` modes; 
-the only difference in behaviours is for objects without a selector.
+The `Propagate` mode propagates all objects unless directed to otherwise via a
+selector, using exceptions. By contrast, opt-in propagation, as set by the
+`AllowPropagate` mode, doesn't propagate objects unless directed to by a
+selector. That is, for an object with a selector, its behaviour will be
+identical in both the `Propagate` and `AllowPropagate` modes; the only
+difference in behaviours is for objects without a selector.
 
 For example:
- 
+
 * A Secret exists on a namespace but we don't want this secret to be propagated
-to all subnamespaces by default but instead only to one namespace of our choosing. 
-So you can choose to propagate to that _one_ child namespace using `AllowPropagate`
-and exceptions.
+  to all subnamespaces by default but instead only to one namespace of our
+  choosing.  So you can choose to propagate to that _one_ child namespace using
+  `AllowPropagate` and exceptions.
 
 #### Built-in exceptions
 
@@ -374,10 +376,11 @@ objects from being propagated by HNC.
 * Kubernetes Service Account Secrets
 * ConfigMaps named `istio-ca-root-cert` or `kube-root-ca.crt`, which are
   auto-created in new namespaces by Istio and Kubernetes respectively
-* *Planned for HNC v1.0+:* Any objects with the label
+* Any objects with the label
   `cattle.io/creator:norman`, which are [inserted by Rancher to support
   Projects](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove))
-* *Planned for future version:* Secrets with type `helm.sh/release.v1`, which is auto-created in the namespaces where their respective Helm releases are deployed to.
+* *HNC v1.1+:* Secrets with type `helm.sh/release.v1`, which is auto-created in
+  the namespaces where their respective Helm releases are deployed to.
 
 <a name="admin"/>
 
@@ -517,9 +520,9 @@ problem, and will generally require human intervention to resolve.
 
 <a name="admin-managed-labels"/>
 
-### (Beta) Managed labels and annotations
+### Managed labels and annotations
 
-***Managed labels and annotations are new in HNC v1.0; please use with caution.***
+***Managed labels and annotations are beta in HNC v1.0 and GA in HNC v1.1+.***
 
 Just as certain objects can be propagated from parent namespaces to their
 descendants, so can certain labels and annotations on namespaces. For example,
