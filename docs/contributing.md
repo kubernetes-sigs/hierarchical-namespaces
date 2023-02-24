@@ -53,9 +53,6 @@ accessible from your `PATH`:
   - [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
   - [kustomize](https://github.com/kubernetes-sigs/kustomize/blob/master/docs/INSTALL.md)
   - [kubebuilder](https://kubebuilder.io)
-    - This [Github issue](https://github.com/kubernetes-sigs/controller-runtime/issues/90#issuecomment-494878527)
-      may help you resolve errors you get when running the tests or any other
-      command.
 
 If you're using `gcloud` and the GCP Container Registry, make sure that `gcloud`
 is configured to use the project containing the registry you want to use, and
