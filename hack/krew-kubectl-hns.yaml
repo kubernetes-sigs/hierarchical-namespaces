@@ -49,6 +49,18 @@ spec:
   - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/HNC_IMG_TAG/kubectl-hns.tar.gz
     selector:
       matchLabels:
+        os: linux
+        arch: arm64
+    sha256: HNC_KREW_TAR_SHA256
+    files:
+      - from: "bin/kubectl/kubectl-hns_linux_arm64"
+        to: "."
+      - from: "bin/kubectl/LICENSE"
+        to: "."
+    bin: "./kubectl-hns_linux_arm64"
+  - uri: https://github.com/HNC_RELEASE_REPO_OWNER/hierarchical-namespaces/releases/download/HNC_IMG_TAG/kubectl-hns.tar.gz
+    selector:
+      matchLabels:
         os: darwin
         arch: amd64
     sha256: HNC_KREW_TAR_SHA256
