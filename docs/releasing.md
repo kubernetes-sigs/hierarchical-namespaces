@@ -36,14 +36,8 @@ that anyone can use, but without leaking personal access tokens._
 
 Ensure that the [user guide](user-guide/) is up-to-date with all the latest or
 changed features. _This must be done on the master branch **before** creating
-the release branch._ The user guide should usually contain instructions for at
-least the last two minor releases of HNC - e.g., if the current version is v0.5,
-it should contain instructions for both v0.4 and v0.5. But if you're _about_ to
-release v0.6, then you should:
-
-* In the master docs README, add a link to the v0.4 version of the user guide.
-* Delete everything about v0.4
-* Add all new information for v0.6.
+the release branch._ We used to remove instructions for old versions of HNC, but
+since v1.0 this should no longer be necessary as it's not changing as quickly.
 
 ## Create a release branch
 

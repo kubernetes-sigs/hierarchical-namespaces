@@ -44,7 +44,7 @@ All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
 * [v1.1](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/3):
-  Improved UX for managed labels; performance improvements.
+  Hierarchical quotas; inclusive propagation.
 * [v1.0](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/2):
   HNC recommended for production use (released March 31 2022)
 * [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/1):
