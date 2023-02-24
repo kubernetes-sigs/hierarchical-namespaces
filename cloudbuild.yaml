@@ -52,7 +52,31 @@ steps:
   - '@hierarchical-namespaces/manifests/ha.yaml'
   - '-u'
   - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
-  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=ha-experimental.yaml'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=ha.yaml'
+# Upload HRQ manifest
+- name: gcr.io/cloud-builders/curl
+  args:
+  - '-X'
+  - 'POST'
+  - '-H'
+  - 'Content-Type: application/x-application'
+  - '--data-binary'
+  - '@hierarchical-namespaces/manifests/hrq.yaml'
+  - '-u'
+  - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=hrq.yaml'
+# Upload cert-manager manifest
+- name: gcr.io/cloud-builders/curl
+  args:
+  - '-X'
+  - 'POST'
+  - '-H'
+  - 'Content-Type: application/x-application'
+  - '--data-binary'
+  - '@hierarchical-namespaces/manifests/default-cm.yaml'
+  - '-u'
+  - '$_HNC_USER:$_HNC_PERSONAL_ACCESS_TOKEN'
+  - 'https://uploads.github.com/repos/$_HNC_REPO_OWNER/hierarchical-namespaces/releases/$_HNC_RELEASE_ID/assets?name=default-cm.yaml'
 # Upload plugin (Linux)
 - name: gcr.io/cloud-builders/curl
   args:
