@@ -52,6 +52,7 @@ type Client interface {
 	getAnchorStatus(nnm string) anchorStatus
 	getHNCConfig() *api.HNCConfiguration
 	updateHNCConfig(*api.HNCConfiguration)
+	getHRQ(names []string, nnm string) *api.HierarchicalResourceQuotaList
 }
 
 func init() {
@@ -103,6 +104,7 @@ func init() {
 	rootCmd.AddCommand(newCreateCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newVersionCmd())
+	rootCmd.AddCommand(newHrqCmd())
 }
 
 func Execute() {
@@ -212,4 +214,28 @@ func (cl *realClient) updateHNCConfig(config *api.HNCConfiguration) {
 		fmt.Printf("\nCould not update the HNC Configuration: %s\n", err)
 		os.Exit(1)
 	}
+}
+
+func (cl *realClient) getHRQ(names []string, nnm string) *api.HierarchicalResourceQuotaList {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	hrqList := &api.HierarchicalResourceQuotaList{}
+
+	if len(names) > 0 && nnm != "" {
+		for _, name := range names {
+			hrq := &api.HierarchicalResourceQuota{}
+			if err := hncClient.Get().Resource("hierarchicalresourcequotas").Namespace(namespace).Name(name).Do(ctx).Into(hrq); err != nil {
+				fmt.Printf("Error reading hierarchicalresourcequota %s: %s\n", name, err)
+				os.Exit(1)
+			}
+
+			hrqList.Items = append(hrqList.Items, *hrq)
+		}
+	} else {
+		if err := hncClient.Get().Resource("hierarchicalresourcequotas").Namespace(namespace).Do(ctx).Into(hrqList); err != nil {
+			fmt.Printf("Error reading hierarchicalresourcequotas: %s\n", err)
+			os.Exit(1)
+		}
+	}
+	return hrqList
 }
