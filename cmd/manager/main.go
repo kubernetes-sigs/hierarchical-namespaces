@@ -55,28 +55,29 @@ var (
 )
 
 var (
-	probeAddr               string
-	metricsAddr             string
-	enableStackdriver       bool
-	maxReconciles           int
-	enableLeaderElection    bool
-	leaderElectionId        string
-	noWebhooks              bool
-	debugLogs               bool
-	testLog                 bool
-	internalCert            bool
-	qps                     int
-	webhookServerPort       int
-	restartOnSecretRefresh  bool
-	unpropagatedAnnotations arrayArg
-	excludedNamespaces      arrayArg
-	managedNamespaceLabels  arrayArg
-	managedNamespaceAnnots  arrayArg
-	includedNamespacesRegex string
-	webhooksOnly            bool
-	enableHRQ               bool
-	hncNamespace            string
-	hrqSyncInterval         time.Duration
+	probeAddr                    string
+	metricsAddr                  string
+	enableStackdriver            bool
+	maxReconciles                int
+	enableLeaderElection         bool
+	leaderElectionId             string
+	noWebhooks                   bool
+	debugLogs                    bool
+	testLog                      bool
+	internalCert                 bool
+	qps                          int
+	webhookServerPort            int
+	restartOnSecretRefresh       bool
+	unpropagatedAnnotations      arrayArg
+	excludedNamespaces           arrayArg
+	managedNamespaceLabels       arrayArg
+	managedNamespaceAnnots       arrayArg
+	includedNamespacesRegex      string
+	webhooksOnly                 bool
+	enableHRQ                    bool
+	hncNamespace                 string
+	hrqSyncInterval              time.Duration
+	disableDefaultLabelExclusion bool
 )
 
 // init preloads some global vars before main() starts. Since this is the top-level module, I'm not
@@ -156,10 +157,12 @@ func parseFlags() {
 	flag.BoolVar(&enableHRQ, "enable-hrq", false, "Enables hierarchical resource quotas")
 	flag.StringVar(&hncNamespace, "namespace", "hnc-system", "Namespace where hnc-manager and hnc resources deployed")
 	flag.DurationVar(&hrqSyncInterval, "hrq-sync-interval", 1*time.Minute, "Frequency to double-check that all HRQ usages are up-to-date (shouldn't be needed)")
+	flag.BoolVar(&disableDefaultLabelExclusion, "disable-default-label-exclusion", false, "Disables the default propagation exclusion by label of resources. Currently only Rancher resources are excluded. See the user guide for more information.")
 	flag.Parse()
 
 	// Assign the array args to the configuration variables after the args are parsed.
 	config.UnpropagatedAnnotations = unpropagatedAnnotations
+	config.DisableDefaultLabelExclusion = disableDefaultLabelExclusion
 	config.SetNamespaces(includedNamespacesRegex, excludedNamespaces...)
 	if err := config.SetManagedMeta(managedNamespaceLabels, managedNamespaceAnnots); err != nil {
 		setupLog.Error(err, "Illegal flag values")

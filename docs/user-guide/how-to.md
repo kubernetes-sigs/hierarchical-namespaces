@@ -956,3 +956,7 @@ Interesting parameters include:
   load on your metrics database (through increased metric cardinality) and also
   by increasing how carefully you need to guard your metrics against
   unauthorized viewers.
+* `--disable-default-label-exclusion`: allows you to disable the exclusion of
+  resources that have pre-defined disallowed labels. Currently only Rancher-generated
+  resources are filtered and excluded from propagation by default. Use this argument
+  to disable this behavior.

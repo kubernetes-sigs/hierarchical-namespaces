@@ -467,6 +467,27 @@ var _ = Describe("Basic propagation", func() {
 		Eventually(HasObject(ctx, "configmaps", barName, "cm-with-label-2")).Should(BeTrue())
 	})
 
+	It("should propagate builtin exclusions by labels if disabled in config", func() {
+		SetParent(ctx, barName, fooName)
+		config.DisableDefaultLabelExclusion = true
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-blocked", map[string]string{"cattle.io/creator": "norman"})
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-something", map[string]string{"app": "hello-world"})
+		AddToHNCConfig(ctx, api.RBACGroup, api.RoleKind, api.Propagate)
+
+		// both should propagate since label exclusion is disabled
+		Eventually(HasObject(ctx, "roles", barName, "role-with-labels-blocked")).Should(BeTrue())
+		Eventually(HasObject(ctx, "roles", barName, "role-with-labels-something")).Should(BeTrue())
+
+		// lets try the same with config maps
+		MakeObjectWithLabels(ctx, "configmaps", fooName, "cm-with-label-1", map[string]string{"cattle.io/creator": "norman"})
+		MakeObjectWithLabels(ctx, "configmaps", fooName, "cm-with-label-2", map[string]string{"app": "hello-world"})
+		AddToHNCConfig(ctx, "", "configmaps", api.Propagate)
+
+		// both should propagate since label exclusion is disabled
+		Eventually(HasObject(ctx, "configmaps", barName, "cm-with-label-1")).Should(BeTrue())
+		Eventually(HasObject(ctx, "configmaps", barName, "cm-with-label-2")).Should(BeTrue())
+	})
+
 	It("should be removed if the hierarchy changes", func() {
 		SetParent(ctx, barName, fooName)
 		SetParent(ctx, bazName, barName)

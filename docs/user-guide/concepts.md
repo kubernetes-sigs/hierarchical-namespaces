@@ -378,7 +378,9 @@ objects from being propagated by HNC.
   auto-created in new namespaces by Istio and Kubernetes respectively
 * Any objects with the label
   `cattle.io/creator:norman`, which are [inserted by Rancher to support
-  Projects](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove))
+  Projects](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove)).
+  This exclusion can be disabled with the `--disable-default-label-exclusion` HNC
+  command-line argument. Refer to the [HNC how-to](how-to.md#admin-cli-args) guide for more details.
 * *HNC v1.1+:* Secrets with type `helm.sh/release.v1`, which is auto-created in
   the namespaces where their respective Helm releases are deployed to.
 

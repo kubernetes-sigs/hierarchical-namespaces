@@ -8,3 +8,4 @@ package config
 // This value is controlled by the --unpropagated-annotation command line, which may be set multiple
 // times.
 var UnpropagatedAnnotations []string
+var DisableDefaultLabelExclusion bool

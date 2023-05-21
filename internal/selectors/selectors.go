@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 )
 
 // ShouldPropagate returns true if the given object should be propagated
@@ -246,13 +247,16 @@ func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 	}
 
 	// exclusion by labels
-	for _, res := range exclusionByLabels {
-		gotLabelValue, ok := inst.GetLabels()[res.Key]
-		// check for presence has to be explicit, as empty label values are allowed and a
-		// nonexisting key in the `labels` map will also return an empty string ("") - potentially
-		// causing false matches if `ok` is not checked
-		if ok && gotLabelValue == res.Value {
-			return true, nil
+	// if the default label exclusion is disabled via the manager command line argument, skip it
+	if !config.DisableDefaultLabelExclusion {
+		for _, res := range exclusionByLabels {
+			gotLabelValue, ok := inst.GetLabels()[res.Key]
+			// check for presence has to be explicit, as empty label values are allowed and a
+			// nonexisting key in the `labels` map will also return an empty string ("") - potentially
+			// causing false matches if `ok` is not checked
+			if ok && gotLabelValue == res.Value {
+				return true, nil
+			}
 		}
 	}
 
