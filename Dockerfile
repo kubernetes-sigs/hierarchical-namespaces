@@ -14,6 +14,7 @@ COPY internal/ internal/
 
 # Build
 RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o manager ./cmd/manager/main.go
+RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o apiextension ./cmd/apiextension/main.go
 
 # Copied from kubebuilder scaffold to run as nonroot at
 # https://github.com/kubernetes-sigs/kubebuilder/blob/7af89cb00c224c57ece37dc14ea37caf1eb769db/pkg/scaffold/v2/dockerfile.go#L60
@@ -22,5 +23,6 @@ RUN CGO_ENABLED=0 GO111MODULE=on go build -a -o manager ./cmd/manager/main.go
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+COPY --from=builder /workspace/apiextension .
 USER nonroot:nonroot
 ENTRYPOINT ["/manager"]
