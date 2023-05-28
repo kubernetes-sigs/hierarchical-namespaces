@@ -80,6 +80,8 @@ webhooks:
       path: /validate-objects
   failurePolicy: Fail
   name: objects.hnc.x-k8s.io
+  rules:
+  - {}
   sideEffects: None
 - admissionReviewVersions:
   - v1

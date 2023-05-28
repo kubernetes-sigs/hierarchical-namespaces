@@ -239,12 +239,15 @@ func (r *Reconciler) writeSingleton(ctx context.Context, inst *api.HNCConfigurat
 }
 
 func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
+	namespacedScope := apiadmissionregistrationv1.NamespacedScope
+
 	var rules []apiadmissionregistrationv1.RuleWithOperations
 	for gr := range r.activeGVKMode {
 		rule := apiadmissionregistrationv1.RuleWithOperations{}
 		rule.APIGroups = []string{gr.Group}
 		rule.Resources = []string{gr.Resource}
 		rule.APIVersions = []string{"*"}
+		rule.Scope = &namespacedScope
 		rule.Operations = []apiadmissionregistrationv1.OperationType{apiadmissionregistrationv1.Create, apiadmissionregistrationv1.Update, apiadmissionregistrationv1.Delete}
 		rules = append(rules, rule)
 	}

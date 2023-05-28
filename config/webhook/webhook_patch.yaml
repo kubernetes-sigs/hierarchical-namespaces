@@ -19,19 +19,7 @@ webhooks:
   namespaceSelector:
     matchLabels:
       hnc.x-k8s.io/included-namespace: "true"
-  rules:
-  # This overwrites the rules specified in the object validator to patch object
-  # scope of `namespaced` since there's no kubebuilder marker for `scope`.
-  # There's no way to just patch "scope: Namespaced" to the first rule, since
-  # `rules` takes a list of rules and we can only patch the entire `rules`.
-  - apiGroups:
-    - '*'
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - '*'
-    scope: "Namespaced"
+  # This deletes the rules specified in the object validator as we reconcile
+  # the object validator rules from HNCConfiguration.
+  # FIXME: Should ideally remove field
+  rules: []
