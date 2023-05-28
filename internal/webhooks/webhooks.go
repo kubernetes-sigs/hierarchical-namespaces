@@ -14,6 +14,11 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 )
 
+const (
+	ValidatingWebhookName = "hnc-validating-webhook-configuration"
+	MutatingWebhookName   = "hnc-mutating-webhook-configuration"
+)
+
 // IsHNCServiceAccount is inspired by isGKServiceAccount from open-policy-agent/gatekeeper.
 func IsHNCServiceAccount(user *authnv1.UserInfo) bool {
 	if user == nil {
