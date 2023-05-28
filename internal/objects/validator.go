@@ -41,7 +41,7 @@ const (
 // file if you want to change the webhook `rules` and better make the rules
 // here the same as what's in the webhook_patch.yaml.
 //
-// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-objects,mutating=false,failurePolicy=fail,groups="*",resources="*",sideEffects=None,verbs=create;update;delete,versions="*",name=objects.hnc.x-k8s.io
+// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-objects,mutating=false,failurePolicy=fail,groups=,resources=,sideEffects=None,verbs=,versions=,name=objects.hnc.x-k8s.io
 
 type Validator struct {
 	Log     logr.Logger
