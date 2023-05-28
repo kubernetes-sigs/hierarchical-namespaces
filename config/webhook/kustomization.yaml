@@ -4,6 +4,3 @@ resources:
 
 configurations:
 - kustomizeconfig.yaml
-
-patchesStrategicMerge:
-- webhook_patch.yaml

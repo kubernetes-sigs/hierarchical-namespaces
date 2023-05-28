@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -24,6 +25,7 @@ import (
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/apimeta"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
@@ -263,16 +265,49 @@ func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
 	}
 	cleanVWC := vwc.DeepCopy()
 
+	webhookFound := false
 	for i, wh := range vwc.Webhooks {
 		if wh.Name == "objects.hnc.x-k8s.io" {
 			vwc.Webhooks[i].Rules = rules
-			if err := r.Patch(ctx, vwc, client.MergeFrom(cleanVWC)); err != nil {
-				return err
-			}
+			webhookFound = true
 			break
 		}
 	}
-	return nil
+	if !webhookFound {
+		failurePolicy := apiadmissionregistrationv1.Fail
+		sideEffects := apiadmissionregistrationv1.SideEffectClassNone
+		vw := apiadmissionregistrationv1.ValidatingWebhook{
+			Name: "objects.hnc.x-k8s.io",
+			ClientConfig: apiadmissionregistrationv1.WebhookClientConfig{
+				Service: &apiadmissionregistrationv1.ServiceReference{
+					Namespace: config.GetHNCNamespace(),
+					Name:      "webhook-service",
+					Path:      pointer.String("/validate-objects"),
+				},
+			},
+			Rules:                   rules,
+			FailurePolicy:           &failurePolicy,
+			SideEffects:             &sideEffects,
+			TimeoutSeconds:          pointer.Int32(2),
+			AdmissionReviewVersions: []string{"v1"},
+			// We only apply this object validator on non-excluded namespaces, which have
+			// the "included-namespace" label set by the HC reconciler, so that when HNC
+			// (webhook service specifically) is down, operations in the excluded
+			// namespaces won't be affected. Validators on HNC CRs are not filtered because
+			// they are supposed to prevent abuse of HNC CRs in excluded namespaces.
+			// Namespace validator is not filtered to prevent abuse of the included-namespace
+			// label on excluded namespaces. Unfortunately, this means that when HNC is
+			// down, we will block updates on all namespaces, even "excluded" ones, but
+			// anyone who can update namespaces like `kube-system` should likely be able to
+			// delete the VWHConfiguration to make the updates.
+			NamespaceSelector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{"hnc.x-k8s.io/included-namespace": "true"},
+			},
+		}
+		vwc.Webhooks = append(vwc.Webhooks, vw)
+	}
+
+	return r.Patch(ctx, vwc, client.MergeFrom(cleanVWC))
 }
 
 // syncObjectReconcilers creates or syncs ObjectReconcilers.
