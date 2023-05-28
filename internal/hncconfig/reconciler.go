@@ -254,6 +254,11 @@ func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
 
 	vwc := &apiadmissionregistrationv1.ValidatingWebhookConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{Name: webhooks.ValidatingWebhookName}, vwc); err != nil {
+		if errors.IsNotFound(err) {
+			// todo(erikgb): See if the tests can/should be bootstrapped with this webhook
+			// Webhook not found; nothing to reconcile
+			return nil
+		}
 		return err
 	}
 	cleanVWC := vwc.DeepCopy()
@@ -261,11 +266,11 @@ func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
 	for i, wh := range vwc.Webhooks {
 		if wh.Name == "objects.hnc.x-k8s.io" {
 			vwc.Webhooks[i].Rules = rules
+			if err := r.Patch(ctx, vwc, client.MergeFrom(cleanVWC)); err != nil {
+				return err
+			}
+			break
 		}
-	}
-
-	if err := r.Patch(ctx, vwc, client.MergeFrom(cleanVWC)); err != nil {
-		return err
 	}
 	return nil
 }
