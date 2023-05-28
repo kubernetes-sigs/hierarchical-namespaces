@@ -71,10 +71,6 @@ func HNCBeforeSuite() {
 	By("configuring test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
-		// todo(erikgb): Fix tests that breaks when enabling webhooks
-		//WebhookInstallOptions: envtest.WebhookInstallOptions{
-		//	Paths: []string{filepath.Join("..", "..", "config", "webhook")},
-		//},
 	}
 
 	By("starting test environment")
@@ -98,14 +94,10 @@ func HNCBeforeSuite() {
 	// CF: https://github.com/microsoft/azure-databricks-operator/blob/0f722a710fea06b86ecdccd9455336ca712bf775/controllers/suite_test.go
 
 	By("creating manager")
-	webhookInstallOptions := &testEnv.WebhookInstallOptions
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		NewClient:          config.NewClient(false),
 		MetricsBindAddress: "0", // disable metrics serving since 'go test' runs multiple suites in parallel processes
 		Scheme:             scheme.Scheme,
-		Host:               webhookInstallOptions.LocalServingHost,
-		Port:               webhookInstallOptions.LocalServingPort,
-		CertDir:            webhookInstallOptions.LocalServingCertDir,
 	})
 	Expect(err).ToNot(HaveOccurred())
 
@@ -119,7 +111,6 @@ func HNCBeforeSuite() {
 	TestForest = forest.NewForest()
 	err = setup.CreateReconcilers(k8sManager, TestForest, opts)
 	Expect(err).ToNot(HaveOccurred())
-	setup.CreateWebhooks(k8sManager, TestForest, opts)
 
 	By("Creating clients")
 	K8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
