@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/duration"
 	"k8s.io/cli-runtime/pkg/printers"
-	k8sprinters "k8s.io/kubernetes/pkg/printers"
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 )
 
@@ -63,11 +62,6 @@ func Run(cmd *cobra.Command, args []string) {
 	flags := cmd.Flags()
 	table := &metav1.Table{ColumnDefinitions: hierarchicalResourceQuotaColumnDefinitions}
 
-	option := k8sprinters.GenerateOptions{
-		NoHeaders: true,
-		Wide:      true,
-	}
-
 	showLabels := flags.Changed("show-labels")
 
 	allResourcesNamespaced := !flags.Changed("all-namespaces")
@@ -89,7 +83,7 @@ func Run(cmd *cobra.Command, args []string) {
 	}
 
 	// Create []metav1.TableRow from HierarchicalResourceQuotaList
-	tableRaws, err := printHierarchicalResourceQuotaList(hrqList, option)
+	tableRaws, err := printHierarchicalResourceQuotaList(hrqList)
 	if err != nil {
 		fmt.Printf("Error reading hierarchicalresourcequotas: %s\n", err)
 	}
@@ -116,7 +110,7 @@ func Run(cmd *cobra.Command, args []string) {
 	w.Flush()
 }
 
-func printHierarchicalResourceQuota(hierarchicalResourceQuota *api.HierarchicalResourceQuota, options k8sprinters.GenerateOptions) ([]metav1.TableRow, error) {
+func printHierarchicalResourceQuota(hierarchicalResourceQuota *api.HierarchicalResourceQuota) ([]metav1.TableRow, error) {
 	row := metav1.TableRow{
 		Object: runtime.RawExtension{Object: hierarchicalResourceQuota},
 	}
@@ -148,10 +142,10 @@ func printHierarchicalResourceQuota(hierarchicalResourceQuota *api.HierarchicalR
 	return []metav1.TableRow{row}, nil
 }
 
-func printHierarchicalResourceQuotaList(list *api.HierarchicalResourceQuotaList, options k8sprinters.GenerateOptions) ([]metav1.TableRow, error) {
+func printHierarchicalResourceQuotaList(list *api.HierarchicalResourceQuotaList) ([]metav1.TableRow, error) {
 	rows := make([]metav1.TableRow, 0, len(list.Items))
 	for i := range list.Items {
-		r, err := printHierarchicalResourceQuota(&list.Items[i], options)
+		r, err := printHierarchicalResourceQuota(&list.Items[i])
 		if err != nil {
 			return nil, err
 		}
