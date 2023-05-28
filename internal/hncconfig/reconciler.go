@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	apiadmissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -27,6 +28,7 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
 	"sigs.k8s.io/hierarchical-namespaces/internal/stats"
+	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
 )
 
 // Reconciler is responsible for determining the HNC configuration from the HNCConfiguration CR,
@@ -81,6 +83,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	inst.Status.Conditions = nil
 
 	if err := r.reconcileTypes(inst); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if err := r.syncObjectWebhookConfigs(ctx); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -229,6 +235,35 @@ func (r *Reconciler) writeSingleton(ctx context.Context, inst *api.HNCConfigurat
 		}
 	}
 
+	return nil
+}
+
+func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
+	var rules []apiadmissionregistrationv1.RuleWithOperations
+	for gr := range r.activeGVKMode {
+		rule := apiadmissionregistrationv1.RuleWithOperations{}
+		rule.APIGroups = []string{gr.Group}
+		rule.Resources = []string{gr.Resource}
+		rule.APIVersions = []string{"*"}
+		rule.Operations = []apiadmissionregistrationv1.OperationType{apiadmissionregistrationv1.Create, apiadmissionregistrationv1.Update, apiadmissionregistrationv1.Delete}
+		rules = append(rules, rule)
+	}
+
+	vwc := &apiadmissionregistrationv1.ValidatingWebhookConfiguration{}
+	if err := r.Get(ctx, client.ObjectKey{Name: webhooks.ValidatingWebhookName}, vwc); err != nil {
+		return err
+	}
+	cleanVWC := vwc.DeepCopy()
+
+	for i, wh := range vwc.Webhooks {
+		if wh.Name == "objects.hnc.x-k8s.io" {
+			vwc.Webhooks[i].Rules = rules
+		}
+	}
+
+	if err := r.Patch(ctx, vwc, client.MergeFrom(cleanVWC)); err != nil {
+		return err
+	}
 	return nil
 }
 

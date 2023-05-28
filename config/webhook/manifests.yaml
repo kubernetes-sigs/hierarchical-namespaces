@@ -80,17 +80,6 @@ webhooks:
       path: /validate-objects
   failurePolicy: Fail
   name: objects.hnc.x-k8s.io
-  rules:
-  - apiGroups:
-    - '*'
-    apiVersions:
-    - '*'
-    operations:
-    - CREATE
-    - UPDATE
-    - DELETE
-    resources:
-    - '*'
   sideEffects: None
 - admissionReviewVersions:
   - v1
