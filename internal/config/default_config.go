@@ -8,3 +8,14 @@ package config
 // This value is controlled by the --unpropagated-annotation command line, which may be set multiple
 // times.
 var UnpropagatedAnnotations []string
+
+// NoPropagationLabel specifies a label Key and Value which will cause an object to be excluded
+// from propagation if the object defines that label with this specific value.
+type NoPropagationLabel struct {
+	Key   string
+	Value string
+}
+
+// NoPropagationLabels is a configuration slice that contains all NoPropagationLabel labels that should
+// cause objects to be ignored from propagation.
+var NoPropagationLabels []NoPropagationLabel
