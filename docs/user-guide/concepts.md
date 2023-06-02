@@ -378,7 +378,10 @@ objects from being propagated by HNC.
   auto-created in new namespaces by Istio and Kubernetes respectively
 * Any objects with the label
   `cattle.io/creator:norman`, which are [inserted by Rancher to support
-  Projects](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove))
+  Projects](https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove)).
+  Can be disabled by removing the default command line argument on the manager
+  `--nopropagation-label=cattle.io/creator=norman`. Refer to [How-to:
+  Modify command-line arguments](how-to.md#modify-command-line-arguments) for more details.
 * *HNC v1.1+:* Secrets with type `helm.sh/release.v1`, which is auto-created in
   the namespaces where their respective Helm releases are deployed to.
 

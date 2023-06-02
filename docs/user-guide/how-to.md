@@ -956,3 +956,12 @@ Interesting parameters include:
   load on your metrics database (through increased metric cardinality) and also
   by increasing how carefully you need to guard your metrics against
   unauthorized viewers.
+* `--nopropagation-label`: has the same effect as the `propagate.hnc.x-k8s.io/none`
+  annotation as specified in [limiting propagation](how-to.md#limit-the-propagation-of-an-object-to-descendant-namespaces),
+  but is useful when there's no control over what annotations the object has in order
+  to disable the propagation of that object. This argument may be specified multiple
+  times, with each parameter representing one `key=val` pair of a label that should
+  exclude an object from propagation.
+    * Rancher objects that have the label `cattle.io/creator=norman` are not propagated
+    by the default manifests (refer to [Concepts: built in exceptions](concepts.md#built-in-exceptions)
+    for more information).
