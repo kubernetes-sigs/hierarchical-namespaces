@@ -13,6 +13,7 @@ namespaces are, and _why_ they behave the way they do.
 * [Basic concepts](#basic)
   * [Parents, children, trees and forests](#basic-trees)
   * [Full namespaces and subnamespaces](#basic-subns)
+  * [Hierarchical resource quotas (HRQs)](#hrq)
   * [Policy inheritance and object propagation](#basic-propagation)
   * [Tree labels and non-propagated policies](#basic-labels)
   * [Exceptions and propagation control](#basic-exceptions)
@@ -87,6 +88,8 @@ namespaces:
   as isolation units for their own services. However, namespace creation is a
   privileged cluster-level operation, and you typically want to control this
   privilege very closely.
+* You might want to give some amount of resources to a team (similar to `ResourceQuota`), and they can
+  distribute those resources between their subnamespaces.
 * Finally, you might want to avoid having to find unique names for every
   namespace in the cluster.
 
@@ -218,6 +221,70 @@ probably not a great idea.
 You can create a subnamespace from the command line via `kubectl hns create child
 -n parent`.
 
+<a name="hrq">
+
+### Hierarchical resource quotas (HRQs)
+
+***Hierarchical resource quotas are beta in HNC v1.1***
+
+***HRQs are not included by default, to use it install the hrq.yaml file in the [releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
+
+When you want to give some amount of resources to `team-a`, and want them to be able to
+flexibly use resources in any of their subnamespaces, you create a `HierarchicalResourceQuota`
+in namespace `team-a`. The sum of all resources from all the subnamespaces of the
+members wont be over the amount of resources that is configured in
+`HierarchicalResourceQuota` of namespace `team-a`. All of the reasources of `team-a` are
+equally shared between the applications in their subnamespaces, which is very efficient.
+
+In addition, you can let an org or team's admin create their own hierarchical
+quotas without violating the overall HRQ for their org or team. For example,
+if you start with the following structure:
+```
+company-a
+├── organization-a
+│   ├── org-a-team-1
+│   ├── org-a-team-2
+│   ...
+├── organization-b
+│   ├── org-b-team-1
+│   ├── org-b-team-2
+│   ...
+...
+```
+Instead of each team asking from the `cluster-admin` to modify their `ResourceQuota`, 
+you can insert an additional "policy" namespace above each level to hold
+the policy objects (like hierarchical quota) that the sub-admin _cannot_
+change, while giving them permission to create their own quotas in the
+lower level namespaces, like this:
+```
+company-a-policy
+└── company-a
+```
+And put the resources HRQ in the `company-a-policy` namespace. This will restrict
+whole `company-a` to the amount of resources that they are paying for. Then `company-a`
+can do similar HRQ with their organizations:
+```
+company-a-policy (has HRQ)
+└── company-a
+    ├── org-a-policy (has HRQ)
+    │   └── organization-a
+    ├── org-b-policy (has HRQ)
+    │   └── organization-b
+    ...
+```
+Lower-level quotas cannot override more restrictive quotas from ancestor namespaces;
+the most restrictive quota always wins.
+This way each individual can fairly and securely distribute their resources across
+their members.
+
+To implement hierarchical quotas, HNC automatically creates `ResourceQuota` objects in each
+affected namespace. This is a part of the internal implementation and shouldn't be modified or
+inspected. Use the `kubectl hns hrq` command to inspect hierarchical quotas,
+or look at the `HierarchicalResourceQuota` object in the ancestor
+namespaces.
+
+Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5` but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
+
 <a name="basic-propagation">
 
 ### Policy inheritance and object propagation
@@ -327,7 +394,7 @@ HNC typically propagates _all_ objects of a [specified type](how-to.md#admin-res
 from ancestor namespaces to descendant namespaces. However, sometimes this is
 too restrictive, and you need to create ***exceptions*** to certain policies. For example:
 
-* A ResourceQuota was propagated to many children, but one child namespace now
+* A `ResourceQuota` was propagated to many children, but one child namespace now
   has higher requirements than the rest. Rather than getting rid of the quota in
   the parent namespace, or raising the limit for everyone, you can stop the
   quota in the parent from being propagated to that _one_ child namespace,
@@ -345,7 +412,7 @@ an object can also control how it is propagated to descendant namespaces.
 If you modify an exception - for example, by removing it - this could cause
 the object to be propagated to descendants from which it had previously been
 excluded. This could cause you to accidentally overwrite objects that were
-intended to be exceptions from higher-level policies, like the ResourceQuota
+intended to be exceptions from higher-level policies, like the `ResourceQuota`
 in the example above. To prevent this, if modifying an exception would cause
 HNC to overwrite another object, HNC’s admission controllers will prevent you
 from modifying the object, and will identify the objects that would have been
