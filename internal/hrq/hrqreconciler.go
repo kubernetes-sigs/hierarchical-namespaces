@@ -1,8 +1,11 @@
 package hrq
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -13,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	v1 "k8s.io/api/core/v1"
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/hrq/utils"
@@ -144,6 +148,33 @@ func (r *HierarchicalResourceQuotaReconciler) syncUsages(inst *api.HierarchicalR
 	// Filter the usages to only include the resource types being limited by this HRQ and write those
 	// usages back to the HRQ status.
 	inst.Status.Used = utils.FilterUnlimited(ns.GetSubtreeUsages(), inst.Spec.Hard)
+
+	// Update status.request and status.limit to show HRQ status by using kubectl get
+	resources := make([]v1.ResourceName, 0, len(inst.Status.Hard))
+	for resource := range inst.Status.Hard {
+		resources = append(resources, resource)
+	}
+	sort.Sort(sortableResourceNames(resources))
+
+	requestColumn := bytes.NewBuffer([]byte{})
+	limitColumn := bytes.NewBuffer([]byte{})
+	for i := range resources {
+		w := requestColumn
+		resource := resources[i]
+		usedQuantity := inst.Status.Used[resource]
+		hardQuantity := inst.Status.Hard[resource]
+
+		// use limitColumn writer if a resource name prefixed with "limits" is found
+		if pieces := strings.Split(resource.String(), "."); len(pieces) > 1 && pieces[0] == "limits" {
+			w = limitColumn
+		}
+
+		fmt.Fprintf(w, "%s: %s/%s, ", resource, usedQuantity.String(), hardQuantity.String())
+	}
+
+	inst.Status.RequestsSummary = strings.TrimSuffix(requestColumn.String(), ", ")
+	inst.Status.LimitsSummary = strings.TrimSuffix(limitColumn.String(), ", ")
+
 }
 
 func isDeleted(inst *api.HierarchicalResourceQuota) bool {
@@ -202,4 +233,19 @@ func (r *HierarchicalResourceQuotaReconciler) SetupWithManager(mgr ctrl.Manager)
 		For(&api.HierarchicalResourceQuota{}).
 		Watches(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
+}
+
+// sortableResourceNames - An array of sortable resource names
+type sortableResourceNames []v1.ResourceName
+
+func (list sortableResourceNames) Len() int {
+	return len(list)
+}
+
+func (list sortableResourceNames) Swap(i, j int) {
+	list[i], list[j] = list[j], list[i]
+}
+
+func (list sortableResourceNames) Less(i, j int) bool {
+	return list[i] < list[j]
 }
