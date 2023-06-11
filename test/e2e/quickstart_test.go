@@ -191,6 +191,43 @@ spec:
 		RunErrorShouldContain("wget: download timed out", defTimeout, clientCmd, nsTeamB, alpineArgs, wgetArgs)
 	})
 
+	PIt("Create and use HierarchicalResourceQuota", func() {
+		// set up initial structure
+		CreateNamespace(nsOrg)
+		CreateSubnamespace(nsTeamA, nsOrg)
+		CreateSubnamespace(nsTeamB, nsOrg)
+
+		expected := "" + // empty string make go fmt happy
+		nsOrg + "\n" +
+			"├── [s] " + nsTeamA + "\n" +
+			"└── [s] " + nsTeamB
+		// The subnamespaces takes a bit of time to show up
+		RunShouldContain(expected, propogationTimeout, "kubectl hns tree", nsOrg)
+
+		// create hrq in parent acme-org
+		hrq:=`# quickstart_test.go: hrq in acme-org
+kind: HierarchicalResourceQuota
+apiVersion: hnc.x-k8s.io/v1alpha2
+metadata:
+  name: acme-org-hrq
+  namespace: acme-org
+spec:
+  hard:
+    services: 1`
+		MustApplyYAML(hrq)
+
+		// create service in team-a
+		MustRun("kubectl create service clusterip", nsTeamA + "-svc", "--clusterip=None", "-n", nsTeamA)
+
+		// show that you can't use resources more than the hrq
+		MustNotRun("kubectl create service clusterip", nsTeamB + "-svc", "--clusterip=None", "-n", nsTeamB)
+
+		// show hrq usage
+		RunShouldContain("services: 1/1", defTimeout, "kubectl hns hrq", "-n", nsOrg)
+
+		MustRun("kubectl delete hrq", nsOrg + "-hrq", "-n", nsOrg)
+	})
+
 	It("Should create and delete subnamespaces", func() {
 		// set up initial structure
 		CreateNamespace(nsOrg)

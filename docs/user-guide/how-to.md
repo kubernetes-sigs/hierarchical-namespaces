@@ -10,6 +10,7 @@ This document describes common tasks you might want to accomplish using HNC.
   * [Create a subnamespace](#use-subns-create)
   * [Inspect namespace hierarchies](#use-inspect)
   * [Propagating policies across namespaces](#use-propagate)
+  * [Apply hierarchical resource quotas (HRQs)](#use-hrq)
   * [Select namespaces based on their hierarchies](#use-select)
   * [Delete a subnamespace](#use-subns-delete)
   * [Organize full namespaces into a hierarchy](#use-full)
@@ -185,6 +186,21 @@ variety of reasons - e.g., HNC itself might not have sufficient RBAC
 permissions. To understand why an object is not being propagated to a namespace,
 use `kubectl hns describe <ns>`, where `<ns>` is either the source (ancestor) or
 destination (descendant) namespace.
+
+<a name="use-hrq"/>
+
+### Limit Resources over parent namespaces
+
+***Hierarchical resource quotas are beta in HNC v1.1***
+
+***HRQs are not included by default, to use it install the hrq.yaml file in the [releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
+
+HNC has an object called `HierarchicalResourceQuota` which is a drop-in replacement for `ResourceQuota`
+but across all the namespaces in a hierarchy. It allows you to distribute your resources between
+teams, and those teams can distribute their resources between their subteams.
+[Learn how it works](concepts.md#hierarchical-resource-quota) or see an [quickstart example](quickstart.md#hrq)
+
+Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5` but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
 
 <a name="use-select"/>
 
