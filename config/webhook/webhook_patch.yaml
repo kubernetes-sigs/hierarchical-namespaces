@@ -13,7 +13,6 @@ webhooks:
       path: /validate-objects
   failurePolicy: Fail
   name: objects.hnc.x-k8s.io
-  # Intentionally no rules, as these are maintained by the HNCConfiguration reconciler
   sideEffects: None
   timeoutSeconds: 2
   # We only apply this object validator on non-excluded namespaces, which have
@@ -29,3 +28,4 @@ webhooks:
   namespaceSelector:
     matchLabels:
       hnc.x-k8s.io/included-namespace: "true"
+  # Intentionally no rules, as these are maintained by the HNCConfiguration reconciler
