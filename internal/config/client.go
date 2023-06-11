@@ -45,8 +45,12 @@ type readOnlyClient struct {
 	client client.Client
 }
 
-func (c readOnlyClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object) error {
+func (c readOnlyClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 	return c.client.Get(ctx, key, obj)
+}
+
+func (c readOnlyClient) SubResource(subResource string) client.SubResourceClient {
+	return readOnlySubResourceClient{client: c.client.SubResource(subResource)}
 }
 
 func (c readOnlyClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
@@ -90,12 +94,36 @@ func (c readOnlyClient) RESTMapper() meta.RESTMapper {
 	return c.client.RESTMapper()
 }
 
-type nopStatusWriter struct{}
+type readOnlySubResourceClient struct {
+	client client.SubResourceClient
+}
 
-func (w nopStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.UpdateOption) error {
+func (r readOnlySubResourceClient) Get(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceGetOption) error {
+	return r.client.Get(ctx, obj, subResource, opts...)
+}
+
+func (r readOnlySubResourceClient) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
 	return nil
 }
 
-func (w nopStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+func (r readOnlySubResourceClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	return nil
+}
+
+func (r readOnlySubResourceClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	return nil
+}
+
+type nopStatusWriter struct{}
+
+func (w nopStatusWriter) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	return nil
+}
+
+func (w nopStatusWriter) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	return nil
+}
+
+func (w nopStatusWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 	return nil
 }

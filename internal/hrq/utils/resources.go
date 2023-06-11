@@ -156,8 +156,8 @@ func mask(resources v1.ResourceList, names []v1.ResourceName) v1.ResourceList {
 }
 
 // toSet takes a list of resource names and converts to a string set
-func toSet(resourceNames []v1.ResourceName) sets.String {
-	result := sets.NewString()
+func toSet(resourceNames []v1.ResourceName) sets.Set[string] {
+	result := sets.Set[string]{}
 	for _, resourceName := range resourceNames {
 		result.Insert(string(resourceName))
 	}

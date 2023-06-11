@@ -19,13 +19,13 @@ import (
 type fakeDeleteCRDClient struct{}
 
 // fakeDeleteCRDClient doesn't return any err on Get() because none of the reconciler test performs CRD deletion
-func (f fakeDeleteCRDClient) Get(context.Context, types.NamespacedName, client.Object) error {
+func (f fakeDeleteCRDClient) Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error {
 	return nil
 }
 
 // crdClientType could be either a real client or fakeDeleteCRDClient
 type crdClientType interface {
-	Get(context.Context, types.NamespacedName, client.Object) error
+	Get(context.Context, client.ObjectKey, client.Object, ...client.GetOption) error
 }
 
 // crdClient is an uncached client for checking CRD deletion (or a fake for testing)

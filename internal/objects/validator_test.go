@@ -680,13 +680,17 @@ type fakeNSClient struct {
 	isDeleting bool
 }
 
-// Get decodes given client.Object as corev1.Namespace that might contains deletionTimestamp
-func (c fakeNSClient) Get(_ context.Context, key client.ObjectKey, obj client.Object) error {
+// Get decodes given client.Object as corev1.Namespace that might contain deletionTimestamp
+func (c fakeNSClient) Get(_ context.Context, _ client.ObjectKey, obj client.Object, _ ...client.GetOption) error {
 	nsObj := obj.(*corev1.Namespace)
 	if c.isDeleting {
 		nsObj.DeletionTimestamp = &metav1.Time{Time: time.Now()}
 	}
 
+	return nil
+}
+
+func (c fakeNSClient) SubResource(_ string) client.SubResourceClient {
 	return nil
 }
 

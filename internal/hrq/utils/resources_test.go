@@ -410,7 +410,7 @@ func TestToSet(t *testing.T) {
 	tests := []struct {
 		name string
 		in   []v1.ResourceName
-		want sets.String
+		want sets.Set[string]
 	}{
 		{
 			name: "empty resource names",
@@ -421,7 +421,7 @@ func TestToSet(t *testing.T) {
 				v1.ResourceCPU,
 				v1.ResourceMemory,
 			},
-			want: sets.NewString(
+			want: sets.New(
 				v1.ResourceCPU.String(),
 				v1.ResourceMemory.String()),
 		},
@@ -432,7 +432,7 @@ func TestToSet(t *testing.T) {
 				v1.ResourceCPU,
 				v1.ResourceMemory,
 			},
-			want: sets.NewString(
+			want: sets.New(
 				v1.ResourceCPU.String(),
 				v1.ResourceMemory.String()),
 		},
