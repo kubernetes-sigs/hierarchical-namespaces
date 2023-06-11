@@ -32,6 +32,12 @@ const (
 	ServingPath = "/validate-objects"
 )
 
+// Note: the validating webhook FAILS CLOSE. This means that if the webhook goes
+// down, all further changes are forbidden. The initial webhook configuration contains
+// just enforced types, and will be dynamically updated when reconciling the HNC configuration.
+//
+// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-objects,mutating=false,failurePolicy=fail,groups="rbac.authorization.k8s.io",resources=roles;rolebindings,sideEffects=None,verbs=create;update;delete,versions=v1,name=objects.hnc.x-k8s.io
+
 type Validator struct {
 	Log     logr.Logger
 	Forest  *forest.Forest

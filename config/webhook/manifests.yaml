@@ -77,6 +77,28 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-objects
+  failurePolicy: Fail
+  name: objects.hnc.x-k8s.io
+  rules:
+  - apiGroups:
+    - rbac.authorization.k8s.io
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - roles
+    - rolebindings
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-hnc-x-k8s-io-v1alpha2-hncconfigurations
   failurePolicy: Fail
   name: hncconfigurations.hnc.x-k8s.io
