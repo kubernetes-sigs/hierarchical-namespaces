@@ -48,10 +48,10 @@ func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretR
 		IsReady:        setupFinished,
 		Webhooks: []cert.WebhookInfo{{
 			Type: cert.Validating,
-			Name: webhooks.ValidatingWebhookName,
+			Name: webhooks.ValidatingWebhookConfigurationName,
 		}, {
 			Type: cert.Mutating,
-			Name: webhooks.MutatingWebhookName,
+			Name: webhooks.MutatingWebhookConfigurationName,
 		}},
 		RestartOnSecretRefresh: restartOnSecretRefresh,
 	})

@@ -15,7 +15,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -25,7 +24,6 @@ import (
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
 	"sigs.k8s.io/hierarchical-namespaces/internal/apimeta"
-	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 	"sigs.k8s.io/hierarchical-namespaces/internal/crd"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
@@ -241,21 +239,24 @@ func (r *Reconciler) writeSingleton(ctx context.Context, inst *api.HNCConfigurat
 }
 
 func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
-	namespacedScope := apiadmissionregistrationv1.NamespacedScope
+	// Group GR by group
+	groups := make(map[string][]string)
+	for gr := range r.activeGVKMode {
+		groups[gr.Group] = append(groups[gr.Group], gr.Resource)
+	}
 
 	var rules []apiadmissionregistrationv1.RuleWithOperations
-	for gr := range r.activeGVKMode {
+	for g, res := range groups {
 		rule := apiadmissionregistrationv1.RuleWithOperations{}
-		rule.APIGroups = []string{gr.Group}
-		rule.Resources = []string{gr.Resource}
+		rule.APIGroups = []string{g}
+		rule.Resources = res
 		rule.APIVersions = []string{"*"}
-		rule.Scope = &namespacedScope
 		rule.Operations = []apiadmissionregistrationv1.OperationType{apiadmissionregistrationv1.Create, apiadmissionregistrationv1.Update, apiadmissionregistrationv1.Delete}
 		rules = append(rules, rule)
 	}
 
 	vwc := &apiadmissionregistrationv1.ValidatingWebhookConfiguration{}
-	if err := r.Get(ctx, client.ObjectKey{Name: webhooks.ValidatingWebhookName}, vwc); err != nil {
+	if err := r.Get(ctx, client.ObjectKey{Name: webhooks.ValidatingWebhookConfigurationName}, vwc); err != nil {
 		if errors.IsNotFound(err) {
 			// todo(erikgb): See if the tests can/should be bootstrapped with this webhook
 			// Webhook not found; nothing to reconcile
@@ -265,49 +266,13 @@ func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
 	}
 	cleanVWC := vwc.DeepCopy()
 
-	webhookFound := false
 	for i, wh := range vwc.Webhooks {
-		if wh.Name == "objects.hnc.x-k8s.io" {
+		if wh.Name == webhooks.ObjectsWebhookName {
 			vwc.Webhooks[i].Rules = rules
-			webhookFound = true
-			break
+			return r.Patch(ctx, vwc, client.MergeFrom(cleanVWC))
 		}
 	}
-	if !webhookFound {
-		failurePolicy := apiadmissionregistrationv1.Fail
-		sideEffects := apiadmissionregistrationv1.SideEffectClassNone
-		vw := apiadmissionregistrationv1.ValidatingWebhook{
-			Name: "objects.hnc.x-k8s.io",
-			ClientConfig: apiadmissionregistrationv1.WebhookClientConfig{
-				Service: &apiadmissionregistrationv1.ServiceReference{
-					Namespace: config.GetHNCNamespace(),
-					Name:      "webhook-service",
-					Path:      pointer.String("/validate-objects"),
-				},
-			},
-			Rules:                   rules,
-			FailurePolicy:           &failurePolicy,
-			SideEffects:             &sideEffects,
-			TimeoutSeconds:          pointer.Int32(2),
-			AdmissionReviewVersions: []string{"v1"},
-			// We only apply this object validator on non-excluded namespaces, which have
-			// the "included-namespace" label set by the HC reconciler, so that when HNC
-			// (webhook service specifically) is down, operations in the excluded
-			// namespaces won't be affected. Validators on HNC CRs are not filtered because
-			// they are supposed to prevent abuse of HNC CRs in excluded namespaces.
-			// Namespace validator is not filtered to prevent abuse of the included-namespace
-			// label on excluded namespaces. Unfortunately, this means that when HNC is
-			// down, we will block updates on all namespaces, even "excluded" ones, but
-			// anyone who can update namespaces like `kube-system` should likely be able to
-			// delete the VWHConfiguration to make the updates.
-			NamespaceSelector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"hnc.x-k8s.io/included-namespace": "true"},
-			},
-		}
-		vwc.Webhooks = append(vwc.Webhooks, vw)
-	}
-
-	return r.Patch(ctx, vwc, client.MergeFrom(cleanVWC))
+	return fmt.Errorf("webhook %q not found in ValidatingWebhookConfiguration %q", webhooks.ObjectsWebhookName, webhooks.ValidatingWebhookConfigurationName)
 }
 
 // syncObjectReconcilers creates or syncs ObjectReconcilers.
