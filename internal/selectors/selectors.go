@@ -13,6 +13,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
+	"sigs.k8s.io/hierarchical-namespaces/internal/config"
 )
 
 // ShouldPropagate returns true if the given object should be propagated
@@ -43,8 +44,10 @@ func ShouldPropagate(inst *unstructured.Unstructured, nsLabels labels.Set, mode 
 	if none, err := GetNoneSelector(inst); err != nil || none {
 		return false, err
 	}
-	if all, err := GetAllSelector(inst); err != nil || all {
-		return true, err
+	if all, err := GetAllSelector(inst); err != nil {
+		return false, err
+	} else if all {
+		propIfNotExcluded = true
 	}
 	if excluded, err := isExcluded(inst); excluded {
 		return false, err
@@ -197,19 +200,6 @@ func GetAllSelector(inst *unstructured.Unstructured) (bool, error) {
 // cmExclusionsByName are known (istio and kube-root) CA configmap which are excluded from propagation
 var cmExclusionsByName = []string{"istio-ca-root-cert", "kube-root-ca.crt"}
 
-// A label as a key, value pair, used to exclude resources matching this label (both key and value).
-type ExclusionByLabelsSpec struct {
-	Key   string
-	Value string
-}
-
-// ExclusionByLabelsSpec are known label key-value pairs which are excluded from propagation. Right
-// now only used to exclude resources created by Rancher, see "System Tools > Remove"
-// (https://rancher.com/docs/rancher/v2.6/en/system-tools/#remove)
-var exclusionByLabels = []ExclusionByLabelsSpec{
-	{Key: "cattle.io/creator", Value: "norman"},
-}
-
 // A annotation as a key, value pair, used to exclude resources matching this annotation
 type ExclusionByAnnotationsSpec struct {
 	Key   string
@@ -246,7 +236,7 @@ func isExcluded(inst *unstructured.Unstructured) (bool, error) {
 	}
 
 	// exclusion by labels
-	for _, res := range exclusionByLabels {
+	for _, res := range config.NoPropagationLabels {
 		gotLabelValue, ok := inst.GetLabels()[res.Key]
 		// check for presence has to be explicit, as empty label values are allowed and a
 		// nonexisting key in the `labels` map will also return an empty string ("") - potentially
