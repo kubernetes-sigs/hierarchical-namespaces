@@ -16,7 +16,14 @@ spec:
     singular: hierarchicalresourcequota
   scope: Namespaced
   versions:
-  - name: v1alpha2
+  - additionalPrinterColumns:
+    - jsonPath: .status.requestsSummary
+      name: Request
+      type: string
+    - jsonPath: .status.limitsSummary
+      name: Limit
+      type: string
+    name: v1alpha2
     schema:
       openAPIV3Schema:
         description: HierarchicalResourceQuota sets aggregate quota restrictions enforced
@@ -62,6 +69,14 @@ spec:
                 description: Hard is the set of enforced hard limits for each named
                   resource
                 type: object
+              limitsSummary:
+                description: LimitsSummary is used by kubectl get hrq, and summarizes
+                  the relevant information from .status.hard.limits and .status.used.limits.
+                type: string
+              requestsSummary:
+                description: RequestsSummary is used by kubectl get hrq, and summarizes
+                  the relevant information from .status.hard.requests and .status.used.requests.
+                type: string
               used:
                 additionalProperties:
                   anyOf:
