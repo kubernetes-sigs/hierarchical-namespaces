@@ -21,6 +21,7 @@ also to all contributors since then.
 * [Basic functionality](#basic)
 * [Propagating different resources](#resources)
 * [Hierarchical network policy](#netpol)
+* [Hierarchical resource quotas](#hrq)
 * [Subnamespaces deep-dive](#subns)
 * [Keeping objects out of certain namespaces](#exceptions)
 
@@ -341,7 +342,7 @@ Now we'll create a default network policy that blocks any ingress from other
 namespaces:
 
 ```bash
-cat << EOF | kubectl apply -f -
+kubectl apply -f - << EOF
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
@@ -394,7 +395,7 @@ other. We do this by creating a policy that selects namespaces based on the
 that is automatically added by the HNC.
 
 ```bash
-cat << EOF | kubectl apply -f -
+kubectl apply -f - << EOF
 kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
 metadata:
@@ -457,6 +458,78 @@ kubectl delete netpol deny-from-other-namespaces -n acme-org
 kubectl delete svc s2 -n service-2
 kubectl delete pods s2 -n service-2
 ```
+
+<a name="hrq"/>
+
+### Hierarchical resource quotas
+
+***Hierarchical resource quotas are beta in HNC v1.1***
+
+***HRQs are not included by default, to use it install the hrq.yaml file in the [releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
+
+_Will demonstrate: Create and delete [HierarchicalResourceQuota](concepts.md#hierarchical-resource-quota)._
+
+Let's assume you own _acme-org_ from the previous example:
+```
+acme-org
+├── [s] team-a
+└── [s] team-b
+```
+
+You can create a `HierarchicalResourceQuota` in namespace `acme-org`, and the sum of 
+all subnamespaces resource usage can't go over what is configured in the HRQ.
+
+We will demonstrate how it works using services, but you could also limit `cpu`,
+`memory` or any other `ResourceQuota` field.
+
+Creating the HRQ:
+```bash
+kubectl apply -f - << EOF
+kind: HierarchicalResourceQuota
+apiVersion: hnc.x-k8s.io/v1alpha2
+metadata:
+  name: acme-org-hrq
+  namespace: acme-org
+spec:
+  hard:
+    services: 1
+EOF
+```
+
+Lets create Service in namespace `team-a`:
+```bash
+kubectl create service clusterip team-a-svc --clusterip=None -n team-a
+```
+
+And when we try to create Service in namespace `team-b`:
+```bash
+kubectl create service clusterip team-b-svc --clusterip=None -n team-b
+```
+We get an error:
+```
+Error from server (Forbidden):
+  error when creating "STDIN":
+    admission webhood "resourcesquotasstatus.hnc.x-k8s.io" denied the request:
+      exceeded hierarchical quota in namespace "acme-org":
+        "acme-org-hrq", requested: services=1, used: services=1, limited: services=1
+```
+
+To view the HRQ usage, simply run:
+```bash
+kubectl hns hrq -n acme-org
+```
+You can also view in all namespace:
+```bash
+kubectl hns hrq --all-namespaces
+```
+
+And you can delete the HRQ via simply deleting the CR:
+```bash
+kubectl delete hrq acme-org-hrq -n acme-org
+```
+
+Note: Decimal point values cannot be specified (you can't do `cpu: 1.5` but
+you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
 
 <a name="subns"/>
 
@@ -672,7 +745,7 @@ Of course, the annotation can also be part of the object when you create it:
 
 ```bash
 kubectl delete secret my-secret -n acme-org
-cat << EOF | k create -f -
+kubectl create -f - << EOF
 apiVersion: v1
 kind: Secret
 metadata:
