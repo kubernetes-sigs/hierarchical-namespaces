@@ -19,12 +19,12 @@ import (
 
 const (
 	prefix = "hrq-test-"
-	nsA = prefix+"a"
-	nsB = prefix+"b"
-	nsC = prefix+"c"
-	nsD = prefix+"d"
+	nsA    = prefix + "a"
+	nsB    = prefix + "b"
+	nsC    = prefix + "c"
+	nsD    = prefix + "d"
 
-	propagationTime = 5
+	propagationTime        = 5
 	resourceQuotaSingleton = "hrq.hnc.x-k8s.io"
 )
 
@@ -295,6 +295,32 @@ var _ = PDescribe("Hierarchical Resource Quota", func() {
 		// Should allow creating another pod under limit.
 		createPod("pod2", nsC, "memory 200Mi cpu 300m", "memory 100Mi cpu 150m")
 	})
+
+	It("should get HRQ status using kubectl-hns hrq command", func() {
+		// set up namespaces
+		CreateNamespace(nsA)
+		CreateSubnamespace(nsB, nsA)
+
+		// Set up an HRQ with limits of 2 secrets in namespace a.
+		setHRQ("a-hrq", nsA, "secrets", "2")
+		// Set up an HRQ with limits of 4 pvcs in namespace a.
+		setHRQ("a-hrq-another", nsA, "persistentvolumeclaims", "4")
+		// Set up an HRQ with limits of 3 pvcs in namespace b.
+		setHRQ("b-hrq", nsB, "persistentvolumeclaims", "3")
+
+		// Should allow creating a secret in namespace b.
+		Eventually(createSecret("b-secret", nsB)).Should(Succeed())
+		// Should allow creating a pvc in namespace a.
+		Eventually(createPVC("a-pvc", nsA)).Should(Succeed())
+		// Should allow creating a pvc in namespace b.
+		Eventually(createPVC("b-pvc", nsB)).Should(Succeed())
+
+		// Verify the HRQ status are shown.
+		RunShouldContainMultiple([]string{"a-hrq", "secrets: 1/2"}, propogationTimeout, "kubectl hns hrq", "a-hrq", "-n", nsA)
+		RunShouldContainMultiple([]string{"b-hrq", "persistentvolumeclaims: 1/3"}, propogationTimeout, "kubectl hns hrq", "b-hrq", "-n", nsB)
+		RunShouldContainMultiple([]string{"a-hrq", "a-hrq-another"}, propogationTimeout, "kubectl hns hrq", "-n", nsA)
+		RunShouldContainMultiple([]string{"a-hrq", "a-hrq-another", "a-hrq"}, propogationTimeout, "kubectl hns hrq", "--all-namespaces")
+	})
 })
 
 func generateHRQManifest(nm, nsnm string, args ...string) string {
@@ -340,8 +366,8 @@ func createPVC(nm, nsnm string) func() error {
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: `+nm+`
-  namespace: `+nsnm+`
+  name: ` + nm + `
+  namespace: ` + nsnm + `
 spec:
   storageClassName: manual
   accessModes:
@@ -350,7 +376,7 @@ spec:
     requests:
       storage: 1Gi`
 		fn := writeTempFile(pvc)
-		GinkgoT().Log("Wrote "+fn+":\n"+pvc)
+		GinkgoT().Log("Wrote " + fn + ":\n" + pvc)
 		defer removeFile(fn)
 		return TryRun("kubectl apply -f", fn)
 	}
