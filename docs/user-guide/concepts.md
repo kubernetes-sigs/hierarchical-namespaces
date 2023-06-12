@@ -277,11 +277,14 @@ the most restrictive quota always wins.
 This way each individual can fairly and securely distribute their resources across
 their members.
 
+You can create the HRQ `CustomResource` by simply applying a yaml file, and see usage via `kubectl hns hrq` or `kubectl get hrq`. See
+[quickstart example](quickstart.md#hrq) for reference.
+
+
 To implement hierarchical quotas, HNC automatically creates `ResourceQuota` objects in each
 affected namespace. This is a part of the internal implementation and shouldn't be modified or
 inspected. Use the `kubectl hns hrq` command to inspect hierarchical quotas,
-or look at the `HierarchicalResourceQuota` object in the ancestor
-namespaces.
+or look at the `HierarchicalResourceQuota` object in the ancestor namespaces.
 
 Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5` but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
 
