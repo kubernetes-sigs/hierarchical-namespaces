@@ -343,8 +343,8 @@ namespaces:
 
 ```bash
 kubectl apply -f - << EOF
-kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: deny-from-other-namespaces
   namespace: acme-org
@@ -396,8 +396,8 @@ that is automatically added by the HNC.
 
 ```bash
 kubectl apply -f - << EOF
-kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-team-a
   namespace: team-a
@@ -485,8 +485,8 @@ We will demonstrate how it works using services, but you could also limit `cpu`,
 Creating the HRQ:
 ```bash
 kubectl apply -f - << EOF
-kind: HierarchicalResourceQuota
 apiVersion: hnc.x-k8s.io/v1alpha2
+kind: HierarchicalResourceQuota
 metadata:
   name: acme-org-hrq
   namespace: acme-org
@@ -514,16 +514,18 @@ Error from server (Forbidden):
         "acme-org-hrq", requested: services=1, used: services=1, limited: services=1
 ```
 
-To view the HRQ usage, simply run:
+You can view the HRQ usage by running `kubectl hns hrq` or `kubectl get hrq`:
 ```bash
-kubectl hns hrq -n acme-org
+kubectl get hrq -n acme-org
 ```
-You can also view in all namespace:
+Should give:
 ```bash
-kubectl hns hrq --all-namespaces
+NAME       REQUEST         LIMIT
+acme-org   services: 1/1
 ```
+You can also view HRQs in all namespaces by running `kubectl get hrq -A`.
 
-And you can delete the HRQ via simply deleting the CR:
+And finally you can delete the HRQ via simply deleting the CR:
 ```bash
 kubectl delete hrq acme-org-hrq -n acme-org
 ```

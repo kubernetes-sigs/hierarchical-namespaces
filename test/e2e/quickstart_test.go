@@ -128,8 +128,8 @@ var _ = Describe("Quickstart", func() {
 
 		// create a default network policy in the root namespace that blocks any ingress from other namespaces
 		policy := `# quickstart_test.go: netpol to block access across namespaces
-kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: deny-from-other-namespaces
   namespace: acme-org
@@ -169,8 +169,8 @@ spec:
 		// communicate with each other, and wait for it to be propagated to the descendant we want to
 		// test.
 		policy = `# quickstart_test.go: netpol to allow communication within team-a subtree
-kind: NetworkPolicy
 apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
 metadata:
   name: allow-team-a
   namespace: team-a
@@ -206,8 +206,8 @@ spec:
 
 		// create hrq in parent acme-org
 		hrq:=`# quickstart_test.go: hrq in acme-org
-kind: HierarchicalResourceQuota
 apiVersion: hnc.x-k8s.io/v1alpha2
+kind: HierarchicalResourceQuota
 metadata:
   name: acme-org-hrq
   namespace: acme-org
@@ -223,7 +223,7 @@ spec:
 		MustNotRun("kubectl create service clusterip", nsTeamB + "-svc", "--clusterip=None", "-n", nsTeamB)
 
 		// show hrq usage
-		RunShouldContain("services: 1/1", defTimeout, "kubectl hns hrq", "-n", nsOrg)
+		RunShouldContain("services: 1/1", defTimeout, "kubectl get hrq", "-n", nsOrg)
 
 		MustRun("kubectl delete hrq", nsOrg + "-hrq", "-n", nsOrg)
 	})
