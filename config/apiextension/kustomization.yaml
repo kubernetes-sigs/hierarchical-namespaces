@@ -1,0 +1,4 @@
+resources:
+- apiextension.yaml
+- service.yaml
+- apiservice.yaml

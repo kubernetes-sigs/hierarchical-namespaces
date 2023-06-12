@@ -23,3 +23,16 @@ spec:
     kind: Issuer
     name: selfsigned-issuer
   secretName: webhook-server-cert # this secret will not be prefixed, since it's not managed by kustomize
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: resourcelist
+spec:
+  dnsNames:
+  - $(APIEXT_SERVICE_NAME).$(SERVICE_NAMESPACE).svc.cluster.local
+  - $(APIEXT_SERVICE_NAME).$(SERVICE_NAMESPACE).svc
+  issuerRef:
+    kind: Issuer
+    name: selfsigned-issuer
+  secretName: hnc-resourcelist

@@ -1,0 +1,51 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: resourcelist-apiextension
+  name: resourcelist-apiextension
+  namespace: system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resourcelist-apiextension
+  template:
+    metadata:
+      labels:
+        app: resourcelist-apiextension
+    spec:
+      securityContext:
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+      - image: controller:latest # this is usually overridden by kustomize
+        name: resourcelist
+        command:
+        - /apiextension
+        args:
+        - "--cert=/certs/tls.crt"
+        - "--key=/certs/tls.key"
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: certs
+          mountPath: /certs
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop: ["ALL"]
+        ports:
+        - containerPort: 7443
+          name: server
+          protocol: TCP
+      volumes:
+      - secret:
+          defaultMode: 420
+          secretName: hnc-resourcelist-apiextension
+        name: certs
