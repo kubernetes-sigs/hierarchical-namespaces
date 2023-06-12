@@ -446,15 +446,20 @@ var _ = Describe("Basic propagation", func() {
 		Eventually(HasObject(ctx, "secrets", barName, "helm-secret")).Should(BeFalse())
 	})
 
-	It("should not propagate builtin exclusions by labels", func() {
+	It("should not propagate objects excluded by labels", func() {
 		SetParent(ctx, barName, fooName)
+		config.NoPropagationLabels = append(config.NoPropagationLabels, config.NoPropagationLabel{Key: "cattle.io/creator", Value: "norman"})
+		config.NoPropagationLabels = append(config.NoPropagationLabels, config.NoPropagationLabel{Key: "ignore-label", Value: "label"})
+
 		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-blocked", map[string]string{"cattle.io/creator": "norman"})
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-blocked-2", map[string]string{"ignore-label": "label"})
 		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-wrong-value", map[string]string{"cattle.io/creator": "testme"})
 		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-something", map[string]string{"app": "hello-world"})
 		AddToHNCConfig(ctx, api.RBACGroup, api.RoleKind, api.Propagate)
 
 		// the first one should not propagate, everything else should
 		Consistently(HasObject(ctx, "roles", barName, "role-with-labels-blocked")).Should(BeFalse())
+		Consistently(HasObject(ctx, "roles", barName, "role-with-labels-blocked-2")).Should(BeFalse())
 		Eventually(HasObject(ctx, "roles", barName, "role-with-labels-wrong-value")).Should(BeTrue())
 		Eventually(HasObject(ctx, "roles", barName, "role-with-labels-something")).Should(BeTrue())
 
@@ -465,6 +470,18 @@ var _ = Describe("Basic propagation", func() {
 
 		Consistently(HasObject(ctx, "configmaps", barName, "cm-with-label-1")).Should(BeFalse())
 		Eventually(HasObject(ctx, "configmaps", barName, "cm-with-label-2")).Should(BeTrue())
+	})
+
+	It("should not propagate objects excluded by labels when using all annotation", func() {
+		SetParent(ctx, barName, fooName)
+		config.NoPropagationLabels = append(config.NoPropagationLabels, config.NoPropagationLabel{Key: "cattle.io/creator", Value: "norman"})
+
+		MakeObjectWithLabels(ctx, "roles", fooName, "role-with-labels-blocked", map[string]string{"cattle.io/creator": "norman"})
+		UpdateObjectWithAnnotations(ctx, "roles", fooName, "role-with-labels-blocked", map[string]string{"propagate.hnc.x-k8s.io/all": "true"})
+		AddToHNCConfig(ctx, api.RBACGroup, api.RoleKind, api.Propagate)
+
+		// The object should not be propagated even though it uses the `all` annotation
+		Consistently(HasObject(ctx, "roles", barName, "role-with-labels-blocked")).Should(BeFalse())
 	})
 
 	It("should be removed if the hierarchy changes", func() {

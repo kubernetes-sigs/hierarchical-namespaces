@@ -18,6 +18,7 @@ package main
 import (
 	"errors"
 	"flag"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -72,6 +73,7 @@ var (
 	excludedNamespaces      arrayArg
 	managedNamespaceLabels  arrayArg
 	managedNamespaceAnnots  arrayArg
+	nopropagationLabel      arrayArg
 	includedNamespacesRegex string
 	webhooksOnly            bool
 	enableHRQ               bool
@@ -156,10 +158,31 @@ func parseFlags() {
 	flag.BoolVar(&enableHRQ, "enable-hrq", false, "Enables hierarchical resource quotas")
 	flag.StringVar(&hncNamespace, "namespace", "hnc-system", "Namespace where hnc-manager and hnc resources deployed")
 	flag.DurationVar(&hrqSyncInterval, "hrq-sync-interval", 1*time.Minute, "Frequency to double-check that all HRQ usages are up-to-date (shouldn't be needed)")
+	flag.Var(&nopropagationLabel, "nopropagation-label", "A label specified as key=val that, if present, will cause HNC to skip objects that match this label. May be specified multiple times, with each key=value pair specifying one label. See the user guide for more information.")
 	flag.Parse()
 
 	// Assign the array args to the configuration variables after the args are parsed.
 	config.UnpropagatedAnnotations = unpropagatedAnnotations
+
+	// Assign the exclusion label args to the configuration
+	for _, label := range nopropagationLabel {
+		keyVal := strings.Split(label, "=")
+		if len(keyVal) != 2 {
+			setupLog.Info(fmt.Sprintf("--nopropagation-label must contain exactly one equal sign (=): %s", label))
+			os.Exit(1)
+		}
+		labelKey := keyVal[0]
+		labelValue := keyVal[1]
+
+		if len(labelKey) == 0 {
+			setupLog.Info(fmt.Sprintf("--nopropagation-label must not have an empty key for the label: %s", label))
+			os.Exit(1)
+		}
+
+		setupLog.Info(fmt.Sprintf("Will exclude objects that match label %s", label))
+		config.NoPropagationLabels = append(config.NoPropagationLabels, config.NoPropagationLabel{Key: labelKey, Value: labelValue})
+	}
+
 	config.SetNamespaces(includedNamespacesRegex, excludedNamespaces...)
 	if err := config.SetManagedMeta(managedNamespaceLabels, managedNamespaceAnnots); err != nil {
 		setupLog.Error(err, "Illegal flag values")

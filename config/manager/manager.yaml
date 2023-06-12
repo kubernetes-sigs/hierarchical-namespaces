@@ -49,6 +49,9 @@ spec:
         - "--excluded-namespace=kube-public"
         - "--excluded-namespace=hnc-system"
         - "--excluded-namespace=kube-node-lease"
+        # Preserves the existing behavior of skipping Rancher objects.
+        # Please don't add any more nopropagation labels to the list of args.
+        - "--nopropagation-label=cattle.io/creator=norman"
         ports:
         - containerPort: 9443
           name: webhook-server
