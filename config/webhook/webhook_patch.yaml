@@ -28,4 +28,5 @@ webhooks:
   namespaceSelector:
     matchLabels:
       hnc.x-k8s.io/included-namespace: "true"
-  # Intentionally no rules, as these are maintained by the HNCConfiguration reconciler
+  # Intentionally no rules, as these are maintained by the HNCConfiguration reconciler.
+  # At present controller-gen is unable to generate a webhook without rules from kubebuilder markers.
