@@ -239,22 +239,6 @@ func (r *Reconciler) writeSingleton(ctx context.Context, inst *api.HNCConfigurat
 }
 
 func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
-	// Group GR by group
-	groups := make(map[string][]string)
-	for gr := range r.activeGVKMode {
-		groups[gr.Group] = append(groups[gr.Group], gr.Resource)
-	}
-
-	var rules []apiadmissionregistrationv1.RuleWithOperations
-	for g, res := range groups {
-		rule := apiadmissionregistrationv1.RuleWithOperations{}
-		rule.APIGroups = []string{g}
-		rule.Resources = res
-		rule.APIVersions = []string{"*"}
-		rule.Operations = []apiadmissionregistrationv1.OperationType{apiadmissionregistrationv1.Create, apiadmissionregistrationv1.Update, apiadmissionregistrationv1.Delete}
-		rules = append(rules, rule)
-	}
-
 	vwc := &apiadmissionregistrationv1.ValidatingWebhookConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{Name: webhooks.ValidatingWebhookConfigurationName}, vwc); err != nil {
 		if errors.IsNotFound(err) {
@@ -268,11 +252,30 @@ func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
 
 	for i, wh := range vwc.Webhooks {
 		if wh.Name == webhooks.ObjectsWebhookName {
-			vwc.Webhooks[i].Rules = rules
+			vwc.Webhooks[i].Rules = objectWebhookRules(r.activeGVKMode)
 			return r.Patch(ctx, vwc, client.MergeFrom(cleanVWC))
 		}
 	}
 	return fmt.Errorf("webhook %q not found in ValidatingWebhookConfiguration %q", webhooks.ObjectsWebhookName, webhooks.ValidatingWebhookConfigurationName)
+}
+
+func objectWebhookRules(mode gr2gvkMode) []apiadmissionregistrationv1.RuleWithOperations {
+	// Group GR by group to make nicer rules
+	g2r := make(map[string][]string)
+	for gr := range mode {
+		g2r[gr.Group] = append(g2r[gr.Group], gr.Resource)
+	}
+
+	var rules []apiadmissionregistrationv1.RuleWithOperations
+	for g, r := range g2r {
+		rule := apiadmissionregistrationv1.RuleWithOperations{}
+		rule.APIGroups = []string{g}
+		rule.Resources = r
+		rule.APIVersions = []string{"*"}
+		rule.Operations = []apiadmissionregistrationv1.OperationType{apiadmissionregistrationv1.Create, apiadmissionregistrationv1.Update, apiadmissionregistrationv1.Delete}
+		rules = append(rules, rule)
+	}
+	return rules
 }
 
 // syncObjectReconcilers creates or syncs ObjectReconcilers.
