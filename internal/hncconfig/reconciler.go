@@ -241,11 +241,6 @@ func (r *Reconciler) writeSingleton(ctx context.Context, inst *api.HNCConfigurat
 func (r *Reconciler) syncObjectWebhookConfigs(ctx context.Context) error {
 	vwc := &apiadmissionregistrationv1.ValidatingWebhookConfiguration{}
 	if err := r.Get(ctx, client.ObjectKey{Name: webhooks.ValidatingWebhookConfigurationName}, vwc); err != nil {
-		if errors.IsNotFound(err) {
-			// todo(erikgb): See if the tests can/should be bootstrapped with this webhook
-			// Webhook not found; nothing to reconcile
-			return nil
-		}
 		return err
 	}
 	cleanVWC := vwc.DeepCopy()
