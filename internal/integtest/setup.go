@@ -23,14 +23,21 @@ import (
 
 	. "github.com/onsi/ginkgo/v2" //lint:ignore ST1001 Ignoring this for now
 	. "github.com/onsi/gomega"    //lint:ignore ST1001 Ignoring this for now
+	apiadmissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
+	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
 
 	// +kubebuilder:scaffold:imports
 
@@ -69,8 +76,28 @@ func HNCBeforeSuite() {
 	SetDefaultEventuallyTimeout(time.Second * 4)
 
 	By("configuring test environment")
+	sideEffectClassNone := apiadmissionregistrationv1.SideEffectClassNone
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		WebhookInstallOptions: envtest.WebhookInstallOptions{
+			ValidatingWebhooks: []*apiadmissionregistrationv1.ValidatingWebhookConfiguration{{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: webhooks.ValidatingWebhookConfigurationName,
+				},
+				Webhooks: []apiadmissionregistrationv1.ValidatingWebhook{{
+					Name:                    webhooks.ObjectsWebhookName,
+					AdmissionReviewVersions: []string{"v1"},
+					SideEffects:             &sideEffectClassNone,
+					ClientConfig: apiadmissionregistrationv1.WebhookClientConfig{
+						Service: &apiadmissionregistrationv1.ServiceReference{
+							Namespace: "system",
+							Name:      "webhook-service",
+							Path:      pointer.String(objects.ServingPath),
+						},
+					},
+				}},
+			}},
+		},
 	}
 
 	By("starting test environment")
@@ -94,12 +121,19 @@ func HNCBeforeSuite() {
 	// CF: https://github.com/microsoft/azure-databricks-operator/blob/0f722a710fea06b86ecdccd9455336ca712bf775/controllers/suite_test.go
 
 	By("creating manager")
+	webhookInstallOptions := &testEnv.WebhookInstallOptions
 	k8sManager, err := ctrl.NewManager(cfg, ctrl.Options{
 		NewClient:          config.NewClient(false),
 		MetricsBindAddress: "0", // disable metrics serving since 'go test' runs multiple suites in parallel processes
 		Scheme:             scheme.Scheme,
+		Host:               webhookInstallOptions.LocalServingHost,
+		Port:               webhookInstallOptions.LocalServingPort,
+		CertDir:            webhookInstallOptions.LocalServingCertDir,
 	})
 	Expect(err).ToNot(HaveOccurred())
+
+	// Register a dummy webhook since the test control plane is to test reconcilers
+	k8sManager.GetWebhookServer().Register(objects.ServingPath, &webhook.Admission{Handler: &allowAllHandler{}})
 
 	By("creating reconcilers")
 	opts := setup.Options{
@@ -123,6 +157,12 @@ func HNCBeforeSuite() {
 		err = k8sManager.Start(ctx)
 		Expect(err).ToNot(HaveOccurred())
 	}()
+}
+
+type allowAllHandler struct{}
+
+func (a allowAllHandler) Handle(_ context.Context, _ admission.Request) admission.Response {
+	return webhooks.Allow("All requests are allowed by allowAllHandler")
 }
 
 func HNCAfterSuite() {
