@@ -25,7 +25,7 @@ import (
 const (
 	// The name of the ResourceQuota object created by the
 	// ResourceQuotaReconciler in a namespace.
-	ResourceQuotaSingleton = "hrq." + api.MetaGroup
+	ResourceQuotaSingleton = "local-impl-hrq." + api.MetaGroup
 )
 
 // HRQEnqueuer enqueues HierarchicalResourceQuota objects.
