@@ -10,8 +10,9 @@ my-team
 Hierarchical namespaces make it easier to share your cluster by making
 namespaces more powerful. For example, you can create additional namespaces
 under your team's namespace, even if you don't have cluster-level permission to
-create namespaces, and easily apply policies like RBAC and Network Policies
-across all namespaces in your team (e.g. a set of related microservices).
+create namespaces, and easily apply policies like RBAC, Network Policies, and
+(beta in v1.1) hierarchical resource quotas across all namespaces in your team
+(e.g. a set of related microservices).
 
 Learn more in the [HNC User Guide](docs/user-guide) or get started with the
 instructions below!
@@ -27,8 +28,6 @@ Lead developer: @adrianludwin (aludwin@google.com)
 To install HNC on your cluster, and the `kubectl-hns` plugin on your
 workstation, follow the instructions on our [release
 pages](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/).
-Note that versions of HNC prior to HNC v0.9 are available from our [old
-repo](https://github.com/kubernetes-sigs/multi-tenancy/releases/).
 
 Once HNC is installed, you can try out the [HNC
 quickstart](docs/user-guide/quickstart.md)
@@ -43,14 +42,17 @@ feature requests will be prioritized and assigned to a milestone or backlog.
 All HNC issues are assigned to an HNC milestone. So far, the following
 milestones are defined or planned:
 
+* [v1.2](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/5):
+  HRQ to GA; server-side listing; stability improvements (ETA late 2023)
 * [v1.1](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/3):
-  Hierarchical quotas; inclusive propagation.
+  Hierarchical quotas; inclusive propagation (released June 23 2023)
 * [v1.0](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/2):
   HNC recommended for production use (released March 31 2022)
-* [v0.9](https://github.com/kubernetes-sigs/hierarchical-namespaces/milestone/1):
-  move HNC to its own repo; continued stability improvements.
-* [v0.1-v0.8](https://github.com/kubernetes-sigs/multi-tenancy/milestones):
-  see our old repo for details.
+
+### Older versions
+
+That versions of HNC prior to HNC v0.9 are available from our [old
+repo](https://github.com/kubernetes-sigs/multi-tenancy/releases/).
 
 ## Contact and governance
 
