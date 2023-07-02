@@ -253,6 +253,12 @@ spec:
 		// show how to delete a subns correctly
 		MustNotRun("kubectl delete ns", nsService3)
 		MustRun("kubectl delete subns", nsService3, "-n", nsTeamA)
+
+		// show how to delete a subns correctly with the kubectl-hns plugin
+		CreateSubnamespace(nsService4, nsTeamA)
+		MustNotRun("kubectl hns delete", nsService4)
+		MustRun("kubectl hns delete", nsService4, "-n", nsTeamA)
+
 		// This should not run because service-1 contains its own subnamespace that would be deleted with it,
 		MustNotRun("kubectl delete subns", nsService1, "-n", nsTeamA)
 
