@@ -680,6 +680,12 @@ team-a
 [s] indicates subnamespaces
 ```
 
+You can also do the above steps in one command run with the `kubectl-hns` plugin:
+
+```bash
+kubectl hns delete service-1 -n team-a --allowCascadingDeletion
+```
+
 There's an important difference between subnamespaces and regular child
 namespace, also known as a full namespace. A subnamespace is created by HNC due
 to an anchor being created in the parent; when that anchor is deleted, the

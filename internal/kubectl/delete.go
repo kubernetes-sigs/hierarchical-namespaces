@@ -25,19 +25,39 @@ import (
 var deleteCmd = &cobra.Command{
 	Use:   "delete -n PARENT CHILD",
 	Short: "Deletes a subnamespace under the given parent.",
-	Args:  cobra.ExactArgs(1),
+	Example: `# Delete the 'foo' anchor in the parent 'bar' namespace
+	kubectl hns delete foo -n bar
+
+	# Allow 'foo' to be cascading deleted and delete it
+	kubectl hns delete foo -n bar --allowCascadingDeletion`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
+		nnm := args[0]
+
 		parent, _ := cmd.Flags().GetString("namespace")
 		if parent == "" {
 			fmt.Println("Error: parent must be set via --namespace or -n")
 			os.Exit(1)
 		}
 
-		client.deleteAnchor(parent, args[0])
+		allowCD, _ := cmd.Flags().GetBool("allowCascadingDeletion")
+		if allowCD {
+			hc := client.getHierarchy(nnm)
+			if hc.Spec.AllowCascadingDeletion {
+				fmt.Printf("Cascading deletion for '%s' is already set to 'true'; unchanged\n", nnm)
+			} else {
+				fmt.Printf("Allowing cascading deletion on '%s'\n", nnm)
+				hc.Spec.AllowCascadingDeletion = true
+				client.updateHierarchy(hc, fmt.Sprintf("update the hierarchical configuration of %s", nnm))
+			}
+		}
+
+		client.deleteAnchor(parent, nnm)
 	},
 }
 
 func newDeleteCmd() *cobra.Command {
 	deleteCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new subnamespace")
+	deleteCmd.Flags().BoolP("allowCascadingDeletion", "a", false, "Allows cascading deletion of its subnamespaces.")
 	return deleteCmd
 }
