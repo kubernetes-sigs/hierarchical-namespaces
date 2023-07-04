@@ -461,11 +461,11 @@ kubectl delete pods s2 -n service-2
 
 <a name="hrq"/>
 
-### Hierarchical resource quotas
+### Hierarchical resource quotas (HRQs)
 
 ***Hierarchical resource quotas are beta in HNC v1.1***
 
-***HRQs are not included by default, to use it install the hrq.yaml file in the [releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
+***HRQs are not included by default. To use it, install the `hrq.yaml` file in [Releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
 
 _Will demonstrate: Create and delete [HierarchicalResourceQuota](concepts.md#hierarchical-resource-quota)._
 
@@ -476,11 +476,11 @@ acme-org
 └── [s] team-b
 ```
 
-You can create a `HierarchicalResourceQuota` in namespace `acme-org`, and the sum of 
-all subnamespaces resource usage can't go over what is configured in the HRQ.
+If you create a `HierarchicalResourceQuota` in namespace `acme-org`, the sum of
+all subnamespaces' resources can't surpass the HRQ.
 
 We will demonstrate how it works using services, but you could also limit `cpu`,
-`memory` or any other `ResourceQuota` field.
+`memory`, or any other `ResourceQuota` field.
 
 Creating the HRQ:
 ```bash
@@ -525,12 +525,12 @@ acme-org   services: 1/1
 ```
 You can also view HRQs in all namespaces by running `kubectl get hrq -A`.
 
-And finally you can delete the HRQ via simply deleting the CR:
+And finally, you can delete the HRQ by deleting the CR:
 ```bash
 kubectl delete hrq acme-org-hrq -n acme-org
 ```
 
-Note: Decimal point values cannot be specified (you can't do `cpu: 1.5` but
+Note: Decimal point values cannot be specified (you can't do `cpu: 1.5`, but
 you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
 
 <a name="subns"/>
