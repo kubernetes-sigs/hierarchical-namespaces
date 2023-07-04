@@ -477,14 +477,13 @@ acme-org
 If you create a `HierarchicalResourceQuota` in namespace `acme-org`, the sum of
 all subnamespaces' resources can't surpass the HRQ.
 
-We will demonstrate how it works using services, but you could also limit `cpu`,
-`memory`, or any other `ResourceQuota` field.
+This example demonstrates how it works using services, but you could also limit
+`cpu`, `memory`, or any other `ResourceQuota` field.
 
 > _Note: Decimal point values cannot be specified (you can't do `cpu: 1.5`, but
 > you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)_
 
-Creating the HRQ:
-
+Create the HRQ:
 ```bash
 kubectl apply -f - << EOF
 apiVersion: hnc.x-k8s.io/v1alpha2
@@ -498,16 +497,16 @@ spec:
 EOF
 ```
 
-Lets create Service in namespace `team-a`:
+Create a Service in namespace `team-a`:
 ```bash
 kubectl create service clusterip team-a-svc --clusterip=None -n team-a
 ```
 
-And when we try to create Service in namespace `team-b`:
+Now, when you try to create a Service in namespace `team-b`:
 ```bash
 kubectl create service clusterip team-b-svc --clusterip=None -n team-b
 ```
-We get an error:
+You get an error:
 ```
 Error from server (Forbidden):
   error when creating "STDIN":
@@ -528,13 +527,13 @@ acme-org   services: 1/1
 ```
 You can also view HRQs in all namespaces by running `kubectl get hrq -A`.
 
-> _Note: If you execute `kubectl get qouta` in namespace `acme-org`, `team-a` or `team-b`, 
+> _Note: If you execute `kubectl get qouta` in namespace `acme-org`, `team-a` or `team-b`,
 > you will see `ResourceQuota` objects named `hrq.hnc.x-k8s.io`.
 > But it is part of the internal implementation of hierarchical resource quotas and shouldn't be modified or
 > inspected directly.
-> Also if you inspect the namespace information 
-> using `kubectl describe ns <NAMESPACE NAME>`, 
-> you may see Resource Quotas imformation of 
+> Also if you inspect the namespace information
+> using `kubectl describe ns <NAMESPACE NAME>`,
+> you may see Resource Quotas imformation of
 > `hrq.hnc.x-k8s.io`, which is also the case([#275](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/275))._
 
 And finally, you can delete the HRQ by deleting the CR:
@@ -645,7 +644,7 @@ kubectl hns set service-1 -a
 You can check if the `service-1` cascading deletion is enabled from its `.spec.allowCascadingDeletion` field of `HierarchyConfiguration`. If the value is `true`, it's enabled.
 
 ```bash
-kubectl get hierarchyconfiguration hierarchy -o jsonpath='{.spec}' -n service-1 
+kubectl get hierarchyconfiguration hierarchy -o jsonpath='{.spec}' -n service-1
 ```
 
 Expected output:
@@ -715,11 +714,11 @@ team-a
 ```
 
 
-As the same of `service-1`, you can't delete `service-4` subnamespace which is 
+As the same of `service-1`, you can't delete `service-4` subnamespace which is
 a parent of `staging` full namespace.
 
-This is both to be consistent with how subnamespaces are treated, 
-and also because deleting `service-4` will delete any propagated objects 
+This is both to be consistent with how subnamespaces are treated,
+and also because deleting `service-4` will delete any propagated objects
 inside `staging`.
 
 ```bash
@@ -727,7 +726,7 @@ kubectl delete subns service-4 -n team-a
 # forbidden
 ```
 
-So you need to make `service-4` subnamespace `"allowCascadingDeletion":true` to 
+So you need to make `service-4` subnamespace `"allowCascadingDeletion":true` to
 delete it.
 
 ```bash
