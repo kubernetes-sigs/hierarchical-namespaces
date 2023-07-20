@@ -389,6 +389,7 @@ var _ = Describe("Basic propagation", func() {
 
 		// This is empty by default.
 		config.UnpropagatedAnnotations = nil
+		config.UnpropagatedLabels = nil
 	})
 
 	AfterEach(func() {
@@ -775,6 +776,54 @@ var _ = Describe("Basic propagation", func() {
 			}
 			return nil
 		}).Should(Succeed(), "waiting for annot-a to be unpropagated")
+	})
+
+	It("should avoid propagating banned labels", func() {
+		SetParent(ctx, barName, fooName)
+		MakeObjectWithLabels(ctx, "roles", fooName, "foo-label-role", map[string]string{
+			"label-a": "value-a",
+			"label-b": "value-b",
+		})
+
+		// Ensure the object is propagated with both labels
+		Eventually(func() error {
+			inst, err := GetObject(ctx, "roles", barName, "foo-label-role")
+			if err != nil {
+				return err
+			}
+			labels := inst.GetLabels()
+			if labels["label-a"] != "value-a" {
+				return fmt.Errorf("label-a: want 'value-a', got %q", labels["label-a"])
+			}
+			if labels["label-b"] != "value-b" {
+				return fmt.Errorf("label-b: want 'value-b', got %q", labels["label-b"])
+			}
+			return nil
+		}).Should(Succeed(), "waiting for initial sync of foo-label-role")
+		DeleteObject(ctx, "roles", fooName, "foo-label-role")
+
+		// Tell the HNC config not to propagate label-a and verify that this time, it's not labelated
+		config.UnpropagatedLabels = []string{"label-a"}
+		MakeObjectWithLabels(ctx, "roles", fooName, "foo-label-role", map[string]string{
+			"label-a": "value-a",
+			"label-b": "value-b",
+		})
+
+		// Verify that the label no longer appears
+		Eventually(func() error {
+			inst, err := GetObject(ctx, "roles", barName, "foo-label-role")
+			if err != nil {
+				return err
+			}
+			labels := inst.GetLabels()
+			if val, ok := labels["label-a"]; ok {
+				return fmt.Errorf("label-a: wanted it to be missing, got %q", val)
+			}
+			if labels["label-b"] != "value-b" {
+				return fmt.Errorf("label-b: want 'value-b', got %q", labels["label-b"])
+			}
+			return nil
+		}).Should(Succeed(), "waiting for label-a to be unpropagated")
 	})
 
 	It("should avoid propagating when no selector is set if the sync mode is 'AllowPropagate'", func() {

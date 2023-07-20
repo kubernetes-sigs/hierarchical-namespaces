@@ -503,6 +503,11 @@ func cleanSource(src *unstructured.Unstructured) *unstructured.Unstructured {
 		labels = map[string]string{}
 	}
 	labels[api.LabelManagedByApps] = api.MetaGroup
+
+	// Clean out bad labels.
+	for _, unprop := range config.UnpropagatedLabels {
+		delete(labels, unprop)
+	}
 	src.SetLabels(labels)
 
 	return src
