@@ -19,22 +19,26 @@ import (
 )
 
 const (
-	serviceName    = "hnc-webhook-service"
-	vwhName        = "hnc-validating-webhook-configuration"
-	mwhName        = "hnc-mutating-webhook-configuration"
-	caName         = "hnc-ca"
-	caOrganization = "hnc"
-	secretName     = "hnc-webhook-server-cert"
-	certDir        = "/tmp/k8s-webhook-server/serving-certs"
+	serviceName       = "hnc-webhook-service"
+	vwhName           = "hnc-validating-webhook-configuration"
+	mwhName           = "hnc-mutating-webhook-configuration"
+	caName            = "hnc-ca"
+	caOrganization    = "hnc"
+	secretName        = "hnc-webhook-server-cert"
+	certDir           = "/tmp/k8s-webhook-server/serving-certs"
+	apiExtCertDir     = "/certs"
+	apiExtServiceName = "hnc-resourcelist"
+	apiExtSecretName  = "hnc-resourcelist"
+	apiExtName        = "v1alpha2.resources.hnc.x-k8s.io"
 )
 
-// ManageCerts creates all certs for webhooks. This function is called from main.go.
+// ManageCerts creates all certs for webhooks and apiservices. This function is called from main.go.
 func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretRefresh bool) error {
 	hncNamespace := config.GetHNCNamespace()
 	// DNSName is <service name>.<hncNamespace>.svc
 	dnsName := fmt.Sprintf("%s.%s.svc", serviceName, hncNamespace)
 
-	return cert.AddRotator(mgr, &cert.CertRotator{
+	err := cert.AddRotator(mgr, &cert.CertRotator{
 		SecretKey: types.NamespacedName{
 			Namespace: hncNamespace,
 			Name:      secretName,
@@ -50,6 +54,26 @@ func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretR
 		}, {
 			Type: cert.Mutating,
 			Name: mwhName,
+		}},
+		RestartOnSecretRefresh: restartOnSecretRefresh,
+	})
+	if err != nil {
+		return err
+	}
+	apiExtDNSName := fmt.Sprintf("%s.%s.svc", apiExtServiceName, hncNamespace)
+	return cert.AddRotator(mgr, &cert.CertRotator{
+		SecretKey: types.NamespacedName{
+			Namespace: hncNamespace,
+			Name:      apiExtSecretName,
+		},
+		CertDir:        apiExtCertDir,
+		CAName:         caName,
+		CAOrganization: caOrganization,
+		DNSName:        apiExtDNSName,
+		IsReady:        setupFinished,
+		Webhooks: []cert.WebhookInfo{{
+			Type: cert.APIService,
+			Name: apiExtName,
 		}},
 		RestartOnSecretRefresh: restartOnSecretRefresh,
 	})
