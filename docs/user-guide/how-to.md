@@ -951,6 +951,14 @@ Interesting parameters include:
   used to remove an annotation on the source object that's has a special meaning
   to another system, such as GKE Config Sync. If you restart HNC after changing
   this arg, all _existing_ propagated objects will also be updated.
+* `--unpropagated-label=<string>`: empty by default, this argument
+  can be specified multiple times, with each parameter representing an
+  label name, such as `example.com/foo`. When HNC propagates objects from
+  ancestor to descendant namespaces, it will strip these labels out of the
+  metadata of the _copy_ of the object, if it exists. For example, this can be
+  used to remove an label on the source object that's has a special meaning
+  to another system, such as ArgoCD. If you restart HNC after changing
+  this arg, all _existing_ propagated objects will also be updated.
 * `--apiserver-qps-throttle=<integer>`: set to 50 by default, this limits how many
   requests HNC will send to the Kubernetes apiserver per second in the steady
   state (it may briefly allow up to 50% more than this number). Setting this

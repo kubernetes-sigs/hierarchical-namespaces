@@ -70,6 +70,7 @@ var (
 	webhookServerPort       int
 	restartOnSecretRefresh  bool
 	unpropagatedAnnotations arrayArg
+	unpropagatedLabels      arrayArg
 	excludedNamespaces      arrayArg
 	managedNamespaceLabels  arrayArg
 	managedNamespaceAnnots  arrayArg
@@ -148,6 +149,7 @@ func parseFlags() {
 	flag.IntVar(&qps, "apiserver-qps-throttle", 50, "The maximum QPS to the API server. See the user guide for more information.")
 	flag.BoolVar(&stats.SuppressObjectTags, "suppress-object-tags", true, "If true, suppresses the kinds of object metrics to reduce metric cardinality. See the user guide for more information.")
 	flag.IntVar(&webhookServerPort, "webhook-server-port", 443, "The port that the webhook server serves at.")
+	flag.Var(&unpropagatedLabels, "unpropagated-label", "An label that, if present, will be stripped out of any propagated copies of an object. May be specified multiple times, with each instance specifying one label. See the user guide for more information.")
 	flag.Var(&unpropagatedAnnotations, "unpropagated-annotation", "An annotation that, if present, will be stripped out of any propagated copies of an object. May be specified multiple times, with each instance specifying one annotation. See the user guide for more information.")
 	flag.Var(&excludedNamespaces, "excluded-namespace", "A namespace that, if present, will be excluded from HNC management. May be specified multiple times, with each instance specifying one namespace. See the user guide for more information.")
 	flag.StringVar(&includedNamespacesRegex, "included-namespace-regex", ".*", "Namespace regular expression. Namespaces that match this regexp will be included and handle by HNC. The regex is implicitly wrapped by \"^...$\" and may only be specified once.")
@@ -163,6 +165,7 @@ func parseFlags() {
 
 	// Assign the array args to the configuration variables after the args are parsed.
 	config.UnpropagatedAnnotations = unpropagatedAnnotations
+	config.UnpropagatedLabels = unpropagatedLabels
 
 	// Assign the exclusion label args to the configuration
 	for _, label := range nopropagationLabel {
