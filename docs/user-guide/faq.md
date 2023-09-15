@@ -47,7 +47,7 @@ for any sane use case.
 ## How does HNC scale?
 
 HNC is deployed as a single pod with in-memory state, so it cannot scale
-horizontally. In practice, we have found the the API throttling by the K8s
+horizontally. In practice, we have found the API throttling by the K8s
 apiserver is by far the greatest bottleneck on HNC performance, which would not
 be improved via horizontal scaling. Almost all validating webhook calls are also
 served entirely by in-memory state and as a result should be extremely fast.

@@ -232,8 +232,8 @@ You can create a subnamespace from the command line via `kubectl hns create chil
 When you want to give some amount of resources to `team-a`, and want them to be able to
 flexibly use resources in any of their subnamespaces, you create a `HierarchicalResourceQuota`
 in namespace `team-a`. The sum of all resources from all the subnamespaces of the
-members wont be over the amount of resources that is configured in
-`HierarchicalResourceQuota` of namespace `team-a`. All of the reasources of `team-a` are
+members won't be over the amount of resources that is configured in
+`HierarchicalResourceQuota` of namespace `team-a`. All of the resources of `team-a` are
 equally shared between the applications in their subnamespaces, which is very efficient.
 
 In addition, you can let an org or team's admin create their own hierarchical
@@ -251,7 +251,7 @@ company-a
 │   ...
 ...
 ```
-Instead of each team asking from the `cluster-admin` to modify their `ResourceQuota`, 
+Instead of each team asking from the `cluster-admin` to modify their `ResourceQuota`,
 you can insert an additional "policy" namespace above each level to hold
 the policy objects (like hierarchical quota) that the sub-admin _cannot_
 change, while giving them permission to create their own quotas in the
