@@ -1,0 +1,16 @@
+# Automatically aggregated to clusterRoles: admin
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: admin
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+rules:
+- apiGroups:
+  - hnc.x-k8s.io
+  resources:
+  - hierarchicalresourcequotas
+  - subnamespaceanchors
+  - hierarchyconfigurations
+  verbs:
+  - '*'

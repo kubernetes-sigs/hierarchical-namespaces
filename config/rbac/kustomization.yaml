@@ -1,6 +1,8 @@
 resources:
 - role.yaml
 - role_binding.yaml
-- hnc_admin.yaml
+- aggregate_to_view.yaml
+- aggregate_to_edit.yaml
+- aggregate_to_admin.yaml
 - leader_election_role.yaml
 - leader_election_role_binding.yaml
