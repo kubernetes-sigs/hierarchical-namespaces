@@ -85,7 +85,7 @@ HNC uses Prow to run tests, which is configured
 [here](https://github.com/kubernetes/test-infra/tree/master/config/jobs/kubernetes-sigs/wg-multi-tenancy).
 The presubmits run `hack/ci-test.sh` in this repo, and the postsubmits and
 periodics run `hack/prow-run-e2e.sh`.  Results are displayed on
-[testgrid](https://k8s-testgrid.appspot.com/wg-multi-tenancy-hnc) and are
+[testgrid](https://testgrid.k8s.io/wg-multi-tenancy-hnc) and are
 configured
 [here](https://github.com/kubernetes/test-infra/tree/master/config/testgrids/kubernetes/wg-multi-tenancy).
 For more information about Prow jobs (e.g. a reference for the configs), see
