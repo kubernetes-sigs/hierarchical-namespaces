@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -129,6 +130,20 @@ func runShouldContainMultiple(offset int, substrs []string, seconds float64, cmd
 	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
 }
 
+func RunShouldContainMultipleWithTimeout(substrs []string, seconds, timeout float64, cmdln ...string) {
+	runShouldContainMultipleWithTimeout(1, substrs, seconds, timeout, cmdln...)
+}
+
+func runShouldContainMultipleWithTimeout(offset int, substrs []string, seconds, timeout float64, cmdln ...string) {
+	EventuallyWithOffset(offset+1, func() string {
+		missing, err := tryRunShouldContainMultipleWithTimeout(substrs, timeout, cmdln...)
+		if err != nil {
+			return "failed: " + err.Error()
+		}
+		return missing
+	}, seconds).Should(beQuiet(), "Command: %s", cmdln)
+}
+
 func RunErrorShouldContain(substr string, seconds float64, cmdln ...string) {
 	runErrorShouldContainMultiple(1, []string{substr}, seconds, cmdln...)
 }
@@ -151,6 +166,38 @@ func tryRunShouldContainMultiple(substrs []string, cmdln ...string) (string, err
 	stdout, err := RunCommand(cmdln...)
 	GinkgoT().Log("Output: ", stdout)
 	return missAny(substrs, stdout), err
+}
+
+func tryRunShouldContainMultipleWithTimeout(substrs []string, timeout float64, cmdln ...string) (string, error) {
+	stdout, err := runCommandWithTimeout(timeout, cmdln...)
+	GinkgoT().Log("Output: ", stdout)
+	return missAny(substrs, stdout), err
+}
+
+// runCommandWithTimeout is like RunCommand, but uses a timeout context to kill the command after `timeout` seconds.
+// This is useful if the command is not expected to exit on its own, like for a watch command.
+func runCommandWithTimeout(timeout float64, cmdln ...string) (string, error) {
+	var args []string
+	for _, subcmdln := range cmdln {
+		// Any arg that starts and ends in a double quote shouldn't be split further
+		if len(subcmdln) > 2 && subcmdln[0] == '"' && subcmdln[len(subcmdln)-1] == '"' {
+			args = append(args, subcmdln[1:len(subcmdln)-1])
+		} else {
+			args = append(args, strings.Split(subcmdln, " ")...)
+		}
+	}
+	prefix := fmt.Sprintf("[%d] Running: ", time.Now().Unix())
+	GinkgoT().Log(prefix, args)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeout)*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	// Work around https://github.com/kubernetes/kubectl/issues/1098#issuecomment-929743957:
+	cmd.Env = append(os.Environ(), "KUBECTL_COMMAND_HEADERS=false")
+	stdout, err := cmd.CombinedOutput()
+	if err != nil && strings.Contains(err.Error(), "signal: killed") {
+		return string(stdout), nil
+	}
+	return string(stdout), err
 }
 
 // If any of the substrs are missing from teststring, returns a string of the form:
