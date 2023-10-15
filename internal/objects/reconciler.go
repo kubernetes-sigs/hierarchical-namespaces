@@ -585,7 +585,7 @@ func (r *Reconciler) operate(ctx context.Context, log logr.Logger, act syncActio
 }
 
 func (r *Reconciler) deleteObject(ctx context.Context, log logr.Logger, inst *unstructured.Unstructured) error {
-	log.Info("Deleted propagated object")
+
 	stats.WriteObject(r.GVK)
 	err := r.Delete(ctx, inst)
 	if errors.IsNotFound(err) {
@@ -598,6 +598,7 @@ func (r *Reconciler) deleteObject(ctx context.Context, log logr.Logger, inst *un
 		return err
 	}
 
+	log.Info("Deleted propagated object")
 	// Remove the propagated object from the map because we are confident that the object was successfully deleted
 	// on the apiserver.
 	r.recordRemovedObject(inst.GetNamespace(), inst.GetName())
