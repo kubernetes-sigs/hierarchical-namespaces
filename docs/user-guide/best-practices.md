@@ -13,7 +13,7 @@ _Part of the [HNC User Guide](README.md)_
 ## Keeping HNC healthy
 
 HNC is installed with very powerful RBAC permissions, and you may rely on it to
-enforece your most critical policies. Therefore, it is important to be able to
+enforce your most critical policies. Therefore, it is important to be able to
 verify that HNC is running correctly.
 
 ### Ensure HNC is running
