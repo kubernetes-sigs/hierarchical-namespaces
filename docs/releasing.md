@@ -35,9 +35,7 @@ that anyone can use, but without leaking personal access tokens._
 ## Document new/changed features
 
 Ensure that the [user guide](user-guide/) is up-to-date with all the latest or
-changed features. _This must be done on the master branch **before** creating
-the release branch._ We used to remove instructions for old versions of HNC, but
-since v1.0 this should no longer be necessary as it's not changing as quickly.
+changed features.
 
 ## Create a release branch
 
@@ -137,15 +135,14 @@ warning. If this was a release candidate, you're done.
 Otherwise, update the [README](../README.md#start) and [user
 guide](user-guide/how-to.md#admin-install) to refer to your new release.
 
-If this was a patch release _and you need to document something_, ensure you
-document it on _both_ the master _and_ the release branch.
+As of HNC v1.0, there is no need to update the docs on the branches.
 
 ## Update Krew
 
-Starting with HNC v0.6.x, the build process also generates a Krew tarball and
+The build process also generates a Krew tarball and
 manifest. This manifest should be downloaded and checked into the Krew index,
 *if* it's for the latest branch (and is not a release candidate). E.g. if you've
-already released HNC v0.7.0 and have to release HNC v0.6.1, do *not* update the
+already released HNC v1.1.0 and have to release HNC v1.0.1, do *not* update the
 Krew index; Krew can only support one version of a plugin at a time so we should
 only support the most recent branch.
 

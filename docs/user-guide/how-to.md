@@ -492,9 +492,6 @@ namespace will be silently ignored. This will eventually
 
 ### Install or upgrade HNC on a cluster
 
-HNC requires Kubernetes v1.16 or later, since it relies on APIs (such as CRDs
-and webhooks) that were only introduced in v1.16.
-
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
