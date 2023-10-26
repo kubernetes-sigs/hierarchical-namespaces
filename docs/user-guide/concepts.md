@@ -227,18 +227,18 @@ You can create a subnamespace from the command line via `kubectl hns create chil
 
 ***Hierarchical resource quotas are beta in HNC v1.1***
 
-***HRQs are not included by default, to use it install the hrq.yaml file in the [releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
+***HRQs are not included by default. To use it, install the `hrq.yaml` file in [Releases -> Assets](https://github.com/kubernetes-sigs/hierarchical-namespaces/releases)***
 
 When you want to give some amount of resources to `team-a`, and want them to be able to
 flexibly use resources in any of their subnamespaces, you create a `HierarchicalResourceQuota`
-in namespace `team-a`. The sum of all resources from all the subnamespaces of the
-members won't be over the amount of resources that is configured in
-`HierarchicalResourceQuota` of namespace `team-a`. All of the resources of `team-a` are
-equally shared between the applications in their subnamespaces, which is very efficient.
+in namespace `team-a`. The sum of all resources from all subnamespaces of `team-a`
+cannot surpass the HRQ in namespace `team-a`. All of the resources of `team-a` are
+shared between applications in their subnamespaces.
 
-In addition, you can let an org or team's admin create their own hierarchical
-quotas without violating the overall HRQ for their org or team. For example,
+In addition, you can let an org or team's admin create sub-HRQs
+without violating the parent HRQ for their org or team. For example,
 if you start with the following structure:
+
 ```
 company-a
 ├── organization-a
@@ -251,42 +251,43 @@ company-a
 │   ...
 ...
 ```
-Instead of each team asking from the `cluster-admin` to modify their `ResourceQuota`,
-you can insert an additional "policy" namespace above each level to hold
-the policy objects (like hierarchical quota) that the sub-admin _cannot_
-change, while giving them permission to create their own quotas in the
-lower level namespaces, like this:
+
+Instead of each team asking a cluster admin to modify their `ResourceQuota`,
+you can insert an additional "policy" parent namespace to hold
+policy objects like HRQ. The sub-admin _cannot_ change the parent policies,
+but still has permission to create sub-HRQs in their subnamespaces, like this:
+
 ```
 company-a-policy
 └── company-a
 ```
-And put the resources HRQ in the `company-a-policy` namespace. This will restrict
-whole `company-a` to the amount of resources that they are paying for. Then `company-a`
-can do similar HRQ with their organizations:
+
+An HRQ in the `company-a-policy` namespace restricts
+`company-a` to the resources they are paying for. Then, `company-a`
+can create sub-HRQs for their internal organizations:
+
 ```
 company-a-policy (has HRQ)
 └── company-a
-    ├── org-a-policy (has HRQ)
+    ├── org-a-policy (has sub-HRQ)
     │   └── organization-a
-    ├── org-b-policy (has HRQ)
+    ├── org-b-policy (has sub-HRQ)
     │   └── organization-b
     ...
 ```
-Lower-level quotas cannot override more restrictive quotas from ancestor namespaces;
-the most restrictive quota always wins.
-This way each individual can fairly and securely distribute their resources across
-their members.
 
-You can create the HRQ `CustomResource` by simply applying a yaml file, and see usage via `kubectl hns hrq` or `kubectl get hrq`. See
-[quickstart example](quickstart.md#hrq) for reference.
+Child quotas cannot override more restrictive quotas from ancestor namespaces;
+the most restrictive quota always applies.
+This way, each namespace can fairly and securely distribute their resources across
+their subnamespaces.
 
+To implement hierarchical quotas, HNC creates `ResourceQuota` objects in each
+affected namespace. This is part of the internal implementation and shouldn't be modified or
+inspected directly. Instead, use `kubectl hns hrq` to inspect hierarchical quotas
+or, in ancestor namespaces, `kubectl get hrq`.
+See the [quickstart example](quickstart.md#hrq) for reference.
 
-To implement hierarchical quotas, HNC automatically creates `ResourceQuota` objects in each
-affected namespace. This is a part of the internal implementation and shouldn't be modified or
-inspected. Use the `kubectl hns hrq` command to inspect hierarchical quotas,
-or look at the `HierarchicalResourceQuota` object in the ancestor namespaces.
-
-Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5` but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
+Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5`, but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
 
 <a name="basic-propagation">
 
