@@ -58,12 +58,11 @@ By default, there's no relationship between these namespaces. For example, let's
 say that we want to make someone Site Reliability Engineer (SRE) for `team-a`,
 so we'll create an RBAC Role and a RoleBinding to that role.
 
-  Note: Typically, we'd create a rolebinding a user account, such as maya@example.com.
-  However, every distribution of K8s has different authentication systems, and
-  some (like [Kind](https://kind.sigs.k8s.io/)) don't have any at all.
-  Therefore, this quickstart uses K8s service accounts instead of user accounts,
-  but feel free to use any account that works on your cluster as you follow
-  along.
+> _Note: Typically, we'd create a rolebinding a user account, such as maya@example.com.
+> However, every distribution of K8s has different authentication systems, and
+> some (like [Kind](https://kind.sigs.k8s.io/)) don't have any at all.
+> Therefore, this quickstart uses K8s service accounts instead of user accounts,
+> but feel free to use any account that works on your cluster as you follow along._
 
 ```bash
 kubectl -n team-a create role team-a-sre --verb=update --resource=deployments
@@ -210,9 +209,9 @@ simply use the config subcommand:
 kubectl hns config set-resource secrets --mode Propagate
 ```
 
-  Note: The supported modes are `Propagate`, `Remove`, `Ignore` and (in HNC
-  v1.1+ only) `AllowPropagate`. More may be added in the future; you can run
-  `kubectl hns config set-resource` for the latest documentation.
+> _Note: The supported modes are `Propagate`, `Remove`, `Ignore` and (in HNC
+> v1.1+ only) `AllowPropagate`. More may be added in the future; you can run
+> `kubectl hns config set-resource` for the latest documentation._
 
 Now, we should be able to verify that `my-creds` was propagated to `service-1`:
 
@@ -280,9 +279,8 @@ installed on the cluster.
 
 _Demonstrates: making Network Policies hierarchy-aware using the 'tree' label._
 
-  Note: this quickstart will only work if network policies are enabled on your
-  cluster. Some flavours, such as KIND and GKE, do not enable network policies
-  by default.
+> _Note: This quickstart will only work if network policies are enabled on your
+> cluster. Some flavours, such as KIND and GKE, do not enable network policies by default._
 
 We now demonstrate propagation of Kubernetes network policies across a namespace
 hierarchy. Continuing from the [basic quickstart](#basic), let us add a second
@@ -482,7 +480,11 @@ all subnamespaces' resources can't surpass the HRQ.
 We will demonstrate how it works using services, but you could also limit `cpu`,
 `memory`, or any other `ResourceQuota` field.
 
+> _Note: Decimal point values cannot be specified (you can't do `cpu: 1.5`, but
+> you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)_
+
 Creating the HRQ:
+
 ```bash
 kubectl apply -f - << EOF
 apiVersion: hnc.x-k8s.io/v1alpha2
@@ -515,6 +517,7 @@ Error from server (Forbidden):
 ```
 
 You can view the HRQ usage by running `kubectl hns hrq` or `kubectl get hrq`:
+
 ```bash
 kubectl get hrq -n acme-org
 ```
@@ -525,13 +528,20 @@ acme-org   services: 1/1
 ```
 You can also view HRQs in all namespaces by running `kubectl get hrq -A`.
 
+> _Note: If you execute `kubectl get qouta` in namespace `acme-org`, `team-a` or `team-b`, 
+> you will see `ResourceQuota` objects named `hrq.hnc.x-k8s.io`.
+> But it is part of the internal implementation of hierarchical resource quotas and shouldn't be modified or
+> inspected directly.
+> Also if you inspect the namespace information 
+> using `kubectl describe ns <NAMESPACE NAME>`, 
+> you may see Resource Quotas imformation of 
+> `hrq.hnc.x-k8s.io`, which is also the case([#275](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/275))._
+
 And finally, you can delete the HRQ by deleting the CR:
 ```bash
 kubectl delete hrq acme-org-hrq -n acme-org
 ```
 
-Note: Decimal point values cannot be specified (you can't do `cpu: 1.5`, but
-you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
 
 <a name="subns"/>
 

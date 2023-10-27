@@ -281,13 +281,13 @@ the most restrictive quota always applies.
 This way, each namespace can fairly and securely distribute their resources across
 their subnamespaces.
 
-To implement hierarchical quotas, HNC creates `ResourceQuota` objects in each
-affected namespace. This is part of the internal implementation and shouldn't be modified or
-inspected directly. Instead, use `kubectl hns hrq` to inspect hierarchical quotas
-or, in ancestor namespaces, `kubectl get hrq`.
-See the [quickstart example](quickstart.md#hrq) for reference.
+> _Note: To implement hierarchical quotas, HNC creates `ResourceQuota` objects named `hrq.hnc.x-k8s.io` in each
+> affected namespace. This is part of the internal implementation and shouldn't be modified or
+> inspected directly. Instead, use `kubectl hns hrq` to inspect hierarchical quotas
+> or, in ancestor namespaces, `kubectl get hrq`.
+> See the [quickstart example](quickstart.md#hrq) for reference._
 
-Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5`, but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
+> _Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5`, but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)_
 
 <a name="basic-propagation">
 
