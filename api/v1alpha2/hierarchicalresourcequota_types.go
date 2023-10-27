@@ -50,6 +50,7 @@ type HierarchicalResourceQuotaStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=hierarchicalresourcequotas,shortName=hrq,scope=Namespaced
+// +kubebuilder:storageversion
 // +kubebuilder:printcolumn:name="Request",type="string",JSONPath=".status.requestsSummary"
 // +kubebuilder:printcolumn:name="Limit",type="string",JSONPath=".status.limitsSummary"
 
