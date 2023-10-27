@@ -200,7 +200,7 @@ but across all the namespaces in a hierarchy. It allows you to distribute your r
 teams, and those teams can distribute their resources between their subteams.
 [Learn how it works](concepts.md#hierarchical-resource-quota) or see an [quickstart example](quickstart.md#hrq)
 
-Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5` but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)
+> _Note: Decimal point values cannot be specified in HRQ (you can't do `cpu: 1.5` but you can do `cpu: "1.5"` or `cpu: 1500m`). See [#292](https://github.com/kubernetes-sigs/hierarchical-namespaces/issues/292)_
 
 <a name="use-select"/>
 
@@ -495,8 +495,8 @@ namespace will be silently ignored. This will eventually
 There is no need to uninstall HNC before upgrading it unless specified in the
 release notes for that version.
 
-_Note: HNC has **experimental** support for HA deployments in v1.0+. Please
-contact us on Slack to discuss if you want to try it out._
+> _Note: HNC has **experimental** support for HA deployments in v1.0+. Please
+> contact us on Slack to discuss if you want to try it out._
 
 #### Prerequisites
 
