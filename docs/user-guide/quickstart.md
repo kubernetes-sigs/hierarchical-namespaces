@@ -633,7 +633,7 @@ subnamespaces by default.
 
 HNC will only allow recursive deletion of subnamespaces if those subnamespaces,
 or any of their ancestors, have cascading deletion explicitly set. For example,
-to delete `service-1`, we first enable cascading deletion and then remove it:
+to delete `service-1`, you first enable cascading deletion and then remove it:
 
 ```bash
 kubectl hns set service-1 --allowCascadingDeletion
@@ -642,10 +642,37 @@ kubectl hns set service-1 --allowCascadingDeletion
 kubectl hns set service-1 -a
 ```
 
+You can check if the `service-1` cascading deletion is enabled from its `.spec.allowCascadingDeletion` field of `HierarchyConfiguration`. If the value is `true`, it's enabled.
+
+```bash
+kubectl get hierarchyconfiguration hierarchy -o jsonpath='{.spec}' -n service-1 
+```
+
+Expected output:
+
+```bash
+{"allowCascadingDeletion":true,"parent":"team-a"}
+```
+
 Now you can (unsafely!) delete `service-1`:
 
 ```bash
 kubectl delete subns service-1 -n team-a
+```
+
+You can see `service-1` and `dev` subnamespace under `service-1` are deleted.
+
+```bash
+kubectl hns tree team-a
+```
+
+Expected output:
+
+```bash
+team-a
+└── [s] service-2
+
+[s] indicates subnamespaces
 ```
 
 There's an important difference between subnamespaces and regular child
@@ -660,6 +687,8 @@ namespace's lifespan is not. If you delete the parent of a _full_ namespace, the
 full namespace itself will _not_ be deleted. However, HNC will mark is as being
 in the `ActivitiesHalted (ParentMissing)` condition, as you can see by calling
 `kubectl hns describe regular-child`.
+
+_Caution: Any propagated objects inside descendant namespaces will be deleted by deleting a parent namespace._
 
 Let's see this in action. Create another subnamespace `service-4`:
 
@@ -678,20 +707,47 @@ kubectl hns tree team-a
 
 Expected output:
 
-```
+```bash
 team-a
 ├── [s] service-2
 └── [s] service-4
      └── staging
 ```
 
-Now, even if you delete `service-4`, the new `staging` namespace will _not_ be
-deleted.
+
+As the same of `service-1`, you can't delete `service-4` subnamespace which is 
+a parent of `staging` full namespace.
+
+This is both to be consistent with how subnamespaces are treated, 
+and also because deleting `service-4` will delete any propagated objects 
+inside `staging`.
+
+```bash
+kubectl delete subns service-4 -n team-a
+# forbidden
+```
+
+So you need to make `service-4` subnamespace `"allowCascadingDeletion":true` to 
+delete it.
+
+```bash
+kubectl hns set service-4 --allowCascadingDeletion
+kubectl get hierarchyconfiguration hierarchy -o jsonpath='{.spec}' -n service-4
+```
+
+Expected output:
+
+```bash
+{"allowCascadingDeletion":true,"parent":"team-a"}
+```
+
+Now, you can delete `service-4`.
 
 ```bash
 kubectl delete subns service-4 -n team-a
 kubectl hns tree team-a
 ```
+
 Output:
 ```
 team-a
@@ -699,7 +755,15 @@ team-a
 ```
 
 The `staging` namespace no longer shows up, because it's no longer a descendant
-of `team-a`. However, if you look at it directly, you'll see a warning that it's
+of `team-a`.
+However, unlike the previous example of `service-1` and `dev`, `staging` namespace will _not_ be deleted alogn with its parent `service-4`.
+
+```bash
+$ kubectl get namespace staging
+# staging namespace will be listed
+```
+
+If you look at it directly, you'll see a warning that it's
 in a bad state:
 
 ```bash
