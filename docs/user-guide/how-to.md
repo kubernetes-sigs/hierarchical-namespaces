@@ -236,6 +236,12 @@ Instead, you must delete its anchor (note that `subns` is a short form of
 $ kubectl delete subns child -n parent
 ```
 
+You can also use the `kubectl-hns` plugin to delete subnamespaces.
+
+```
+$ kubectl hns delete child -n parent
+```
+
 This _seems_ to imply that if you delete a _parent_ namespace, all its
 subnamespace children (and their descendants) will be deleted as well, since all
 objects in a namespace (such as anchors) are deleted along with the namespace.

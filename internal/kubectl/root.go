@@ -49,6 +49,7 @@ type Client interface {
 	getHierarchy(nnm string) *api.HierarchyConfiguration
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
 	createAnchor(nnm string, hnnm string)
+	deleteAnchor(nnm string, hnnm string)
 	getAnchorStatus(nnm string) anchorStatus
 	getHNCConfig() *api.HNCConfiguration
 	updateHNCConfig(*api.HNCConfiguration)
@@ -102,6 +103,7 @@ func init() {
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
 	rootCmd.AddCommand(newCreateCmd())
+	rootCmd.AddCommand(newDeleteCmd())
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newHrqCmd())
@@ -184,6 +186,18 @@ func (cl *realClient) createAnchor(nnm string, hnnm string) {
 		os.Exit(1)
 	}
 	fmt.Printf("Successfully created %q subnamespace anchor in %q namespace\n", hnnm, nnm)
+}
+
+func (cl *realClient) deleteAnchor(nnm string, hnnm string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := hncClient.Delete().Resource(api.Anchors).Namespace(nnm).Name(hnnm).Do(ctx).Error()
+	if err != nil {
+		fmt.Printf("\nCould not delete subnamespace anchor.\nReason: %s\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Successfully deleted %q subnamespace anchor in %q namespace\n", hnnm, nnm)
 }
 
 func (cl *realClient) getHNCConfig() *api.HNCConfiguration {

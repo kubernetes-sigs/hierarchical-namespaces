@@ -614,6 +614,11 @@ kubectl delete subns service-3 -n team-a
 Note that `subns` is a short form for `subnamespaceanchor` or
 `subnamespaceanchor.hnc.x-k8s.io`.
 
+You can also use the `kubectl-hns` plugin to delete subnamespaces.
+
+```bash
+kubectl hns delete service-3 -n team-a
+```
 
 Now try to delete `service-1` in the same way, but you'll see it doesn't work:
 
@@ -672,6 +677,12 @@ team-a
 └── [s] service-2
 
 [s] indicates subnamespaces
+```
+
+You can also do the above steps in one command run with the `kubectl-hns` plugin:
+
+```bash
+kubectl hns delete service-1 -n team-a --allowCascadingDeletion
 ```
 
 There's an important difference between subnamespaces and regular child

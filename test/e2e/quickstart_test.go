@@ -253,6 +253,12 @@ spec:
 		// show how to delete a subns correctly
 		MustNotRun("kubectl delete ns", nsService3)
 		MustRun("kubectl delete subns", nsService3, "-n", nsTeamA)
+
+		// show how to delete a subns correctly with the kubectl-hns plugin
+		CreateSubnamespace(nsService4, nsTeamA)
+		MustNotRun("kubectl hns delete", nsService4)
+		MustRun("kubectl hns delete", nsService4, "-n", nsTeamA)
+
 		// This should not run because service-1 contains its own subnamespace that would be deleted with it,
 		MustNotRun("kubectl delete subns", nsService1, "-n", nsTeamA)
 
@@ -262,6 +268,21 @@ spec:
 			nsTeamA + "\n" +
 			"└── [s] " + nsService2
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
+
+		// cascading deletion with the kubectl-hns plugin
+		CreateSubnamespace(nsService1, nsTeamA)
+		CreateSubnamespace(nsService4, nsService1)
+		expected = "" +
+			nsService1 + "\n" +
+			"└── [s] " + nsService4
+		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsService1, "-n", nsTeamA)
+		MustNotRun("kubectl hns delete", nsService1, "-n", nsTeamA)
+		MustRun("kubectl hns delete", nsService1, "-n", nsTeamA, "--allowCascadingDeletion")
+		expected = "" +
+			nsTeamA + "\n" +
+			"└── [s] " + nsService2
+		// cascading deletion of its subnamespaces takes time
+		RunShouldContain(expected, cleanupTimeout, "kubectl hns tree", nsTeamA)
 
 		// Show the difference of a subns and regular child ns
 		CreateSubnamespace(nsService4, nsTeamA)
