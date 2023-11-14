@@ -113,7 +113,7 @@ test-only: build-setup-envtest
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet staticcheck manifests
 	go build -o bin/manager ./cmd/manager/main.go
-	GOOS=linux GOARCH=amd64 go build \
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 	     -o bin/kubectl/kubectl-hns_linux_amd64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
@@ -125,11 +125,11 @@ build: generate fmt vet staticcheck manifests
 	     -o bin/kubectl/kubectl-hns_darwin_arm64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
-	GOOS=linux GOARCH=arm64 go build \
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \
 	     -o bin/kubectl/kubectl-hns_linux_arm64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
-	GOOS=linux GOARCH=arm go build \
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm go build \
 	     -o bin/kubectl/kubectl-hns_linux_arm \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
 	     ./cmd/kubectl/main.go
