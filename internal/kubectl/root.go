@@ -62,6 +62,10 @@ func init() {
 	client = &realClient{}
 
 	kubecfgFlags := genericclioptions.NewConfigFlags(false)
+	defaultNs, _, err := kubecfgFlags.ToRawKubeConfigLoader().Namespace()
+	if err != nil {
+		fmt.Printf("Error reading namespace in default kubeconfig :%s\n", err.Error())
+	}
 
 	rootCmd = &cobra.Command{
 		// We should use "kubectl hns" instead of "kubectl-hns" to invoke the plugin.
@@ -102,8 +106,8 @@ func init() {
 	rootCmd.AddCommand(newSetCmd())
 	rootCmd.AddCommand(newDescribeCmd())
 	rootCmd.AddCommand(newTreeCmd())
-	rootCmd.AddCommand(newCreateCmd())
-	rootCmd.AddCommand(newDeleteCmd())
+	rootCmd.AddCommand(newCreateCmd(defaultNs))
+	rootCmd.AddCommand(newDeleteCmd(defaultNs))
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newHrqCmd())

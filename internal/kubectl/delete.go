@@ -56,8 +56,8 @@ var deleteCmd = &cobra.Command{
 	},
 }
 
-func newDeleteCmd() *cobra.Command {
-	deleteCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new subnamespace")
+func newDeleteCmd(defaultNs string) *cobra.Command {
+	deleteCmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNs, "The parent namespace for the new subnamespace")
 	deleteCmd.Flags().BoolP("allowCascadingDeletion", "a", false, "Allows cascading deletion of its subnamespaces.")
 	return deleteCmd
 }
