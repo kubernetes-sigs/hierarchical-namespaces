@@ -91,14 +91,10 @@ func (v *Validator) handle(inst *api.HNCConfiguration) admission.Response {
 
 func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admission.Response {
 	allErrs := field.ErrorList{}
+	gvkChecker := newGVKChecker(v.mapper)
 	for i, r := range inst.Spec.Resources {
 		gr := schema.GroupResource{Group: r.Group, Resource: r.Resource}
 		fldPath := field.NewPath("spec", "resources").Index(i)
-		// Validate the type configured is not an HNC enforced type.
-		if api.IsEnforcedType(r) {
-			fldErr := field.Invalid(fldPath, gr, "always uses the 'Propagate' mode and cannot be configured")
-			allErrs = append(allErrs, fldErr)
-		}
 
 		// Validate the resource exists and is namespaced. And convert GR to GVK.
 		// We use GVK because we will need to checkForest() later to avoid source
@@ -106,6 +102,12 @@ func (v *Validator) validateTypes(inst *api.HNCConfiguration, ts gvkSet) admissi
 		gvk, err := v.mapper.NamespacedKindFor(gr)
 		if err != nil {
 			fldErr := field.Invalid(fldPath, gr, err.Error())
+			allErrs = append(allErrs, fldErr)
+		}
+
+		// Validate the type configured is not an HNC enforced type.
+		if gvkChecker.isEnforced(gvk) {
+			fldErr := field.Invalid(fldPath, gr, "always uses the 'Propagate' mode and cannot be configured")
 			allErrs = append(allErrs, fldErr)
 		}
 
