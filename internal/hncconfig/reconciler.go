@@ -148,10 +148,20 @@ func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration) {
 	// Get valid settings in the spec.resources of the `config` singleton.
 	for _, rsc := range inst.Spec.Resources {
 		gr := schema.GroupResource{Group: rsc.Group, Resource: rsc.Resource}
-		// If there are multiple configurations of the same type, we will follow the
+		// Look if the resource exists in the API server.
+		gvk, err := r.resourceMapper.NamespacedKindFor(gr)
+		if err != nil {
+			// Log error and write conditions, but don't early exit since the other types can still be reconciled.
+			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, reasonForGVKError(err), err.Error())
+			continue
+		}
+
+		// If there are multiple configurations of the same GVK, we will follow the
 		// first configuration and ignore the rest.
-		if gvkMode, exist := r.activeGVKMode[gr]; exist {
-			log := r.Log.WithValues("resource", gr, "appliedMode", gvkMode.mode)
+		if firstGR, exist := r.activeGR[gvk]; exist {
+			gvkMode := r.activeGVKMode[firstGR]
+			log := r.Log.WithValues("resource", gr, "appliedMode", rsc.Mode)
 			msg := ""
 			// Set a different message if the type is enforced by HNC.
 			if api.IsEnforcedType(rsc) {
@@ -165,14 +175,6 @@ func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration) {
 			continue
 		}
 
-		// Look if the resource exists in the API server.
-		gvk, err := r.resourceMapper.NamespacedKindFor(gr)
-		if err != nil {
-			// Log error and write conditions, but don't early exit since the other types can still be reconciled.
-			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
-			r.writeCondition(inst, api.ConditionBadTypeConfiguration, reasonForGVKError(err), err.Error())
-			continue
-		}
 		r.activeGVKMode[gr] = gvkMode{gvk, rsc.Mode}
 		r.activeGR[gvk] = gr
 	}
