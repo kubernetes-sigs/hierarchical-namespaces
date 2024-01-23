@@ -99,6 +99,15 @@ HNC_KREW_TAR_SHA256=$(shell sha256sum bin/kubectl-hns.tar.gz | cut -d " " -f 1)
 DIRS=./api/... ./cmd/... ./internal/...
 GOFMT_DIRS=$(DIRS:/...=)
 
+
+YQ ?= ${CURDIR}/bin/yq
+MANIFESTDIR ?= ${CURDIR}/manifests
+HELMPATCHESDIR ?= ${CURDIR}/hack/helm_patches
+CAHRTDIR ?= ${CURDIR}/charts/hnc
+TEMPLATESDIR ?= ${CAHRTDIR}/templates
+HA_MANAGERNAME ?= "hnc-controller-manager-ha"
+
+
 all: test docker-build
 
 ###################### LOCAL ARTIFACTS #########################
@@ -488,3 +497,31 @@ krew-install: krew-build
 # Uninstall kubectl plugin locally using krew.
 krew-uninstall:
 	-kubectl krew uninstall hns
+
+.PHONY: yq
+yq: ## Download yq locally if necessary.
+	@GOBIN=${CURDIR}/bin GO111MODULE=on go install github.com/mikefarah/yq/v4@v4.34.1
+
+charts: yq manifests
+    # Generate CRDs template from manifests/crds.yaml
+	@rm -rf charts/hnc/crds/*
+	@cd charts/hnc/crds && \
+    	cat ${MANIFESTDIR}/crds.yaml | ${YQ} -N -s '.metadata.name + ".yaml"'
+	
+    # Generate helm templates from manifests 
+	@rm -rf charts/hnc/templates/*
+	@cd charts/hnc/templates && \
+	  cat ${MANIFESTDIR}/default.yaml | ${YQ} -N -s '.metadata.name + ".yaml"' && \
+	  cat ${MANIFESTDIR}/ha.yaml | ${YQ} 'select(.kind=="Deployment") | select(.metadata.name==${HA_MANAGERNAME})' | ${YQ} -N -s '.metadata.name + ".yaml"' && \
+	  rm -f ${TEMPLATESDIR}/hnc-system.yaml
+	
+	@cp ${HELMPATCHESDIR}/_helpers.tpl ${TEMPLATESDIR}
+	@cp ${HELMPATCHESDIR}/NOTES.txt ${TEMPLATESDIR}
+
+    # Update image repository and tag from environment variables
+	@yq -N -i '.image.repository = "${HNC_REGISTRY}/${HNC_IMG_NAME}"' ${CAHRTDIR}/values.yaml
+	@yq -N -i '.image.tag = "${HNC_IMG_TAG}"' ${CAHRTDIR}/values.yaml
+	
+    # Update helm templates
+	${HELMPATCHESDIR}/update-helm.sh
+	

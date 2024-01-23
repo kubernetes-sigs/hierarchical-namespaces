@@ -1,0 +1,36 @@
+image:
+  repository: gcr.io/k8s-staging-multitenancy/hnc-manager
+  tag: v1.1.0
+  imagePullPolicy: {}
+# A list of namespaces to add the HNC exclude label to
+hncExcludeNamespaces:
+  - hnc-system
+  - kube-system
+  - kube-public
+  - kube-node-lease
+manager:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 300Mi
+    requests:
+      cpu: 100m
+      memory: 150Mi
+  nodeSelector: {}
+  affinity: {}
+  tolerations: []
+hrq:
+  enabled: false
+ha:
+  enabled: false
+  manager:
+    resources:
+      limits:
+        cpu: 100m
+        memory: 300Mi
+      requests:
+        cpu: 100m
+        memory: 150Mi
+    nodeSelector: {}
+    affinity: {}
+    tolerations: []

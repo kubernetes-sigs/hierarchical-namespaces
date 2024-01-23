@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
+  name: {{ include "hnc.fullname" . }}-controller-manager
+  namespace: {{ include "hnc.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+      labels:
+        control-plane: controller-manager
+    spec:
+      containers:
+        - args:
+            {{- if .Values.hrq.enabled }}
+            - --enable-hrq
+            {{- end }}
+            {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces}}
+            - --excluded-namespace={{ $hncExcludeNamespace }}
+            {{- end }}
+            {{- if .Values.ha.enabled }}
+            - --no-webhooks
+            {{- end }}
+            - --webhook-server-port=9443
+            - --metrics-addr=:8080
+            - --max-reconciles=10
+            - --apiserver-qps-throttle=50
+            - --nopropagation-label=cattle.io/creator=norman
+            - --enable-internal-cert-management
+            - --cert-restart-on-secret-refresh
+          command:
+            - /manager
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag | default "hnc-manager:latest" }}
+          livenessProbe:
+            failureThreshold: 1
+            httpGet:
+              path: /healthz
+              port: 8081
+            periodSeconds: 10
+          name: manager
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+            - containerPort: 8081
+              name: healthz
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          startupProbe:
+            failureThreshold: 100
+            httpGet:
+              path: /readyz
+              port: 8081
+            periodSeconds: 5
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+          {{- with .Values.imagePullPolicy }}
+          imagePullPolicy: {{ .Values.image.imagePullPolicy }}
+          {{- end }}
+          {{- with .Values.manager.resources }}
+          resources: {{- toYaml . | nindent 12}}
+          {{- end }}
+      securityContext:
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ include "hnc.fullname" . }}-webhook-server-cert
+      {{- with .Values.manager.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8}}
+      {{- end }}
+      {{- with .Values.manager.affinity }}
+      affinity: {{- toYaml . | nindent 8}}
+      {{- end }}
+      {{- with .Values.manager.tolerations }}
+      tolerations: {{- toYaml . | nindent 8}}
+      {{- end }}

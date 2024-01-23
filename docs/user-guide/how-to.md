@@ -541,6 +541,32 @@ export HNC_IMG_TAG=test-img
 make deploy
 ```
 
+#### Install with Helm
+
+You can install HNC with Helm by following the instructions:
+
+Generate latest chart. 
+
+> _Note: This process should be done in [Automated Builds](../automated-builds.md)_
+
+```bash
+$ export HNC_REGISTRY=gcr.io/k8s-staging-multitenancy
+$ export HNC_IMG_NAME=hnc-manager
+$ export HNC_IMG_TAG=<HNC Version, eg v1.1.0>
+$ make charts
+```
+
+Install chart.
+You can do any setting in `charts/hnc/values.yaml` before installation.
+eg: setting hncExcludeNamespaces, enable HRQ, etc.
+
+> _Caution: Don't change release name(hnc) and namespace(hnc-system)
+> because HNC assumes them._
+
+```bash
+$ helm install hnc charts/hnc --create-namespace -n hnc-system
+```
+
 <a name="admin-uninstall"/>
 
 ### Uninstall HNC from a cluster

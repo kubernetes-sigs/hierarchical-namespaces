@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: '{{ include "hnc.fullname" . }}-webhook-service'
+  namespace: '{{ include "hnc.namespace" . }}'
+spec:
+  ports:
+    - port: 443
+      targetPort: 9443
+  selector: 
+    {{- if .Values.ha.enabled }}
+    control-plane: controller-manager-ha
+    {{- else }}
+    control-plane: controller-manager
+    {{- end }}

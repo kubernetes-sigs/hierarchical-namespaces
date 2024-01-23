@@ -1,0 +1,13 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-admin: "true"
+  name: '{{ include "hnc.fullname" . }}-admin-role'
+rules:
+  - apiGroups:
+      - hnc.x-k8s.io
+    resources:
+      - '*'
+    verbs:
+      - '*'

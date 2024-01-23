@@ -1,0 +1,73 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: '{{ include "hnc.fullname" . }}-manager-role'
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - resourcequotas
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - '*'
+    resources:
+      - '*'
+    verbs:
+      - '*'
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - hnc.x-k8s.io
+    resources:
+      - hierarchicalresourcequotas
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - hnc.x-k8s.io
+    resources:
+      - hierarchicalresourcequotas/status
+    verbs:
+      - get
+      - patch
+      - update
+  - apiGroups:
+      - hnc.x-k8s.io
+    resources:
+      - hierarchies
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - hnc.x-k8s.io
+    resources:
+      - hierarchies/status
+    verbs:
+      - get
+      - patch
+      - update
