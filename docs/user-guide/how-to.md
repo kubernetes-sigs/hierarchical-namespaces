@@ -578,7 +578,7 @@ relationships and configuration settings:
 kubectl get crds | grep .hnc.x-k8s.io | awk '{print $1}' | xargs kubectl delete crd
 
 # Delete the rest of HNC. For HNC v1.0 and later:
-kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-${HNC_VERSION}/default.yaml
+kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/${HNC_VERSION}/default.yaml
 # For versions earlier than HNC v1.0:
 kubectl delete -f https://github.com/kubernetes-sigs/hierarchical-namespaces/releases/download/hnc-${HNC_VERSION}/hnc-manager.yaml
 ```
