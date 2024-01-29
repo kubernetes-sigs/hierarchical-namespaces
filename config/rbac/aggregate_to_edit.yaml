@@ -1,0 +1,15 @@
+# Automatically aggregated to clusterRoles: edit -> admin
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: edit
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-edit: "true"
+rules:
+- apiGroups:
+  - hnc.x-k8s.io
+  resources:
+  - hierarchicalresourcequotas
+  - subnamespaceanchors
+  verbs:
+  - '*'
