@@ -65,7 +65,7 @@ If you use HNC, we recommend joining the
 mailing list, a low-volume list to receive updates such as new version of HNC
 and proposed changes or new features.
 
-This project is goverened by
+This project is governed by
 [wg-multitenancy](https://github.com/kubernetes-sigs/multi-tenancy), and was
 originally located in that repo. It moved to this location after approval by
 sig-auth in [KEP #1687](https://github.com/kubernetes/enhancements/issues/1687).
