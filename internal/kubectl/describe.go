@@ -25,7 +25,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/duration"
 )
@@ -73,6 +73,9 @@ var describeCmd = &cobra.Command{
 		} else {
 			fmt.Printf("  No children\n")
 		}
+
+		// AllowCascadingDeletion
+		fmt.Printf("  Allows Cascading Deletion: %t\n", hier.Spec.AllowCascadingDeletion)
 
 		// Conditions
 		describeConditions(hier.Status.Conditions)

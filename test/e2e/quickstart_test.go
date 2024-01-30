@@ -198,14 +198,14 @@ spec:
 		CreateSubnamespace(nsTeamB, nsOrg)
 
 		expected := "" + // empty string make go fmt happy
-		nsOrg + "\n" +
+			nsOrg + "\n" +
 			"├── [s] " + nsTeamA + "\n" +
 			"└── [s] " + nsTeamB
 		// The subnamespaces takes a bit of time to show up
 		RunShouldContain(expected, propogationTimeout, "kubectl hns tree", nsOrg)
 
 		// create hrq in parent acme-org
-		hrq:=`# quickstart_test.go: hrq in acme-org
+		hrq := `# quickstart_test.go: hrq in acme-org
 apiVersion: hnc.x-k8s.io/v1alpha2
 kind: HierarchicalResourceQuota
 metadata:
@@ -217,15 +217,15 @@ spec:
 		MustApplyYAML(hrq)
 
 		// create service in team-a
-		MustRun("kubectl create service clusterip", nsTeamA + "-svc", "--clusterip=None", "-n", nsTeamA)
+		MustRun("kubectl create service clusterip", nsTeamA+"-svc", "--clusterip=None", "-n", nsTeamA)
 
 		// show that you can't use resources more than the hrq
-		MustNotRun("kubectl create service clusterip", nsTeamB + "-svc", "--clusterip=None", "-n", nsTeamB)
+		MustNotRun("kubectl create service clusterip", nsTeamB+"-svc", "--clusterip=None", "-n", nsTeamB)
 
 		// show hrq usage
 		RunShouldContain("services: 1/1", defTimeout, "kubectl get hrq", "-n", nsOrg)
 
-		MustRun("kubectl delete hrq", nsOrg + "-hrq", "-n", nsOrg)
+		MustRun("kubectl delete hrq", nsOrg+"-hrq", "-n", nsOrg)
 	})
 
 	It("Should create and delete subnamespaces", func() {
@@ -268,6 +268,10 @@ spec:
 			nsTeamA + "\n" +
 			"└── [s] " + nsService2
 		RunShouldContain(expected, defTimeout, "kubectl hns tree", nsTeamA)
+
+		// Describe should describe AllowCascadingDeletion flag value
+		MustRun("kubectl hns describe", nsOrg)
+		RunShouldContain("Allows Cascading Deletion: false", defTimeout, "kubectl hns describe", nsOrg)
 
 		// cascading deletion with the kubectl-hns plugin
 		CreateSubnamespace(nsService1, nsTeamA)
