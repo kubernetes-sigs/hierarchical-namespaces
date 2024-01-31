@@ -48,7 +48,7 @@ type anchorStatus map[string]string
 type Client interface {
 	getHierarchy(nnm string) *api.HierarchyConfiguration
 	updateHierarchy(hier *api.HierarchyConfiguration, reason string)
-	createAnchor(nnm string, hnnm string)
+	createAnchor(nnm string, hnnm string, annotations, labels map[string]string)
 	deleteAnchor(nnm string, hnnm string)
 	getAnchorStatus(nnm string) anchorStatus
 	getHNCConfig() *api.HNCConfiguration
@@ -173,13 +173,19 @@ func (cl *realClient) updateHierarchy(hier *api.HierarchyConfiguration, reason s
 	}
 }
 
-func (cl *realClient) createAnchor(nnm string, hnnm string) {
+func (cl *realClient) createAnchor(nnm string, hnnm string, annotations, labels map[string]string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	anchor := &api.SubnamespaceAnchor{}
 	anchor.Name = hnnm
 	anchor.Namespace = nnm
+	if len(annotations) > 0 {
+		anchor.Spec.Annotations = mapToMetaKVP(annotations)
+	}
+	if len(labels) > 0 {
+		anchor.Spec.Labels = mapToMetaKVP(labels)
+	}
 	err := hncClient.Post().Resource(api.Anchors).Namespace(nnm).Name(hnnm).Body(anchor).Do(ctx).Error()
 	if err != nil {
 		fmt.Printf("\nCould not create subnamespace anchor.\nReason: %s\n", err)
@@ -252,4 +258,12 @@ func (cl *realClient) getHRQ(names []string, nnm string) *api.HierarchicalResour
 		}
 	}
 	return hrqList
+}
+
+func mapToMetaKVP(m map[string]string) []api.MetaKVP {
+	var kvps []api.MetaKVP
+	for k, v := range m {
+		kvps = append(kvps, api.MetaKVP{Key: k, Value: v})
+	}
+	return kvps
 }

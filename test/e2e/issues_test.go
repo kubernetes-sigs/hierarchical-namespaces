@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -12,6 +13,7 @@ var _ = Describe("Issues", func() {
 	const (
 		nsParent   = "parent"
 		nsChild    = "child"
+		nsChild2   = "child2"
 		nsSub1     = "sub1"
 		nsSub2     = "sub2"
 		nsSub1Sub1 = "sub1-sub1"
@@ -385,6 +387,21 @@ spec:
 		// after removing a allSelector, the object does not show up in the child namespace
 		MustRun("kubectl annotate secret my-creds -n", nsParent, "propagate.hnc.x-k8s.io/all-")
 		RunShouldNotContain("my-creds", defTimeout, "kubectl -n", nsChild, "get secrets")
+	})
+
+	// NB: this test requires managed labels and annotations to be set in the test environment - hnstest/.*
+	It("Should create namespace with annotations and labels while using kubetl hns - issue #305", func() {
+		CreateNamespace(nsParent)
+		// should let it run without the annotations and label flags
+		MustRun(fmt.Sprintf("kubectl hns create -n %s", nsParent), nsChild)
+		// should let it run with the annotations and label flags and create ns with provided annotations and labels
+		MustRun(fmt.Sprintf("kubectl hns create -n %s --annotations hnstest/foo=bar --labels hnstest/foo=bar", nsParent), nsChild2)
+		RunShouldContain("bar", defTimeout, "kubectl get ns", nsChild2, "-o=jsonpath='{.metadata.annotations.hnstest/foo}'")
+		RunShouldContain("bar", defTimeout, "kubectl get ns", nsChild2, "-o=jsonpath='{.metadata.labels.hnstest/foo}'")
+		// cleanup - set for deletion
+		MustRun("kubectl label --overwrite ns", nsChild, "hnc.x-k8s.io/testNamespace=true")
+		MustRun("kubectl label --overwrite ns", nsChild2, "hnc.x-k8s.io/testNamespace=true")
+
 	})
 })
 
