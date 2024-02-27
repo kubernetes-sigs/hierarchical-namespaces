@@ -23,7 +23,7 @@ import (
 )
 
 var createCmd = &cobra.Command{
-	Use:   "create -n PARENT CHILD",
+	Use:   "create -n PARENT CHILD [-a] key1=value1 [-l] key1=value1,key2=value2",
 	Short: "Creates a subnamespace under the given parent.",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -32,12 +32,17 @@ var createCmd = &cobra.Command{
 			fmt.Println("Error: parent must be set via --namespace or -n")
 			os.Exit(1)
 		}
+		annotations, _ := cmd.Flags().GetStringToString("annotations")
+		labels, _ := cmd.Flags().GetStringToString("labels")
+
 		// Create the anchor, the custom resource representing the subnamespace.
-		client.createAnchor(parent, args[0])
+		client.createAnchor(parent, args[0], annotations, labels)
 	},
 }
 
 func newCreateCmd() *cobra.Command {
 	createCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new subnamespace")
+	createCmd.Flags().StringToStringP("annotations", "a", make(map[string]string, 0), "The annotations to add on subnamespace")
+	createCmd.Flags().StringToStringP("labels", "l", make(map[string]string, 0), "The labels to add on subnamespace")
 	return createCmd
 }
