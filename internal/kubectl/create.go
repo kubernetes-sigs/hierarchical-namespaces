@@ -37,7 +37,7 @@ var createCmd = &cobra.Command{
 	},
 }
 
-func newCreateCmd() *cobra.Command {
-	createCmd.Flags().StringP("namespace", "n", "", "The parent namespace for the new subnamespace")
+func newCreateCmd(defaultNs string) *cobra.Command {
+	createCmd.Flags().StringVarP(&namespace, "namespace", "n", defaultNs, "The parent namespace for the new subnamespace")
 	return createCmd
 }
