@@ -21,10 +21,11 @@ import (
 
 const (
 	serviceName       = "hnc-webhook-service"
-	caName         = "hnc-ca"
-	caOrganization = "hnc"
-	secretName     = "hnc-webhook-server-cert"
-	certDir        = "/tmp/k8s-webhook-server/serving-certs"apiExtCertDir     = "/certs"
+	caName            = "hnc-ca"
+	caOrganization    = "hnc"
+	secretName        = "hnc-webhook-server-cert"
+	certDir           = "/tmp/k8s-webhook-server/serving-certs"
+	apiExtCertDir     = "/certs"
 	apiExtServiceName = "hnc-resourcelist"
 	apiExtSecretName  = "hnc-resourcelist"
 	apiExtName        = "v1alpha2.resources.hnc.x-k8s.io"
