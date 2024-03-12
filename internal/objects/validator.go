@@ -32,17 +32,6 @@ const (
 	ServingPath = "/validate-objects"
 )
 
-// Note: the validating webhook FAILS CLOSE. This means that if the webhook goes
-// down, all further changes are forbidden. In addition, the webhook `rules`
-// (groups, resources, versions, verbs) specified in the below kubebuilder marker
-// are overwritten by the `rules` configured in config/webhook/webhook_patch.yaml,
-// because there's no marker for `scope` and we only want this object webhook
-// to work on `namespaced` objects. Please make sure you edit the webhook_patch.yaml
-// file if you want to change the webhook `rules` and better make the rules
-// here the same as what's in the webhook_patch.yaml.
-//
-// +kubebuilder:webhook:admissionReviewVersions=v1,path=/validate-objects,mutating=false,failurePolicy=fail,groups="*",resources="*",sideEffects=None,verbs=create;update;delete,versions="*",name=objects.hnc.x-k8s.io
-
 type Validator struct {
 	Log     logr.Logger
 	Forest  *forest.Forest
