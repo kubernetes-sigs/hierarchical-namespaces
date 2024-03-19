@@ -17,11 +17,13 @@ package stackdriver
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	monitoring "cloud.google.com/go/monitoring/apiv3"
+	monitoring "cloud.google.com/go/monitoring/apiv3/v2"
 	monitoringpb "google.golang.org/genproto/googleapis/monitoring/v3"
 )
 
@@ -131,16 +133,61 @@ func (mb *metricsBatcher) sendReqToChan() {
 	mb.reqsChan <- req
 }
 
+// regex to extract min-max ranges from error response strings in the format "timeSeries[(min-max,...)] ..." (max is optional)
+var timeSeriesErrRegex = regexp.MustCompile(`: timeSeries\[([0-9]+(?:-[0-9]+)?(?:,[0-9]+(?:-[0-9]+)?)*)\]`)
+
 // sendReq sends create time series requests to Stackdriver,
 // and returns the count of dropped time series and error.
-func sendReq(ctx context.Context, c *monitoring.MetricClient, req *monitoringpb.CreateTimeSeriesRequest) (int, error) {
-	if c != nil { // c==nil only happens in unit tests where we don't make real calls to Stackdriver server
-		err := createTimeSeries(ctx, c, req)
+func sendReq(ctx context.Context, c *monitoring.MetricClient, req *monitoringpb.CreateTimeSeriesRequest) (int, []error) {
+	// c == nil only happens in unit tests where we don't make real calls to Stackdriver server
+	if c == nil {
+		return 0, nil
+	}
+
+	dropped := 0
+	errors := []error{}
+	serviceReq, nonServiceReq := splitCreateTimeSeriesRequest(req)
+	if nonServiceReq != nil {
+		err := createTimeSeries(ctx, c, nonServiceReq)
 		if err != nil {
-			return len(req.TimeSeries), err
+			dropped += droppedTimeSeriesFromMonitoringAPIError(nonServiceReq, err)
+			errors = append(errors, err)
 		}
 	}
-	return 0, nil
+	if serviceReq != nil {
+		err := createServiceTimeSeries(ctx, c, serviceReq)
+		if err != nil {
+			dropped += droppedTimeSeriesFromMonitoringAPIError(serviceReq, err)
+			errors = append(errors, err)
+		}
+	}
+	return dropped, errors
+}
+
+func droppedTimeSeriesFromMonitoringAPIError(req *monitoringpb.CreateTimeSeriesRequest, monitoringAPIerr error) int {
+	droppedTimeSeriesRangeMatches := timeSeriesErrRegex.FindAllStringSubmatch(monitoringAPIerr.Error(), -1)
+	if !strings.HasPrefix(monitoringAPIerr.Error(), "One or more TimeSeries could not be written:") || len(droppedTimeSeriesRangeMatches) == 0 {
+		return len(req.TimeSeries)
+	}
+
+	dropped := 0
+	for _, submatches := range droppedTimeSeriesRangeMatches {
+		for i := 1; i < len(submatches); i++ {
+			for _, rng := range strings.Split(submatches[i], ",") {
+				rngSlice := strings.Split(rng, "-")
+
+				// strconv errors not possible due to regex above
+				min, _ := strconv.Atoi(rngSlice[0])
+				max := min
+				if len(rngSlice) > 1 {
+					max, _ = strconv.Atoi(rngSlice[1])
+				}
+
+				dropped += max - min + 1
+			}
+		}
+	}
+	return dropped
 }
 
 type worker struct {
@@ -188,10 +235,10 @@ func (w *worker) sendReqWithTimeout(req *monitoringpb.CreateTimeSeriesRequest) {
 	w.recordDroppedTimeseries(sendReq(ctx, w.mc, req))
 }
 
-func (w *worker) recordDroppedTimeseries(numTimeSeries int, err error) {
+func (w *worker) recordDroppedTimeseries(numTimeSeries int, errors []error) {
 	w.resp.droppedTimeSeries += numTimeSeries
-	if err != nil {
-		w.resp.errs = append(w.resp.errs, err)
+	if len(errors) > 0 {
+		w.resp.errs = append(w.resp.errs, errors...)
 	}
 }
 
