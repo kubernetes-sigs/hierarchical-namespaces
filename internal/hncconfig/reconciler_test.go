@@ -89,6 +89,22 @@ var _ = Describe("HNCConfiguration", func() {
 		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring(api.RoleResource))
 	})
 
+	It("should ignore the `roles` configuration in the spec and set `MultipleConfigurationsForType` condition even when given in a singular form", func() {
+		AddToHNCConfig(ctx, api.RBACGroup, "role", api.Ignore)
+
+		Eventually(typeSpecMode(ctx, api.RBACGroup, "role")).Should(Equal(api.Ignore))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
+		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring("role"))
+	})
+
+	It("should ignore the `roles` configuration in the spec and set `MultipleConfigurationsForType` condition even when specified without group", func() {
+		AddToHNCConfig(ctx, "", api.RoleResource, api.Ignore)
+
+		Eventually(typeSpecMode(ctx, "", api.RoleResource)).Should(Equal(api.Ignore))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleResource)).Should(Equal(api.Propagate))
+		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring(api.RoleResource))
+	})
+
 	It("should propagate RoleBindings by default", func() {
 		SetParent(ctx, barName, fooName)
 		// Give foo a role binding.
@@ -102,6 +118,22 @@ var _ = Describe("HNCConfiguration", func() {
 		AddToHNCConfig(ctx, api.RBACGroup, api.RoleBindingResource, api.Ignore)
 
 		Eventually(typeSpecMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Ignore))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
+		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring(api.RoleBindingResource))
+	})
+
+	It("should ignore the `rolebindings` configuration in the spec and set `MultipleConfigurationsForType` condition even when given in a singular form", func() {
+		AddToHNCConfig(ctx, api.RBACGroup, "rolebinding", api.Ignore)
+
+		Eventually(typeSpecMode(ctx, api.RBACGroup, "rolebinding")).Should(Equal(api.Ignore))
+		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
+		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring("rolebinding"))
+	})
+
+	It("should ignore the `rolebindings` configuration in the spec and set `MultipleConfigurationsForType` condition even when specified without group", func() {
+		AddToHNCConfig(ctx, "", api.RoleBindingResource, api.Ignore)
+
+		Eventually(typeSpecMode(ctx, "", api.RoleBindingResource)).Should(Equal(api.Ignore))
 		Eventually(typeStatusMode(ctx, api.RBACGroup, api.RoleBindingResource)).Should(Equal(api.Propagate))
 		Eventually(GetHNCConfigCondition(ctx, api.ConditionBadTypeConfiguration, api.ReasonMultipleConfigsForType)).Should(ContainSubstring(api.RoleBindingResource))
 	})

@@ -24,6 +24,10 @@ var (
 	gr2gvk = map[schema.GroupResource]schema.GroupVersionKind{
 		{Group: api.RBACGroup, Resource: api.RoleResource}:        {Group: api.RBACGroup, Version: "v1", Kind: api.RoleKind},
 		{Group: api.RBACGroup, Resource: api.RoleBindingResource}: {Group: api.RBACGroup, Version: "v1", Kind: api.RoleBindingKind},
+		{Group: api.RBACGroup, Resource: "role"}:                  {Group: api.RBACGroup, Version: "v1", Kind: api.RoleKind},
+		{Group: api.RBACGroup, Resource: "rolebinding"}:           {Group: api.RBACGroup, Version: "v1", Kind: api.RoleBindingKind},
+		{Resource: api.RoleResource}:                              {Group: api.RBACGroup, Version: "v1", Kind: api.RoleKind},
+		{Resource: api.RoleBindingResource}:                       {Group: api.RBACGroup, Version: "v1", Kind: api.RoleBindingKind},
 		{Group: "", Resource: "secrets"}:                          {Group: "", Version: "v1", Kind: "Secret"},
 		{Group: "", Resource: "resourcequotas"}:                   {Group: "", Version: "v1", Kind: "ResourceQuota"},
 	}
@@ -84,6 +88,22 @@ func TestRBACTypes(t *testing.T) {
 			configs: []api.ResourceSpec{
 				{Group: api.RBACGroup, Resource: api.RoleResource, Mode: api.Propagate},
 				{Group: api.RBACGroup, Resource: api.RoleBindingResource, Mode: api.Propagate},
+			},
+			allow: false,
+		},
+		{
+			name: "Configure redundant enforced resources in a singular manner",
+			configs: []api.ResourceSpec{
+				{Group: api.RBACGroup, Resource: "role", Mode: api.AllowPropagate},
+				{Group: api.RBACGroup, Resource: "rolebinding", Mode: api.AllowPropagate},
+			},
+			allow: false,
+		},
+		{
+			name: "Configure redundant enforced resources without specifying group",
+			configs: []api.ResourceSpec{
+				{Resource: api.RoleResource, Mode: api.AllowPropagate},
+				{Resource: api.RoleBindingResource, Mode: api.AllowPropagate},
 			},
 			allow: false,
 		},

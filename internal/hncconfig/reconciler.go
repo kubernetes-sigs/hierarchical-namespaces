@@ -146,15 +146,26 @@ func (r *Reconciler) ensureEnforcedTypes(inst *api.HNCConfiguration) error {
 // to retry but only set conditions since the configuration may be incorrect.
 func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration) {
 	// Get valid settings in the spec.resources of the `config` singleton.
+	gvkChecker := newGVKChecker(r.resourceMapper)
 	for _, rsc := range inst.Spec.Resources {
 		gr := schema.GroupResource{Group: rsc.Group, Resource: rsc.Resource}
-		// If there are multiple configurations of the same type, we will follow the
+		// Look if the resource exists in the API server.
+		gvk, err := r.resourceMapper.NamespacedKindFor(gr)
+		if err != nil {
+			// Log error and write conditions, but don't early exit since the other types can still be reconciled.
+			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
+			r.writeCondition(inst, api.ConditionBadTypeConfiguration, reasonForGVKError(err), err.Error())
+			continue
+		}
+
+		// If there are multiple configurations of the same GVK, we will follow the
 		// first configuration and ignore the rest.
-		if gvkMode, exist := r.activeGVKMode[gr]; exist {
-			log := r.Log.WithValues("resource", gr, "appliedMode", gvkMode.mode)
+		if firstGR, exist := r.activeGR[gvk]; exist {
+			gvkMode := r.activeGVKMode[firstGR]
+			log := r.Log.WithValues("resource", gr, "appliedMode", rsc.Mode)
 			msg := ""
 			// Set a different message if the type is enforced by HNC.
-			if api.IsEnforcedType(rsc) {
+			if gvkChecker.isEnforced(gvk) {
 				msg = fmt.Sprintf("The sync mode for %q is enforced by HNC as %q and cannot be overridden", gr, api.Propagate)
 				log.Info("The sync mode for this resource is enforced by HNC and cannot be overridden")
 			} else {
@@ -165,14 +176,6 @@ func (r *Reconciler) reconcileConfigTypes(inst *api.HNCConfiguration) {
 			continue
 		}
 
-		// Look if the resource exists in the API server.
-		gvk, err := r.resourceMapper.NamespacedKindFor(gr)
-		if err != nil {
-			// Log error and write conditions, but don't early exit since the other types can still be reconciled.
-			r.Log.Error(err, "while trying to reconcile the configuration", "type", gr, "mode", rsc.Mode)
-			r.writeCondition(inst, api.ConditionBadTypeConfiguration, reasonForGVKError(err), err.Error())
-			continue
-		}
 		r.activeGVKMode[gr] = gvkMode{gvk, rsc.Mode}
 		r.activeGR[gvk] = gr
 	}
@@ -538,4 +541,33 @@ func reasonForGVKError(err error) string {
 		reason = api.ReasonResourceNotNamespaced
 	}
 	return reason
+}
+
+// gvkChecker checks if a GVK is an enforced type.
+// It is needed to check duplicated types in ResourceSpec using GVK instead of GR,
+// since the user-given GRs might include some ambiguity.
+// (e.g. singular/plural, empty group is handled as corev1).
+type gvkChecker struct {
+	enforcedGVKs []schema.GroupVersionKind
+}
+
+func newGVKChecker(mapper resourceMapper) *gvkChecker {
+	var enforcedGVKs []schema.GroupVersionKind
+	for _, enforcedType := range api.EnforcedTypes {
+		enforcedGVK, _ := mapper.NamespacedKindFor(schema.GroupResource{
+			Group:    enforcedType.Group,
+			Resource: enforcedType.Resource,
+		})
+		enforcedGVKs = append(enforcedGVKs, enforcedGVK)
+	}
+	return &gvkChecker{enforcedGVKs}
+}
+
+func (c *gvkChecker) isEnforced(gvk schema.GroupVersionKind) bool {
+	for _, enforcedGVK := range c.enforcedGVKs {
+		if gvk == enforcedGVK {
+			return true
+		}
+	}
+	return false
 }
