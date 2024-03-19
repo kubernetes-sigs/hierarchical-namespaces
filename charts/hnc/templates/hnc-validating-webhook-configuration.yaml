@@ -1,0 +1,157 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: '{{ include "hnc.fullname" . }}-validating-webhook-configuration'
+webhooks:
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-hnc-x-k8s-io-v1alpha2-subnamespaceanchors
+    failurePolicy: Fail
+    name: subnamespaceanchors.hnc.x-k8s.io
+    rules:
+      - apiGroups:
+          - hnc.x-k8s.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - subnamespaceanchors
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-hnc-x-k8s-io-v1alpha2-hierarchyconfigurations
+    failurePolicy: Fail
+    name: hierarchyconfigurations.hnc.x-k8s.io
+    rules:
+      - apiGroups:
+          - hnc.x-k8s.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+        resources:
+          - hierarchyconfigurations
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-objects
+    failurePolicy: Fail
+    name: objects.hnc.x-k8s.io
+    namespaceSelector:
+      matchLabels:
+        hnc.x-k8s.io/included-namespace: "true"
+    rules:
+      - apiGroups:
+          - '*'
+        apiVersions:
+          - '*'
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - '*'
+        scope: Namespaced
+    sideEffects: None
+    timeoutSeconds: 2
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-hnc-x-k8s-io-v1alpha2-hncconfigurations
+    failurePolicy: Fail
+    name: hncconfigurations.hnc.x-k8s.io
+    rules:
+      - apiGroups:
+          - hnc.x-k8s.io
+        apiVersions:
+          - v1alpha2
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - hncconfigurations
+    sideEffects: None
+  - admissionReviewVersions:
+      - v1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-v1-namespace
+    failurePolicy: Fail
+    name: namespaces.hnc.x-k8s.io
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - DELETE
+          - CREATE
+          - UPDATE
+        resources:
+          - namespaces
+    sideEffects: None
+  {{- if .Values.hrq.enabled }}
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-hnc-x-k8s-io-v1alpha2-hrq
+    failurePolicy: Fail
+    name: hrq.hnc.x-k8s.io
+    rules:
+    - apiGroups:
+      - hnc.x-k8s.io
+      apiVersions:
+      - v1alpha2
+      operations:
+      - CREATE
+      - UPDATE
+      resources:
+      - hierarchicalresourcequotas
+    sideEffects: None
+  - admissionReviewVersions:
+    - v1
+    - v1beta1
+    clientConfig:
+      service:
+        name: '{{ include "hnc.fullname" . }}-webhook-service'
+        namespace: '{{ include "hnc.namespace" . }}'
+        path: /validate-hnc-x-k8s-io-v1alpha2-resourcequotasstatus
+    failurePolicy: Ignore
+    name: resourcesquotasstatus.hnc.x-k8s.io
+    rules:
+    - apiGroups:
+      - ""
+      apiVersions:
+      - v1
+      operations:
+      - UPDATE
+      resources:
+      - resourcequotas/status
+    sideEffects: None
+  {{- end }}
