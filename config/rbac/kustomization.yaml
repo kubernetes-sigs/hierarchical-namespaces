@@ -6,3 +6,5 @@ resources:
 - aggregate_to_admin.yaml
 - leader_election_role.yaml
 - leader_election_role_binding.yaml
+- resourcelist_role.yaml
+- resourcelist_rolebinding.yaml

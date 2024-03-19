@@ -24,10 +24,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -41,6 +43,8 @@ var k8sClient *kubernetes.Clientset
 var hncClient *rest.RESTClient
 var rootCmd *cobra.Command
 var client Client
+var dynamicClient dynamic.Interface
+var mapper meta.RESTMapper
 
 type realClient struct{}
 type anchorStatus map[string]string
@@ -98,6 +102,16 @@ func init() {
 				return err
 			}
 
+			mapper, err = kubecfgFlags.ToRESTMapper()
+			if err != nil {
+				return err
+			}
+
+			dynamicClient, err = dynamic.NewForConfig(config)
+			if err != nil {
+				return err
+			}
+
 			return nil
 		},
 	}
@@ -111,6 +125,7 @@ func init() {
 	rootCmd.AddCommand(newConfigCmd())
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newHrqCmd())
+	rootCmd.AddCommand(newGetCmd())
 }
 
 func Execute() {

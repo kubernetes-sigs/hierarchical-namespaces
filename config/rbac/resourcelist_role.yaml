@@ -1,0 +1,15 @@
+# Allow the resourcelist-apiextension deployment to read resources in order to re-register them as HNC resources.
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: resourcelist
+rules:
+- apiGroups:
+  - "*"
+  resources:
+  - "*"
+  verbs:
+  - get
+  - list
+  - watch

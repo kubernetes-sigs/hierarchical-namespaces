@@ -14,6 +14,7 @@ bases:
 - ../../manager
 - ../../rbac
 - ../../webhook
+- ../../apiextension
 
 patchesStrategicMerge:
 - webhook_patch.yaml

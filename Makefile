@@ -113,6 +113,7 @@ test-only: build-setup-envtest
 # Builds all binaries (manager and kubectl) and manifests
 build: generate fmt vet staticcheck manifests
 	go build -o bin/manager ./cmd/manager/main.go
+	go build -o bin/apiextension ./cmd/apiextension/main.go
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
 	     -o bin/kubectl/kubectl-hns_linux_amd64 \
 	     -ldflags="-X sigs.k8s.io/hierarchical-namespaces/internal/version.Version=${HNC_IMG_TAG}" \
