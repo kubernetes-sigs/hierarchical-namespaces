@@ -24,6 +24,7 @@ hrq:
 ha:
   enabled: false
   manager:
+    replicas: 3
     resources:
       limits:
         cpu: 100m
