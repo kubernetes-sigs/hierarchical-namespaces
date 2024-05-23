@@ -9,5 +9,5 @@ roleRef:
   name: '{{ include "hnc.fullname" . }}-leader-election-role'
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: '{{ $.Values.manager.serviceAccount }}'
     namespace: '{{ include "hnc.namespace" . }}'
