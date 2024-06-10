@@ -60,13 +60,17 @@ import (
 	metadataapi "cloud.google.com/go/compute/metadata"
 	traceapi "cloud.google.com/go/trace/apiv2"
 	"contrib.go.opencensus.io/exporter/stackdriver/monitoredresource"
+	opencensus "go.opencensus.io"
 	"go.opencensus.io/resource"
 	"go.opencensus.io/resource/resourcekeys"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/trace"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
+	metricpb "google.golang.org/genproto/googleapis/api/metric"
 	monitoredrespb "google.golang.org/genproto/googleapis/api/monitoredres"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	commonpb "github.com/census-instrumentation/opencensus-proto/gen-go/agent/common/v1"
 	metricspb "github.com/census-instrumentation/opencensus-proto/gen-go/metrics/v1"
@@ -183,7 +187,7 @@ type Options struct {
 
 	// MapResource converts a OpenCensus resource to a Stackdriver monitored resource.
 	//
-	// If this field is unset, defaultMapResource will be used which encodes a set of default
+	// If this field is unset, DefaultMapResource will be used which encodes a set of default
 	// conversions from auto-detected resources to well-known Stackdriver monitored resources.
 	MapResource func(*resource.Resource) *monitoredrespb.MonitoredResource
 
@@ -251,7 +255,7 @@ type Options struct {
 	// or the unit is not important.
 	SkipCMD bool
 
-	// Timeout for all API calls. If not set, defaults to 5 seconds.
+	// Timeout for all API calls. If not set, defaults to 12 seconds.
 	Timeout time.Duration
 
 	// ReportingInterval sets the interval between reporting metrics.
@@ -279,11 +283,17 @@ type Options struct {
 	// time-series then it will result into an error for the entire CreateTimeSeries request
 	// which may contain more than one time-series.
 	ResourceByDescriptor func(*metricdata.Descriptor, map[string]string) (map[string]string, monitoredresource.Interface)
+
+	// Override the user agent value supplied to Monitoring APIs and included as an
+	// attribute in trace data.
+	UserAgent string
 }
 
-const defaultTimeout = 5 * time.Second
+const defaultTimeout = 12 * time.Second
 
 var defaultDomain = path.Join("custom.googleapis.com", "opencensus")
+
+var defaultUserAgent = fmt.Sprintf("opencensus-go %s; stackdriver-exporter %s", opencensus.Version(), version)
 
 // Exporter is a stats and trace exporter that uploads data to Stackdriver.
 //
@@ -333,7 +343,7 @@ func NewExporter(o Options) (*Exporter, error) {
 		o.Resource = convertMonitoredResourceToPB(o.MonitoredResource)
 	}
 	if o.MapResource == nil {
-		o.MapResource = defaultMapResource
+		o.MapResource = DefaultMapResource
 	}
 	if o.ResourceDetector != nil {
 		// For backwards-compatibility we still respect the deprecated resource field.
@@ -346,6 +356,9 @@ func NewExporter(o Options) (*Exporter, error) {
 		}
 		// Populate internal resource labels for defaulting project_id, location, and
 		// generic resource labels of applicable monitored resources.
+		if res.Labels == nil {
+			res.Labels = make(map[string]string)
+		}
 		res.Labels[stackdriverProjectID] = o.ProjectID
 		res.Labels[resourcekeys.CloudKeyZone] = o.Location
 		res.Labels[stackdriverGenericTaskNamespace] = "default"
@@ -358,6 +371,9 @@ func NewExporter(o Options) (*Exporter, error) {
 	}
 	if o.MetricPrefix != "" && !strings.HasSuffix(o.MetricPrefix, "/") {
 		o.MetricPrefix = o.MetricPrefix + "/"
+	}
+	if o.UserAgent == "" {
+		o.UserAgent = defaultUserAgent
 	}
 
 	se, err := newStatsExporter(o)
@@ -409,7 +425,7 @@ func (e *Exporter) ExportMetrics(ctx context.Context, metrics []*metricdata.Metr
 //    exporter.StartMetricsExporter()
 //    defer exporter.StopMetricsExporter()
 //
-// Both approach should not be used simultaenously. Otherwise it may result into unknown behavior.
+// Both approach should not be used simultaneously. Otherwise it may result into unknown behavior.
 // Previous approach continues to work as before but will not report newly define metrics such
 // as gauges.
 func (e *Exporter) StartMetricsExporter() error {
@@ -421,6 +437,22 @@ func (e *Exporter) StopMetricsExporter() {
 	e.statsExporter.stopMetricsReader()
 }
 
+// Close closes client connections.
+func (e *Exporter) Close() error {
+	tErr := e.traceExporter.close()
+	mErr := e.statsExporter.close()
+	// If the trace and stats exporter share client connections,
+	// closing the stats exporter will return an error indicating
+	// it is already closed.  Ignore this error.
+	if status.Code(mErr) == codes.Canceled {
+		mErr = nil
+	}
+	if mErr != nil || tErr != nil {
+		return fmt.Errorf("error(s) closing trace client (%v), or metrics client (%v)", tErr, mErr)
+	}
+	return nil
+}
+
 // ExportSpan exports a SpanData to Stackdriver Trace.
 func (e *Exporter) ExportSpan(sd *trace.SpanData) {
 	if len(e.traceExporter.o.DefaultTraceAttributes) > 0 {
@@ -429,9 +461,10 @@ func (e *Exporter) ExportSpan(sd *trace.SpanData) {
 	e.traceExporter.ExportSpan(sd)
 }
 
-// PushTraceSpans exports a bundle of OpenCensus Spans
+// PushTraceSpans exports a bundle of OpenCensus Spans.
+// Returns number of dropped spans.
 func (e *Exporter) PushTraceSpans(ctx context.Context, node *commonpb.Node, rsc *resourcepb.Resource, spans []*trace.SpanData) (int, error) {
-	return len(spans), e.traceExporter.pushTraceSpans(ctx, node, rsc, spans)
+	return e.traceExporter.pushTraceSpans(ctx, node, rsc, spans)
 }
 
 func (e *Exporter) sdWithDefaultTraceAttributes(sd *trace.SpanData) *trace.SpanData {
@@ -453,6 +486,15 @@ func (e *Exporter) sdWithDefaultTraceAttributes(sd *trace.SpanData) *trace.SpanD
 func (e *Exporter) Flush() {
 	e.statsExporter.Flush()
 	e.traceExporter.Flush()
+}
+
+// ViewToMetricDescriptor converts an OpenCensus view to a MetricDescriptor.
+//
+// This is useful for cases when you want to use your Go code as source of
+// truth of metric descriptors. You can extract or define views in a central
+// place, then call this method to generate MetricDescriptors.
+func (e *Exporter) ViewToMetricDescriptor(ctx context.Context, v *view.View) (*metricpb.MetricDescriptor, error) {
+	return e.statsExporter.viewToMetricDescriptor(ctx, v)
 }
 
 func (o Options) handleError(err error) {
