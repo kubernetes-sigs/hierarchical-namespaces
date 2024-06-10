@@ -16,12 +16,11 @@ import (
 	"sigs.k8s.io/hierarchical-namespaces/internal/hrq"
 	ns "sigs.k8s.io/hierarchical-namespaces/internal/namespace" // for some reason, by default this gets imported as "namespace*s*"
 	"sigs.k8s.io/hierarchical-namespaces/internal/objects"
+	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
 )
 
 const (
 	serviceName       = "hnc-webhook-service"
-	vwhName           = "hnc-validating-webhook-configuration"
-	mwhName           = "hnc-mutating-webhook-configuration"
 	caName            = "hnc-ca"
 	caOrganization    = "hnc"
 	secretName        = "hnc-webhook-server-cert"
@@ -50,10 +49,10 @@ func ManageCerts(mgr ctrl.Manager, setupFinished chan struct{}, restartOnSecretR
 		IsReady:        setupFinished,
 		Webhooks: []cert.WebhookInfo{{
 			Type: cert.Validating,
-			Name: vwhName,
+			Name: webhooks.ValidatingWebhookConfigurationName,
 		}, {
 			Type: cert.Mutating,
-			Name: mwhName,
+			Name: webhooks.MutatingWebhookConfigurationName,
 		}},
 		RestartOnSecretRefresh: restartOnSecretRefresh,
 	})
