@@ -19,6 +19,8 @@ manager:
   nodeSelector: {}
   affinity: {}
   tolerations: []
+
+  serviceAccount: default
 hrq:
   enabled: false
 ha:

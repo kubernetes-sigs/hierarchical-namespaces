@@ -17,6 +17,7 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
+      serviceAccountName: {{ .Values.manager.serviceAccount }}
       containers:
         - args:
             {{- if .Values.hrq.enabled }}
