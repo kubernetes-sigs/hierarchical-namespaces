@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: resourcelist-apiextension
+  name: {{ include "hnc.fullname" . }}-resourcelist-apiextension
+  namespace: {{ include "hnc.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: resourcelist-apiextension
+  template:
+    metadata:
+      labels:
+        app: resourcelist-apiextension
+    spec:
+      containers:
+        - args:
+            {{- if .Values.hrq.enabled }}
+            - --enable-hrq
+            {{- end }}
+            {{- if $hncIncludeNamespacesRegex }}
+            - --included-namespace-regex={{ $hncIncludeNamespacesRegex }}
+            {{- end }}
+            {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces }}
+            - --excluded-namespace={{ $hncExcludeNamespace }}
+            {{- end }}
+            - --cert=/certs/tls.crt
+            - --key=/certs/tls.key
+          command:
+            - /apiextension
+          image: gcr.io/k8s-staging-multitenancy/hnc-manager:v1.1.0
+          {{- with .Values.imagePullPolicy }}
+          imagePullPolicy: IfNotPresent
+          {{- end }}
+          name: resourcelist
+          ports:
+            - containerPort: 7443
+              name: server
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - mountPath: /certs
+              name: certs
+      securityContext:
+        fsGroup: 2000
+        runAsNonRoot: true
+        runAsUser: 1000
+      volumes:
+        - name: certs
+          secret:
+            defaultMode: 420
+            secretName: hnc-resourcelist-apiextension
+      nodeSelector: {{- toYaml . | nindent 8}}
+      affinity: {{- toYaml . | nindent 8}}
+      tolerations: {{- toYaml . | nindent 8}}

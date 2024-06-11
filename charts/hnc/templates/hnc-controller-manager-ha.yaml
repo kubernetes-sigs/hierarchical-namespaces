@@ -23,7 +23,10 @@ spec:
             {{- if .Values.hrq.enabled }}
             - --enable-hrq
             {{- end }}
-            {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces}}
+            {{- if $hncIncludeNamespacesRegex }}
+            - --included-namespace-regex={{ $hncIncludeNamespacesRegex }}
+            {{- end }}
+            {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces }}
             - --excluded-namespace={{ $hncExcludeNamespace }}
             {{- end }}
             - --webhook-server-port=9443
