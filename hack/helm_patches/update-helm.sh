@@ -174,7 +174,10 @@ for output_file in ${TEMPLATESDIR}/*.yaml; do
     fi
 
     # Add placeholder for --excluded-namespace arg
-    sed -i -e '/args:/a \            {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces}}\n \           - --excluded-namespace={{ $hncExcludeNamespace }}\n \           {{- end }}' $output_file
+    sed -i -e '/args:/a \            {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces }}\n \           - --excluded-namespace={{ $hncExcludeNamespace }}\n \           {{- end }}' $output_file
+
+    # Add placeholder for --included-namespace-regex arg
+    sed -i -e '/args:/a \            {{- if $hncIncludeNamespacesRegex }}\n \           - --included-namespace-regex={{ $hncIncludeNamespacesRegex }}\n \           {{- end }}' $output_file
 
     # [HRQ] Add conditional blocks for --enable-hrq arg
     sed -i -e '/args:/a \            {{- if .Values.hrq.enabled }}\n \           - --enable-hrq\n \           {{- end }}' $output_file

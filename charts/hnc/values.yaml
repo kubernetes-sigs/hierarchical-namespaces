@@ -2,6 +2,10 @@ image:
   repository: gcr.io/k8s-staging-multitenancy/hnc-manager
   tag: v1.1.0
   imagePullPolicy: {}
+# Regex of namespaces for HNC to manage
+# example include everything except openshift.*
+#hncIncludeNamespacesRegex: ([^o].*|o([^p].*)|op([^e].*)|ope([^n].*)|open([^s].*)|opens([^h].*)|opensh([^i].*)|openshi([^f].*)|openshif([^t].*))
+hncIncludeNamespacesRegex: ""
 # A list of namespaces to add the HNC exclude label to
 hncExcludeNamespaces:
   - hnc-system
