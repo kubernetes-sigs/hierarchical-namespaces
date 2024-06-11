@@ -1,0 +1,13 @@
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: '{{ include "hnc.fullname" . }}-v1alpha2.resources.hnc.x-k8s.io'
+spec:
+  group: resources.hnc.x-k8s.io
+  groupPriorityMinimum: 10
+  service:
+    name: hnc-resourcelist
+    namespace: hnc-system
+    port: 7443
+  version: v1alpha2
+  versionPriority: 10

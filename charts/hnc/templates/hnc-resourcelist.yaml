@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: resourcelist
+  name: '{{ include "hnc.fullname" . }}-resourcelist'
+  namespace: '{{ include "hnc.namespace" . }}'
+spec:
+  ports:
+    - port: 7443
+      protocol: TCP
+      targetPort: 7443
+  selector:
+    app: resourcelist
