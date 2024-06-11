@@ -7,7 +7,7 @@ metadata:
   name: {{ include "hnc.fullname" . }}-controller-manager-ha
   namespace: {{ include "hnc.namespace" . }}
 spec:
-  replicas: 3
+  replicas: {{ .Values.ha.manager.replicas }}
   selector:
     matchLabels:
       control-plane: controller-manager-ha
