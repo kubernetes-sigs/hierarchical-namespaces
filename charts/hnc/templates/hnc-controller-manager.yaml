@@ -35,6 +35,9 @@ spec:
             - --nopropagation-label=cattle.io/creator=norman
             - --enable-internal-cert-management
             - --cert-restart-on-secret-refresh
+            {{- range $arg := .Values.manager.extraArgs }}
+            - {{ $arg }}
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.image.repository }}:{{ .Values.image.tag | default "hnc-manager:latest" }}

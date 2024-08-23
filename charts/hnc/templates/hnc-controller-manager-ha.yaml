@@ -32,6 +32,9 @@ spec:
             - --apiserver-qps-throttle=50
             - --nopropagation-label=cattle.io/creator=norman
             - --webhooks-only
+            {{- range $arg := .Values.manager.extraArgs }}
+            - {{ $arg }}
+            {{- end }}
           command:
             - /manager
           image: {{ .Values.image.repository }}:{{ .Values.image.tag | default "hnc-manager:latest" }}

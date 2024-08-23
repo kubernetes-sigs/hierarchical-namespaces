@@ -9,6 +9,7 @@ hncExcludeNamespaces:
   - kube-public
   - kube-node-lease
 manager:
+  extraArgs: []
   resources:
     limits:
       cpu: 100m
