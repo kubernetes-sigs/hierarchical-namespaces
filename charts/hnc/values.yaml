@@ -8,6 +8,10 @@ hncExcludeNamespaces:
   - kube-system
   - kube-public
   - kube-node-lease
+# A list of regular expressions for namespace labels that HNC will manage
+hncManagedNamespaceLabels: []
+# A list of regular expressions for namespace annotations that HNC will manage
+hncManagedNamespaceAnnotations: []
 manager:
   resources:
     limits:

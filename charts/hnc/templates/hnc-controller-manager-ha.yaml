@@ -23,6 +23,14 @@ spec:
             {{- if .Values.hrq.enabled }}
             - --enable-hrq
             {{- end }}
+            {{- range $hncManagedNamespaceLabel := .Values.hncManagedNamespaceLabels }}
+            - --managed-namespace-label
+            - {{ quote $hncManagedNamespaceLabel }}
+            {{- end }}
+            {{- range $hncManagedNamespaceAnnotation := .Values.hncManagedNamespaceAnnotations }}
+            - --managed-namespace-annotation
+            - {{ quote $hncManagedNamespaceAnnotation }}
+            {{- end }}
             {{- range $hncExcludeNamespace := .Values.hncExcludeNamespaces}}
             - --excluded-namespace={{ $hncExcludeNamespace }}
             {{- end }}
