@@ -1,4 +1,4 @@
-// Copyright (c) 2022 Uber Technologies, Inc.
+// Copyright (c) 2023 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,20 +18,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package internal and its subpackages hold types and functionality
-// that are not part of Zap's public API.
-package internal
+package zapcore
 
-import "go.uber.org/zap/zapcore"
+import "sync"
 
-// LeveledEnabler is an interface satisfied by LevelEnablers that are able to
-// report their own level.
-//
-// This interface is defined to use more conveniently in tests and non-zapcore
-// packages.
-// This cannot be imported from zapcore because of the cyclic dependency.
-type LeveledEnabler interface {
-	zapcore.LevelEnabler
+type lazyWithCore struct {
+	Core
+	sync.Once
+	fields []Field
+}
 
-	Level() zapcore.Level
+// NewLazyWith wraps a Core with a "lazy" Core that will only encode fields if
+// the logger is written to (or is further chained in a lon-lazy manner).
+func NewLazyWith(core Core, fields []Field) Core {
+	return &lazyWithCore{
+		Core:   core,
+		fields: fields,
+	}
+}
+
+func (d *lazyWithCore) initOnce() {
+	d.Once.Do(func() {
+		d.Core = d.Core.With(d.fields)
+	})
+}
+
+func (d *lazyWithCore) With(fields []Field) Core {
+	d.initOnce()
+	return d.Core.With(fields)
+}
+
+func (d *lazyWithCore) Check(e Entry, ce *CheckedEntry) *CheckedEntry {
+	d.initOnce()
+	return d.Core.Check(e, ce)
 }

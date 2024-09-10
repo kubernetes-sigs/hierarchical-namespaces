@@ -13,7 +13,7 @@ require (
 	github.com/open-policy-agent/cert-controller v0.6.0
 	github.com/spf13/cobra v1.7.0
 	go.opencensus.io v0.24.0
-	go.uber.org/zap v1.24.0
+	go.uber.org/zap v1.27.0
 	honnef.co/go/tools v0.4.0
 	k8s.io/api v0.26.5
 	k8s.io/apiextensions-apiserver v0.26.5
@@ -98,7 +98,7 @@ require (
 	k8s.io/component-base v0.26.5 // indirect
 	k8s.io/klog/v2 v2.90.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230308215209-15aac26d736a // indirect
-	k8s.io/utils v0.0.0-20230209194617-a36077c30491 // indirect
+	k8s.io/utils v0.0.0-20230209194617-a36077c30491
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.12.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.9 // indirect
