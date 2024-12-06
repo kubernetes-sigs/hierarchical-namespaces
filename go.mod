@@ -80,7 +80,7 @@ require (
 	golang.org/x/mod v0.10.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/oauth2 v0.7.0 // indirect
-	golang.org/x/sync v0.1.0
+	golang.org/x/sync v0.10.0
 	golang.org/x/sys v0.7.0 // indirect
 	golang.org/x/term v0.7.0 // indirect
 	golang.org/x/text v0.9.0
@@ -98,7 +98,7 @@ require (
 	k8s.io/component-base v0.26.5 // indirect
 	k8s.io/klog/v2 v2.90.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20230308215209-15aac26d736a // indirect
-	k8s.io/utils v0.0.0-20230209194617-a36077c30491 // indirect
+	k8s.io/utils v0.0.0-20230209194617-a36077c30491
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kustomize/api v0.12.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.13.9 // indirect
