@@ -15,8 +15,14 @@ spec:
     metadata:
       annotations:
         prometheus.io/scrape: "true"
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8}}
+        {{- end }}
       labels:
         control-plane: controller-manager-ha
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8}}
+        {{- end }}
     spec:
       containers:
         - args:
