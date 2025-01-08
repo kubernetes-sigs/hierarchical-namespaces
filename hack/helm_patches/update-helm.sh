@@ -76,11 +76,27 @@ cat <<'EOF'
 EOF
 )
 
+POD_ANNOTATIONS=$(
+cat <<'EOF'
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8}}
+        {{- end }}
+EOF
+)
+
+POD_LABELS=$(
+cat <<'EOF'
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8}}
+        {{- end }}
+EOF
+)
+
 # Update templates
 for output_file in ${TEMPLATESDIR}/*.yaml; do
   # Add prefix placeholder to Resource Name
   if [ "$($YQ '.metadata | has("name")' $output_file)" = "true" ]; then
-    
+
     resourcename=$($YQ -N '.metadata.name' $output_file | sed s/hnc-//g) $YQ -N -i '.metadata.name |= "{{ include \"hnc.fullname\" . }}-" + strenv(resourcename)' $output_file
 
     # Add prefix placeholder to Service Name of WebhookConfiguration
@@ -148,6 +164,12 @@ for output_file in ${TEMPLATESDIR}/*.yaml; do
       sed -i -e 's/tolerations:/\{{- with .Values.manager.tolerations }}\n \     tolerations:/' $output_file
       sed -i -e '/tolerations:/a \      {{- end }}' $output_file
 
+      # Add scope block for podLabels
+      awk -i inplace -v pl="$POD_LABELS" 'BEGIN{found=0} /labels:/ {count++} (count==2 && found==0) {print $0 "\n" pl; found=1; next} 1' $output_file
+
+      # Add scope block for podAnnotations
+      awk -i inplace -v pa="$POD_ANNOTATIONS" 'BEGIN{found=0} /annotations:/ {count++} (count==1 && found==0) {print $0 "\n" pa; found=1; next} 1' $output_file
+
     # [HA] Additional update for controller-manager-ha Deployment
     elif [ "$($YQ '.metadata.name | (. == "*-controller-manager-ha")' $output_file)" = "true" ]; then
 
@@ -167,6 +189,12 @@ for output_file in ${TEMPLATESDIR}/*.yaml; do
       sed -i -e 's/tolerations:/\{{- with .Values.ha.manager.tolerations }}\n \     tolerations:/' $output_file
       sed -i -e '/tolerations:/a \      {{- end }}' $output_file
 
+      # [HA] Add scope block for podLabels
+      awk -i inplace -v pl="$POD_LABELS" 'BEGIN{found=0} /labels:/ {count++} (count==2 && found==0) {print $0 "\n" pl; found=1; next} 1' $output_file
+
+      # [HA] Add scope block for podAnnotations
+      awk -i inplace -v pa="$POD_ANNOTATIONS" 'BEGIN{found=0} /annotations:/ {count++} (count==1 && found==0) {print $0 "\n" pa; found=1; next} 1' $output_file
+
       # [HA] Add conditional blocks for controller-manager-ha Deployment
       sed -i -e '1s/^/{{- if .Values.ha.enabled }}\n/g' $output_file
       sed -i -e '$s/$/\n{{- end }}/g' $output_file
@@ -184,7 +212,7 @@ for output_file in ${TEMPLATESDIR}/*.yaml; do
     sed -i -e '/imagePullPolicy:/a \          {{- end }}' $output_file
 
     # Remove extra '' from templates
-    sed -i -e s/\'//g $output_file 
+    sed -i -e s/\'//g $output_file
 
   # Update RoleBinding template
   elif [ "$($YQ '.kind | (. == "RoleBinding")' $output_file)" = "true" ]; then
