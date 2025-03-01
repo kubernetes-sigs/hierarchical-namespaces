@@ -1,8 +1,10 @@
 package runtime
 
 import (
-	"errors"
 	"io"
+
+	"errors"
+	"io/ioutil"
 
 	"google.golang.org/protobuf/proto"
 )
@@ -36,7 +38,7 @@ func (*ProtoMarshaller) Unmarshal(data []byte, value interface{}) error {
 // NewDecoder returns a Decoder which reads proto stream from "reader".
 func (marshaller *ProtoMarshaller) NewDecoder(reader io.Reader) Decoder {
 	return DecoderFunc(func(value interface{}) error {
-		buffer, err := io.ReadAll(reader)
+		buffer, err := ioutil.ReadAll(reader)
 		if err != nil {
 			return err
 		}
@@ -51,7 +53,8 @@ func (marshaller *ProtoMarshaller) NewEncoder(writer io.Writer) Encoder {
 		if err != nil {
 			return err
 		}
-		if _, err := writer.Write(buffer); err != nil {
+		_, err = writer.Write(buffer)
+		if err != nil {
 			return err
 		}
 

@@ -11,6 +11,8 @@ import (
 	"go/ast"
 	"go/token"
 	"sort"
+
+	"golang.org/x/tools/internal/typeparams"
 )
 
 // PathEnclosingInterval returns the node that encloses the source
@@ -320,7 +322,7 @@ func childrenOf(n ast.Node) []ast.Node {
 			children = append(children, n.Recv)
 		}
 		children = append(children, n.Name)
-		if tparams := n.Type.TypeParams; tparams != nil {
+		if tparams := typeparams.ForFuncType(n.Type); tparams != nil {
 			children = append(children, tparams)
 		}
 		if n.Type.Params != nil {
@@ -375,7 +377,7 @@ func childrenOf(n ast.Node) []ast.Node {
 			tok(n.Lbrack, len("[")),
 			tok(n.Rbrack, len("]")))
 
-	case *ast.IndexListExpr:
+	case *typeparams.IndexListExpr:
 		children = append(children,
 			tok(n.Lbrack, len("[")),
 			tok(n.Rbrack, len("]")))
@@ -586,7 +588,7 @@ func NodeDescription(n ast.Node) string {
 		return "decrement statement"
 	case *ast.IndexExpr:
 		return "index expression"
-	case *ast.IndexListExpr:
+	case *typeparams.IndexListExpr:
 		return "index list expression"
 	case *ast.InterfaceType:
 		return "interface type"

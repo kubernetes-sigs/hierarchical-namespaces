@@ -18,10 +18,6 @@ limitations under the License.
 
 package v1alpha1
 
-// IPAddressListerExpansion allows custom methods to be added to
-// IPAddressLister.
-type IPAddressListerExpansion interface{}
-
-// ServiceCIDRListerExpansion allows custom methods to be added to
-// ServiceCIDRLister.
-type ServiceCIDRListerExpansion interface{}
+// ClusterCIDRListerExpansion allows custom methods to be added to
+// ClusterCIDRLister.
+type ClusterCIDRListerExpansion interface{}

@@ -33,60 +33,17 @@ type Interface interface {
 	ShuttingDown() bool
 }
 
-// QueueConfig specifies optional configurations to customize an Interface.
-type QueueConfig struct {
-	// Name for the queue. If unnamed, the metrics will not be registered.
-	Name string
-
-	// MetricsProvider optionally allows specifying a metrics provider to use for the queue
-	// instead of the global provider.
-	MetricsProvider MetricsProvider
-
-	// Clock ability to inject real or fake clock for testing purposes.
-	Clock clock.WithTicker
-}
-
 // New constructs a new work queue (see the package comment).
 func New() *Type {
-	return NewWithConfig(QueueConfig{
-		Name: "",
-	})
+	return NewNamed("")
 }
 
-// NewWithConfig constructs a new workqueue with ability to
-// customize different properties.
-func NewWithConfig(config QueueConfig) *Type {
-	return newQueueWithConfig(config, defaultUnfinishedWorkUpdatePeriod)
-}
-
-// NewNamed creates a new named queue.
-// Deprecated: Use NewWithConfig instead.
 func NewNamed(name string) *Type {
-	return NewWithConfig(QueueConfig{
-		Name: name,
-	})
-}
-
-// newQueueWithConfig constructs a new named workqueue
-// with the ability to customize different properties for testing purposes
-func newQueueWithConfig(config QueueConfig, updatePeriod time.Duration) *Type {
-	var metricsFactory *queueMetricsFactory
-	if config.MetricsProvider != nil {
-		metricsFactory = &queueMetricsFactory{
-			metricsProvider: config.MetricsProvider,
-		}
-	} else {
-		metricsFactory = &globalMetricsFactory
-	}
-
-	if config.Clock == nil {
-		config.Clock = clock.RealClock{}
-	}
-
+	rc := clock.RealClock{}
 	return newQueue(
-		config.Clock,
-		metricsFactory.newQueueMetrics(config.Name, config.Clock),
-		updatePeriod,
+		rc,
+		globalMetricsFactory.newQueueMetrics(name, rc),
+		defaultUnfinishedWorkUpdatePeriod,
 	)
 }
 
@@ -238,12 +195,8 @@ func (q *Type) Done(item interface{}) {
 // ShutDown will cause q to ignore all new items added to it and
 // immediately instruct the worker goroutines to exit.
 func (q *Type) ShutDown() {
-	q.cond.L.Lock()
-	defer q.cond.L.Unlock()
-
-	q.drain = false
-	q.shuttingDown = true
-	q.cond.Broadcast()
+	q.setDrain(false)
+	q.shutdown()
 }
 
 // ShutDownWithDrain will cause q to ignore all new items added to it. As soon
@@ -256,16 +209,53 @@ func (q *Type) ShutDown() {
 // ShutDownWithDrain, as to force the queue shut down to terminate immediately
 // without waiting for the drainage.
 func (q *Type) ShutDownWithDrain() {
+	q.setDrain(true)
+	q.shutdown()
+	for q.isProcessing() && q.shouldDrain() {
+		q.waitForProcessing()
+	}
+}
+
+// isProcessing indicates if there are still items on the work queue being
+// processed. It's used to drain the work queue on an eventual shutdown.
+func (q *Type) isProcessing() bool {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
+	return q.processing.len() != 0
+}
 
-	q.drain = true
+// waitForProcessing waits for the worker goroutines to finish processing items
+// and call Done on them.
+func (q *Type) waitForProcessing() {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	// Ensure that we do not wait on a queue which is already empty, as that
+	// could result in waiting for Done to be called on items in an empty queue
+	// which has already been shut down, which will result in waiting
+	// indefinitely.
+	if q.processing.len() == 0 {
+		return
+	}
+	q.cond.Wait()
+}
+
+func (q *Type) setDrain(shouldDrain bool) {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	q.drain = shouldDrain
+}
+
+func (q *Type) shouldDrain() bool {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	return q.drain
+}
+
+func (q *Type) shutdown() {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
 	q.shuttingDown = true
 	q.cond.Broadcast()
-
-	for q.processing.len() != 0 && q.drain {
-		q.cond.Wait()
-	}
 }
 
 func (q *Type) ShuttingDown() bool {

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"go/build"
 	"io"
+	"io/ioutil"
 	"os"
 	"path"
 	"path/filepath"
@@ -75,7 +76,7 @@ func FakeContext(pkgs map[string]map[string]string) *build.Context {
 		if !ok {
 			return nil, fmt.Errorf("file not found: %s", filename)
 		}
-		return io.NopCloser(strings.NewReader(content)), nil
+		return ioutil.NopCloser(strings.NewReader(content)), nil
 	}
 	ctxt.IsAbsPath = func(path string) bool {
 		path = filepath.ToSlash(path)

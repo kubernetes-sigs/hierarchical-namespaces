@@ -15,11 +15,6 @@
                 "CancelOperation"
               ]
             },
-            "CheckAutopilotCompatibility": {
-              "methods": [
-                "CheckAutopilotCompatibility"
-              ]
-            },
             "CompleteIPRotation": {
               "methods": [
                 "CompleteIPRotation"

@@ -135,10 +135,6 @@ func (w *Writer) Println(a ...interface{}) {
 
 func GinkgoLogrFunc(writer *Writer) logr.Logger {
 	return funcr.New(func(prefix, args string) {
-		if prefix == "" {
-			writer.Printf("%s\n", args)
-		} else {
-			writer.Printf("%s %s\n", prefix, args)
-		}
+		writer.Printf("%s", args)
 	}, funcr.Options{})
 }

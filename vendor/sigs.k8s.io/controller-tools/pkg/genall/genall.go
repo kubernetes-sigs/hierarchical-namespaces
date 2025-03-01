@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 
 	"golang.org/x/tools/go/packages"
@@ -142,17 +143,12 @@ func TransformRemoveCreationTimestamp(obj map[string]interface{}) error {
 // WriteYAML writes the given objects out, serialized as YAML, using the
 // context's OutputRule.  Objects are written as separate documents, separated
 // from each other by `---` (as per the YAML spec).
-func (g GenerationContext) WriteYAML(itemPath, headerText string, objs []interface{}, options ...*WriteYAMLOptions) error {
+func (g GenerationContext) WriteYAML(itemPath string, objs []interface{}, options ...*WriteYAMLOptions) error {
 	out, err := g.Open(nil, itemPath)
 	if err != nil {
 		return err
 	}
 	defer out.Close()
-
-	_, err = out.Write([]byte(headerText))
-	if err != nil {
-		return err
-	}
 
 	for _, obj := range objs {
 		yamlContent, err := yamlMarshal(obj, options...)
@@ -213,7 +209,7 @@ func (g GenerationContext) ReadFile(path string) ([]byte, error) {
 		return nil, err
 	}
 	defer file.Close()
-	return io.ReadAll(file)
+	return ioutil.ReadAll(file)
 }
 
 // ForRoots produces a Runtime to run the given generators against the

@@ -300,10 +300,6 @@ func (f *DeltaFIFO) KeyOf(obj interface{}) (string, error) {
 func (f *DeltaFIFO) HasSynced() bool {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	return f.hasSynced_locked()
-}
-
-func (f *DeltaFIFO) hasSynced_locked() bool {
 	return f.populated && f.initialPopulationCount == 0
 }
 
@@ -574,7 +570,6 @@ func (f *DeltaFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 
 			f.cond.Wait()
 		}
-		isInInitialList := !f.hasSynced_locked()
 		id := f.queue[0]
 		f.queue = f.queue[1:]
 		depth := len(f.queue)
@@ -600,7 +595,7 @@ func (f *DeltaFIFO) Pop(process PopProcessFunc) (interface{}, error) {
 				utiltrace.Field{Key: "Reason", Value: "slow event handlers blocking the queue"})
 			defer trace.LogIfLong(100 * time.Millisecond)
 		}
-		err := process(item, isInInitialList)
+		err := process(item)
 		if e, ok := err.(ErrRequeue); ok {
 			f.addIfNotPresent(id, item)
 			err = e.Err

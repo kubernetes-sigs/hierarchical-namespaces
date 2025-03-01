@@ -18,7 +18,6 @@ package serialize
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -172,33 +171,83 @@ func KVListFormat(b *bytes.Buffer, keysAndValues ...interface{}) {
 	Formatter{}.KVListFormat(b, keysAndValues...)
 }
 
+// KVFormat serializes one key/value pair into the provided buffer.
+// A space gets inserted before the pair.
+func (f Formatter) KVFormat(b *bytes.Buffer, k, v interface{}) {
+	b.WriteByte(' ')
+	// Keys are assumed to be well-formed according to
+	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-instrumentation/migration-to-structured-logging.md#name-arguments
+	// for the sake of performance. Keys with spaces,
+	// special characters, etc. will break parsing.
+	if sK, ok := k.(string); ok {
+		// Avoid one allocation when the key is a string, which
+		// normally it should be.
+		b.WriteString(sK)
+	} else {
+		b.WriteString(fmt.Sprintf("%s", k))
+	}
+
+	// The type checks are sorted so that more frequently used ones
+	// come first because that is then faster in the common
+	// cases. In Kubernetes, ObjectRef (a Stringer) is more common
+	// than plain strings
+	// (https://github.com/kubernetes/kubernetes/pull/106594#issuecomment-975526235).
+	switch v := v.(type) {
+	case textWriter:
+		writeTextWriterValue(b, v)
+	case fmt.Stringer:
+		writeStringValue(b, true, StringerToString(v))
+	case string:
+		writeStringValue(b, true, v)
+	case error:
+		writeStringValue(b, true, ErrorToString(v))
+	case logr.Marshaler:
+		value := MarshalerToValue(v)
+		// A marshaler that returns a string is useful for
+		// delayed formatting of complex values. We treat this
+		// case like a normal string. This is useful for
+		// multi-line support.
+		//
+		// We could do this by recursively formatting a value,
+		// but that comes with the risk of infinite recursion
+		// if a marshaler returns itself. Instead we call it
+		// only once and rely on it returning the intended
+		// value directly.
+		switch value := value.(type) {
+		case string:
+			writeStringValue(b, true, value)
+		default:
+			writeStringValue(b, false, f.AnyToString(value))
+		}
+	case []byte:
+		// In https://github.com/kubernetes/klog/pull/237 it was decided
+		// to format byte slices with "%+q". The advantages of that are:
+		// - readable output if the bytes happen to be printable
+		// - non-printable bytes get represented as unicode escape
+		//   sequences (\uxxxx)
+		//
+		// The downsides are that we cannot use the faster
+		// strconv.Quote here and that multi-line output is not
+		// supported. If developers know that a byte array is
+		// printable and they want multi-line output, they can
+		// convert the value to string before logging it.
+		b.WriteByte('=')
+		b.WriteString(fmt.Sprintf("%+q", v))
+	default:
+		writeStringValue(b, false, f.AnyToString(v))
+	}
+}
+
 func KVFormat(b *bytes.Buffer, k, v interface{}) {
 	Formatter{}.KVFormat(b, k, v)
 }
 
-// formatAny is the fallback formatter for a value. It supports a hook (for
-// example, for YAML encoding) and itself uses JSON encoding.
-func (f Formatter) formatAny(b *bytes.Buffer, v interface{}) {
-	b.WriteRune('=')
+// AnyToString is the historic fallback formatter.
+func (f Formatter) AnyToString(v interface{}) string {
 	if f.AnyToStringHook != nil {
-		b.WriteString(f.AnyToStringHook(v))
-		return
+		return f.AnyToStringHook(v)
 	}
-	formatAsJSON(b, v)
-}
-
-func formatAsJSON(b *bytes.Buffer, v interface{}) {
-	encoder := json.NewEncoder(b)
-	l := b.Len()
-	if err := encoder.Encode(v); err != nil {
-		// This shouldn't happen. We discard whatever the encoder
-		// wrote and instead dump an error string.
-		b.Truncate(l)
-		b.WriteString(fmt.Sprintf(`"<internal error: %v>"`, err))
-		return
-	}
-	// Remove trailing newline.
-	b.Truncate(b.Len() - 1)
+	return fmt.Sprintf("%+v", v)
 }
 
 // StringerToString converts a Stringer to a string,
@@ -238,7 +287,7 @@ func ErrorToString(err error) (ret string) {
 }
 
 func writeTextWriterValue(b *bytes.Buffer, v textWriter) {
-	b.WriteByte('=')
+	b.WriteRune('=')
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Fprintf(b, `"<panic: %s>"`, err)
@@ -247,13 +296,18 @@ func writeTextWriterValue(b *bytes.Buffer, v textWriter) {
 	v.WriteText(b)
 }
 
-func writeStringValue(b *bytes.Buffer, v string) {
+func writeStringValue(b *bytes.Buffer, quote bool, v string) {
 	data := []byte(v)
 	index := bytes.IndexByte(data, '\n')
 	if index == -1 {
 		b.WriteByte('=')
-		// Simple string, quote quotation marks and non-printable characters.
-		b.WriteString(strconv.Quote(v))
+		if quote {
+			// Simple string, quote quotation marks and non-printable characters.
+			b.WriteString(strconv.Quote(v))
+			return
+		}
+		// Non-string with no line breaks.
+		b.WriteString(v)
 		return
 	}
 

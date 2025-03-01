@@ -75,9 +75,7 @@ func (cfg tracerProviderConfig) MarshalLog() interface{} {
 type TracerProvider struct {
 	mu             sync.Mutex
 	namedTracer    map[instrumentation.Scope]*tracer
-	spanProcessors atomic.Pointer[spanProcessorStates]
-
-	isShutdown atomic.Bool
+	spanProcessors atomic.Value
 
 	// These fields are not protected by the lock mu. They are assumed to be
 	// immutable after creation of the TracerProvider.
@@ -118,13 +116,12 @@ func NewTracerProvider(opts ...TracerProviderOption) *TracerProvider {
 		spanLimits:  o.spanLimits,
 		resource:    o.resource,
 	}
+
 	global.Info("TracerProvider created", "config", o)
 
-	spss := make(spanProcessorStates, 0, len(o.processors))
 	for _, sp := range o.processors {
-		spss = append(spss, newSpanProcessorState(sp))
+		tp.RegisterSpanProcessor(sp)
 	}
-	tp.spanProcessors.Store(&spss)
 
 	return tp
 }
@@ -137,11 +134,10 @@ func NewTracerProvider(opts ...TracerProviderOption) *TracerProvider {
 //
 // This method is safe to be called concurrently.
 func (p *TracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.Tracer {
-	// This check happens before the mutex is acquired to avoid deadlocking if Tracer() is called from within Shutdown().
-	if p.isShutdown.Load() {
-		return trace.NewNoopTracerProvider().Tracer(name, opts...)
-	}
 	c := trace.NewTracerConfig(opts...)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if name == "" {
 		name = defaultTracerName
 	}
@@ -150,87 +146,57 @@ func (p *TracerProvider) Tracer(name string, opts ...trace.TracerOption) trace.T
 		Version:   c.InstrumentationVersion(),
 		SchemaURL: c.SchemaURL(),
 	}
-
-	t, ok := func() (trace.Tracer, bool) {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-		// Must check the flag after acquiring the mutex to avoid returning a valid tracer if Shutdown() ran
-		// after the first check above but before we acquired the mutex.
-		if p.isShutdown.Load() {
-			return trace.NewNoopTracerProvider().Tracer(name, opts...), true
-		}
-		t, ok := p.namedTracer[is]
-		if !ok {
-			t = &tracer{
-				provider:             p,
-				instrumentationScope: is,
-			}
-			p.namedTracer[is] = t
-		}
-		return t, ok
-	}()
+	t, ok := p.namedTracer[is]
 	if !ok {
-		// This code is outside the mutex to not hold the lock while calling third party logging code:
-		// - That code may do slow things like I/O, which would prolong the duration the lock is held,
-		//   slowing down all tracing consumers.
-		// - Logging code may be instrumented with tracing and deadlock because it could try
-		//   acquiring the same non-reentrant mutex.
-		global.Info("Tracer created", "name", name, "version", is.Version, "schemaURL", is.SchemaURL)
+		t = &tracer{
+			provider:             p,
+			instrumentationScope: is,
+		}
+		p.namedTracer[is] = t
+		global.Info("Tracer created", "name", name, "version", c.InstrumentationVersion(), "schemaURL", c.SchemaURL())
 	}
 	return t
 }
 
 // RegisterSpanProcessor adds the given SpanProcessor to the list of SpanProcessors.
-func (p *TracerProvider) RegisterSpanProcessor(sp SpanProcessor) {
-	// This check prevents calls during a shutdown.
-	if p.isShutdown.Load() {
-		return
-	}
+func (p *TracerProvider) RegisterSpanProcessor(s SpanProcessor) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// This check prevents calls after a shutdown.
-	if p.isShutdown.Load() {
-		return
+	newSPS := spanProcessorStates{}
+	if old, ok := p.spanProcessors.Load().(spanProcessorStates); ok {
+		newSPS = append(newSPS, old...)
 	}
-
-	current := p.getSpanProcessors()
-	newSPS := make(spanProcessorStates, 0, len(current)+1)
-	newSPS = append(newSPS, current...)
-	newSPS = append(newSPS, newSpanProcessorState(sp))
-	p.spanProcessors.Store(&newSPS)
+	newSpanSync := &spanProcessorState{
+		sp:    s,
+		state: &sync.Once{},
+	}
+	newSPS = append(newSPS, newSpanSync)
+	p.spanProcessors.Store(newSPS)
 }
 
 // UnregisterSpanProcessor removes the given SpanProcessor from the list of SpanProcessors.
-func (p *TracerProvider) UnregisterSpanProcessor(sp SpanProcessor) {
-	// This check prevents calls during a shutdown.
-	if p.isShutdown.Load() {
-		return
-	}
+func (p *TracerProvider) UnregisterSpanProcessor(s SpanProcessor) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	// This check prevents calls after a shutdown.
-	if p.isShutdown.Load() {
+	spss := spanProcessorStates{}
+	old, ok := p.spanProcessors.Load().(spanProcessorStates)
+	if !ok || len(old) == 0 {
 		return
 	}
-	old := p.getSpanProcessors()
-	if len(old) == 0 {
-		return
-	}
-	spss := make(spanProcessorStates, len(old))
-	copy(spss, old)
+	spss = append(spss, old...)
 
 	// stop the span processor if it is started and remove it from the list
 	var stopOnce *spanProcessorState
 	var idx int
 	for i, sps := range spss {
-		if sps.sp == sp {
+		if sps.sp == s {
 			stopOnce = sps
 			idx = i
 		}
 	}
 	if stopOnce != nil {
 		stopOnce.state.Do(func() {
-			if err := sp.Shutdown(context.Background()); err != nil {
+			if err := s.Shutdown(context.Background()); err != nil {
 				otel.Handle(err)
 			}
 		})
@@ -241,13 +207,16 @@ func (p *TracerProvider) UnregisterSpanProcessor(sp SpanProcessor) {
 	spss[len(spss)-1] = nil
 	spss = spss[:len(spss)-1]
 
-	p.spanProcessors.Store(&spss)
+	p.spanProcessors.Store(spss)
 }
 
 // ForceFlush immediately exports all spans that have not yet been exported for
 // all the registered span processors.
 func (p *TracerProvider) ForceFlush(ctx context.Context) error {
-	spss := p.getSpanProcessors()
+	spss, ok := p.spanProcessors.Load().(spanProcessorStates)
+	if !ok {
+		return fmt.Errorf("failed to load span processors")
+	}
 	if len(spss) == 0 {
 		return nil
 	}
@@ -266,23 +235,14 @@ func (p *TracerProvider) ForceFlush(ctx context.Context) error {
 	return nil
 }
 
-// Shutdown shuts down TracerProvider. All registered span processors are shut down
-// in the order they were registered and any held computational resources are released.
-// After Shutdown is called, all methods are no-ops.
+// Shutdown shuts down the span processors in the order they were registered.
 func (p *TracerProvider) Shutdown(ctx context.Context) error {
-	// This check prevents deadlocks in case of recursive shutdown.
-	if p.isShutdown.Load() {
-		return nil
+	spss, ok := p.spanProcessors.Load().(spanProcessorStates)
+	if !ok {
+		return fmt.Errorf("failed to load span processors")
 	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	// This check prevents calls after a shutdown has already been done concurrently.
-	if !p.isShutdown.CompareAndSwap(false, true) { // did toggle?
-		return nil
-	}
-
 	var retErr error
-	for _, sps := range p.getSpanProcessors() {
+	for _, sps := range spss {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -302,12 +262,7 @@ func (p *TracerProvider) Shutdown(ctx context.Context) error {
 			}
 		}
 	}
-	p.spanProcessors.Store(&spanProcessorStates{})
 	return retErr
-}
-
-func (p *TracerProvider) getSpanProcessors() spanProcessorStates {
-	return *(p.spanProcessors.Load())
 }
 
 // TracerProviderOption configures a TracerProvider.

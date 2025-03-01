@@ -24,10 +24,8 @@ import (
 
 // Interface provides access to all the informers in this group version.
 type Interface interface {
-	// IPAddresses returns a IPAddressInformer.
-	IPAddresses() IPAddressInformer
-	// ServiceCIDRs returns a ServiceCIDRInformer.
-	ServiceCIDRs() ServiceCIDRInformer
+	// ClusterCIDRs returns a ClusterCIDRInformer.
+	ClusterCIDRs() ClusterCIDRInformer
 }
 
 type version struct {
@@ -41,12 +39,7 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// IPAddresses returns a IPAddressInformer.
-func (v *version) IPAddresses() IPAddressInformer {
-	return &iPAddressInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
-}
-
-// ServiceCIDRs returns a ServiceCIDRInformer.
-func (v *version) ServiceCIDRs() ServiceCIDRInformer {
-	return &serviceCIDRInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
+// ClusterCIDRs returns a ClusterCIDRInformer.
+func (v *version) ClusterCIDRs() ClusterCIDRInformer {
+	return &clusterCIDRInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }

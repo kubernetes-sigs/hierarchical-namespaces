@@ -1,7 +1,6 @@
 package httprule
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 )
@@ -165,9 +164,9 @@ func (p *parser) segment() (segment, error) {
 
 	v, err := p.variable()
 	if err != nil {
-		return nil, fmt.Errorf("segment neither wildcards, literal or variable: %w", err)
+		return nil, fmt.Errorf("segment neither wildcards, literal or variable: %v", err)
 	}
-	return v, nil
+	return v, err
 }
 
 func (p *parser) literal() (segment, error) {
@@ -192,7 +191,7 @@ func (p *parser) variable() (segment, error) {
 	if _, err := p.accept("="); err == nil {
 		segs, err = p.segments()
 		if err != nil {
-			return nil, fmt.Errorf("invalid segment in variable %q: %w", path, err)
+			return nil, fmt.Errorf("invalid segment in variable %q: %v", path, err)
 		}
 	} else {
 		segs = []segment{wildcard{}}
@@ -214,12 +213,12 @@ func (p *parser) fieldPath() (string, error) {
 	}
 	components := []string{c}
 	for {
-		if _, err := p.accept("."); err != nil {
+		if _, err = p.accept("."); err != nil {
 			return strings.Join(components, "."), nil
 		}
 		c, err := p.accept(typeIdent)
 		if err != nil {
-			return "", fmt.Errorf("invalid field path component: %w", err)
+			return "", fmt.Errorf("invalid field path component: %v", err)
 		}
 		components = append(components, c)
 	}
@@ -238,8 +237,10 @@ const (
 	typeEOF     = termType("$")
 )
 
-// eof is the terminal symbol which always appears at the end of token sequence.
-const eof = "\u0000"
+const (
+	// eof is the terminal symbol which always appears at the end of token sequence.
+	eof = "\u0000"
+)
 
 // accept tries to accept a token in "p".
 // This function consumes a token and returns it if it matches to the specified "term".
@@ -333,7 +334,7 @@ func expectPChars(t string) error {
 // expectIdent determines if "ident" is a valid identifier in .proto schema ([[:alpha:]_][[:alphanum:]_]*).
 func expectIdent(ident string) error {
 	if ident == "" {
-		return errors.New("empty identifier")
+		return fmt.Errorf("empty identifier")
 	}
 	for pos, r := range ident {
 		switch {

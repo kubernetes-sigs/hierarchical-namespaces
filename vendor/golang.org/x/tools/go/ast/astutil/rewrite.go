@@ -9,6 +9,8 @@ import (
 	"go/ast"
 	"reflect"
 	"sort"
+
+	"golang.org/x/tools/internal/typeparams"
 )
 
 // An ApplyFunc is invoked by Apply for each node n, even if n is nil,
@@ -250,7 +252,7 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 		a.apply(n, "X", nil, n.X)
 		a.apply(n, "Index", nil, n.Index)
 
-	case *ast.IndexListExpr:
+	case *typeparams.IndexListExpr:
 		a.apply(n, "X", nil, n.X)
 		a.applyList(n, "Indices")
 
@@ -291,7 +293,7 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 		a.apply(n, "Fields", nil, n.Fields)
 
 	case *ast.FuncType:
-		if tparams := n.TypeParams; tparams != nil {
+		if tparams := typeparams.ForFuncType(n); tparams != nil {
 			a.apply(n, "TypeParams", nil, tparams)
 		}
 		a.apply(n, "Params", nil, n.Params)
@@ -406,7 +408,7 @@ func (a *application) apply(parent ast.Node, name string, iter *iterator, n ast.
 	case *ast.TypeSpec:
 		a.apply(n, "Doc", nil, n.Doc)
 		a.apply(n, "Name", nil, n.Name)
-		if tparams := n.TypeParams; tparams != nil {
+		if tparams := typeparams.ForTypeSpec(n); tparams != nil {
 			a.apply(n, "TypeParams", nil, tparams)
 		}
 		a.apply(n, "Type", nil, n.Type)

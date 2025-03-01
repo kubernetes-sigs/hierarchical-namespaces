@@ -19,7 +19,7 @@ linters:
   disable-all: true
   enable:
     #- bodyclose
-    # - deadcode ! deprecated since v1.49.0; replaced by 'unused'
+    - deadcode
     #- depguard
     #- dogsled
     #- dupl
@@ -51,12 +51,12 @@ linters:
     #- rowserrcheck
     #- scopelint
     #- staticcheck
-    #- structcheck ! deprecated since v1.49.0; replaced by 'unused'
+    - structcheck
     #- stylecheck
     #- typecheck
     - unconvert
     #- unparam
-    - unused
-    # - varcheck ! deprecated since v1.49.0; replaced by 'unused'
+    #- unused
+    - varcheck
     #- whitespace
   fast: false

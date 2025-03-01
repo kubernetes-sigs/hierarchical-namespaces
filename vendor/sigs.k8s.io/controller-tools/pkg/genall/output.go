@@ -19,6 +19,7 @@ package genall
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -91,7 +92,7 @@ var OutputToNothing = outputToNothing{}
 type outputToNothing struct{}
 
 func (o outputToNothing) Open(_ *loader.Package, _ string) (io.WriteCloser, error) {
-	return nopCloser{io.Discard}, nil
+	return nopCloser{ioutil.Discard}, nil
 }
 
 // +controllertools:marker:generateHelp:category=""
@@ -121,7 +122,7 @@ var OutputToStdout = outputToStdout{}
 // Generally useful for single-artifact outputs.
 type outputToStdout struct{}
 
-func (o outputToStdout) Open(_ *loader.Package, _ string) (io.WriteCloser, error) {
+func (o outputToStdout) Open(_ *loader.Package, itemPath string) (io.WriteCloser, error) {
 	return nopCloser{os.Stdout}, nil
 }
 

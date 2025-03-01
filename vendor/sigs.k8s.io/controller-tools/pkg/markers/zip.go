@@ -58,13 +58,6 @@ func extractDoc(node ast.Node, decl *ast.GenDecl) string {
 		}
 		outGroup.List = append(outGroup.List, comment)
 	}
-	isAsteriskComment := false
-	for _, l := range outGroup.List {
-		if strings.HasPrefix(l.Text, "/*") {
-			isAsteriskComment = true
-			break
-		}
-	}
 
 	// split lines, and re-join together as a single
 	// paragraph, respecting double-newlines as
@@ -76,12 +69,10 @@ func extractDoc(node ast.Node, decl *ast.GenDecl) string {
 	}
 
 	for i, line := range outLines {
-		if isAsteriskComment {
-			// Trim any extranous whitespace,
-			// for handling /*…*/-style comments,
-			// which have whitespace preserved in go/ast:
-			line = strings.TrimSpace(line)
-		}
+		// Trim any extranous whitespace,
+		// for handling /*…*/-style comments,
+		// which have whitespace preserved in go/ast:
+		line = strings.TrimSpace(line)
 
 		// Respect that double-newline means
 		// actual newline:
@@ -91,7 +82,8 @@ func extractDoc(node ast.Node, decl *ast.GenDecl) string {
 			outLines[i] = line
 		}
 	}
-	return strings.Join(outLines, "\n")
+
+	return strings.Join(outLines, " ")
 }
 
 // PackageMarkers collects all the package-level marker values for the given package.

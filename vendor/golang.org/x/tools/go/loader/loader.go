@@ -23,7 +23,7 @@ import (
 
 	"golang.org/x/tools/go/ast/astutil"
 	"golang.org/x/tools/go/internal/cgo"
-	"golang.org/x/tools/internal/versions"
+	"golang.org/x/tools/internal/typeparams"
 )
 
 var ignoreVendor build.ImportMode
@@ -1033,14 +1033,13 @@ func (imp *importer) newPackageInfo(path, dir string) *PackageInfo {
 			Defs:       make(map[*ast.Ident]types.Object),
 			Uses:       make(map[*ast.Ident]types.Object),
 			Implicits:  make(map[ast.Node]types.Object),
-			Instances:  make(map[*ast.Ident]types.Instance),
 			Scopes:     make(map[ast.Node]*types.Scope),
 			Selections: make(map[*ast.SelectorExpr]*types.Selection),
 		},
 		errorFunc: imp.conf.TypeChecker.Error,
 		dir:       dir,
 	}
-	versions.InitFileVersions(&info.Info)
+	typeparams.InitInstanceInfo(&info.Info)
 
 	// Copy the types.Config so we can vary it across PackageInfos.
 	tc := imp.conf.TypeChecker

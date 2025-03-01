@@ -1,3 +1,5 @@
+bazel-*
+
 # Ignore binaries without extension
 //example/client/client
 //example/server/server

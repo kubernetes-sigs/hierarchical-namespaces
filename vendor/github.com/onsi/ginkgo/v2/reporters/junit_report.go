@@ -14,7 +14,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/onsi/ginkgo/v2/config"
@@ -286,9 +285,6 @@ func GenerateJUnitReportWithConfig(report types.Report, dst string, config Junit
 		TestSuites: []JUnitTestSuite{suite},
 	}
 
-	if err := os.MkdirAll(path.Dir(dst), 0770); err != nil {
-		return err
-	}
 	f, err := os.Create(dst)
 	if err != nil {
 		return err
@@ -326,9 +322,6 @@ func MergeAndCleanupJUnitReports(sources []string, dst string) ([]string, error)
 		mergedReport.TestSuites = append(mergedReport.TestSuites, report.TestSuites...)
 	}
 
-	if err := os.MkdirAll(path.Dir(dst), 0770); err != nil {
-		return messages, err
-	}
 	f, err := os.Create(dst)
 	if err != nil {
 		return messages, err
@@ -351,12 +344,8 @@ func failureDescriptionForUnstructuredReporters(spec types.SpecReport) string {
 }
 
 func systemErrForUnstructuredReporters(spec types.SpecReport) string {
-	return RenderTimeline(spec, true)
-}
-
-func RenderTimeline(spec types.SpecReport, noColor bool) string {
 	out := &strings.Builder{}
-	NewDefaultReporter(types.ReporterConfig{NoColor: noColor, VeryVerbose: true}, out).emitTimeline(0, spec, spec.Timeline())
+	NewDefaultReporter(types.ReporterConfig{NoColor: true, VeryVerbose: true}, out).emitTimeline(0, spec, spec.Timeline())
 	return out.String()
 }
 

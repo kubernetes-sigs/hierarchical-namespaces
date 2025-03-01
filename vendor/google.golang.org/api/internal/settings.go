@@ -46,7 +46,6 @@ type DialSettings struct {
 	SkipValidation                bool
 	ImpersonationConfig           *impersonate.Config
 	EnableDirectPath              bool
-	EnableDirectPathXds           bool
 	AllowNonDefaultServiceAccount bool
 
 	// Google API system parameters. For more information please read:
