@@ -231,7 +231,7 @@ func (r *HierarchicalResourceQuotaReconciler) SetupWithManager(mgr ctrl.Manager)
 	r.trigger = make(chan event.GenericEvent)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.HierarchicalResourceQuota{}).
-		Watches(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
 

@@ -533,7 +533,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	r.trigger = make(chan event.GenericEvent)
 
-	mapper, err := apimeta.NewGroupKindMapper(mgr.GetConfig())
+	mapper, err := apimeta.NewGroupKindMapper(mgr.GetConfig(), mgr.GetHTTPClient())
 	if err != nil {
 		return fmt.Errorf("cannot create API mapper: %w", err)
 	}
@@ -541,7 +541,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	// Whenever a CRD is created/updated, we will send a request to reconcile the singleton again, in
 	// case the singleton has configuration for the custom resource type.
-	crdMapFn := func(_ client.Object) []reconcile.Request {
+	crdMapFn := func(_ context.Context, _ client.Object) []reconcile.Request {
 		return []reconcile.Request{{NamespacedName: types.NamespacedName{
 			Name: api.HNCConfigSingleton,
 		}}}
@@ -550,8 +550,8 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	// Register the reconciler
 	err = ctrl.NewControllerManagedBy(mgr).
 		For(&api.HNCConfiguration{}).
-		Watches(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &apiextensions.CustomResourceDefinition{}},
+		WatchesRawSource(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &apiextensions.CustomResourceDefinition{}),
 			handler.EnqueueRequestsFromMapFunc(crdMapFn)).
 		Complete(r)
 	if err != nil {

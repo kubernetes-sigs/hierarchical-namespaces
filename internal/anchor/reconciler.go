@@ -411,7 +411,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.affected = make(chan event.GenericEvent)
 
 	// Maps an subnamespace to its anchor in the parent namespace.
-	nsMapFn := func(obj client.Object) []reconcile.Request {
+	nsMapFn := func(_ context.Context, obj client.Object) []reconcile.Request {
 		if obj.GetAnnotations()[api.SubnamespaceOf] == "" {
 			return nil
 		}
@@ -424,7 +424,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.SubnamespaceAnchor{}).
-		Watches(&source.Channel{Source: r.affected}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
+		WatchesRawSource(&source.Channel{Source: r.affected}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &corev1.Namespace{}), handler.EnqueueRequestsFromMapFunc(nsMapFn)).
 		Complete(r)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -227,7 +228,9 @@ func (a ancestorObjects) add(onm string, ns *forest.Namespace) {
 }
 
 func (v *Validator) InjectConfig(cf *rest.Config) error {
-	mapper, err := apimeta.NewGroupKindMapper(cf)
+	// FIXME: Where do we get the client from?
+	client := &http.Client{Timeout: 180}
+	mapper, err := apimeta.NewGroupKindMapper(cf, client)
 	if err != nil {
 		return err
 	}

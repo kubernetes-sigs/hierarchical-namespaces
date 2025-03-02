@@ -290,6 +290,6 @@ func (r *ResourceQuotaReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1.ResourceQuota{}).
-		Watches(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.trigger}, &handler.EnqueueRequestForObject{}).
 		Complete(r)
 }
