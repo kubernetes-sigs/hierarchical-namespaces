@@ -115,14 +115,3 @@ func (c *realClient) validate(ctx context.Context, inst *v1.ResourceQuota) error
 	}
 	return nil
 }
-
-func (v *HRQ) InjectClient(c client.Client) error {
-	// Create a dry-run client.
-	v.server = &realClient{client: client.NewDryRunClient(c)}
-	return nil
-}
-
-func (r *HRQ) InjectDecoder(d *admission.Decoder) error {
-	r.decoder = d
-	return nil
-}

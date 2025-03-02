@@ -65,9 +65,3 @@ func (m *Mutator) handle(log logr.Logger, ns *corev1.Namespace) {
 		ns.Labels[api.LabelIncludedNamespace] = "true"
 	}
 }
-
-// InjectDecoder injects the decoder.
-func (m *Mutator) InjectDecoder(d *admission.Decoder) error {
-	m.decoder = d
-	return nil
-}

@@ -406,13 +406,3 @@ func (v *Validator) decodeRequest(log logr.Logger, req admission.Request) (*requ
 		gvr:    req.Resource,
 	}, nil
 }
-
-func (v *Validator) InjectClient(c client.Client) error {
-	v.client = c
-	return nil
-}
-
-func (v *Validator) InjectDecoder(d *admission.Decoder) error {
-	v.decoder = d
-	return nil
-}

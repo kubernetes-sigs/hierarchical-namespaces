@@ -10,11 +10,9 @@ import (
 	k8sadm "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	api "sigs.k8s.io/hierarchical-namespaces/api/v1alpha2"
-	"sigs.k8s.io/hierarchical-namespaces/internal/apimeta"
 	"sigs.k8s.io/hierarchical-namespaces/internal/forest"
 	"sigs.k8s.io/hierarchical-namespaces/internal/selectors"
 	"sigs.k8s.io/hierarchical-namespaces/internal/webhooks"
@@ -224,18 +222,4 @@ func (a ancestorObjects) copy() ancestorObjects {
 
 func (a ancestorObjects) add(onm string, ns *forest.Namespace) {
 	a[onm] = append(a[onm], ns.Name())
-}
-
-func (v *Validator) InjectConfig(cf *rest.Config) error {
-	mapper, err := apimeta.NewGroupKindMapper(cf)
-	if err != nil {
-		return err
-	}
-	v.mapper = mapper
-	return nil
-}
-
-func (v *Validator) InjectDecoder(d *admission.Decoder) error {
-	v.decoder = d
-	return nil
 }

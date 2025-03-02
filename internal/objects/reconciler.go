@@ -817,7 +817,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(target).
-		Watches(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(&source.Channel{Source: r.Affected}, &handler.EnqueueRequestForObject{}).
 		WithOptions(opts).
 		Complete(r)
 }

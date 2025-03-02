@@ -805,7 +805,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 	r.affected = make(chan event.GenericEvent)
 
 	// Maps namespaces to their singletons
-	nsMapFn := func(obj client.Object) []reconcile.Request {
+	nsMapFn := func(_ context.Context, obj client.Object) []reconcile.Request {
 		return []reconcile.Request{
 			{NamespacedName: types.NamespacedName{
 				Name:      api.Singleton,
@@ -817,7 +817,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 	// Also maps a subnamespace anchor to the child singleton.
 	// Required as the anchor needs to be reconciled to add or remove finalizers
 	// The subnamespace created by the anchor needs to be reconciled in case managed labels or annotations have changed
-	anchorMapFn := func(obj client.Object) []reconcile.Request {
+	anchorMapFn := func(_ context.Context, obj client.Object) []reconcile.Request {
 		return []reconcile.Request{
 			{NamespacedName: types.NamespacedName{
 				Name:      api.Singleton,
@@ -834,9 +834,9 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager, maxReconciles int) error
 	}
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&api.HierarchyConfiguration{}).
-		Watches(&source.Channel{Source: r.affected}, &handler.EnqueueRequestForObject{}).
-		Watches(&source.Kind{Type: &corev1.Namespace{}}, handler.EnqueueRequestsFromMapFunc(nsMapFn)).
-		Watches(&source.Kind{Type: &api.SubnamespaceAnchor{}}, handler.EnqueueRequestsFromMapFunc(anchorMapFn)).
+		WatchesRawSource(&source.Channel{Source: r.affected}, &handler.EnqueueRequestForObject{}).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &corev1.Namespace{}), handler.EnqueueRequestsFromMapFunc(nsMapFn)).
+		WatchesRawSource(source.Kind(mgr.GetCache(), &api.SubnamespaceAnchor{}), handler.EnqueueRequestsFromMapFunc(anchorMapFn)).
 		WithOptions(opts).
 		Complete(r)
 }
