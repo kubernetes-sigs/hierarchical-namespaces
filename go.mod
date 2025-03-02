@@ -1,6 +1,6 @@
 module sigs.k8s.io/hierarchical-namespaces
 
-go 1.21
+go 1.22
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.0
