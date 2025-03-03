@@ -3,7 +3,6 @@ package lintcmd
 import (
 	"crypto/sha256"
 	"fmt"
-	"go/build"
 	"go/token"
 	"io"
 	"os"
@@ -82,9 +81,11 @@ func newLinter(opts options) (*linter, error) {
 }
 
 type lintResult struct {
-	checkedFiles []string
-	diagnostics  []diagnostic
-	warnings     []string
+	// These fields are exported so that we can gob encode them.
+
+	CheckedFiles []string
+	Diagnostics  []diagnostic
+	Warnings     []string
 }
 
 type options struct {
@@ -109,7 +110,6 @@ func (l *linter) run(bconf buildConfig) (lintResult, error) {
 	if err != nil {
 		return lintResult{}, err
 	}
-	r.FallbackGoVersion = defaultGoVersion()
 	r.GoVersion = l.opts.goVersion
 	r.Stats.PrintAnalyzerMeasurement = l.opts.printAnalyzerMeasurement
 
@@ -148,8 +148,8 @@ func (l *linter) run(bconf buildConfig) (lintResult, error) {
 		}()
 	}
 	res, err := l.lint(r, cfg, l.opts.patterns)
-	for i := range res.diagnostics {
-		res.diagnostics[i].buildName = bconf.Name
+	for i := range res.Diagnostics {
+		res.Diagnostics[i].BuildName = bconf.Name
 	}
 	return res, err
 }
@@ -185,10 +185,10 @@ func (l *linter) lint(r *runner.Runner, cfg *packages.Config, patterns []string)
 			panic("package has errors but isn't marked as failed")
 		}
 		if res.Failed {
-			out.diagnostics = append(out.diagnostics, failed(res)...)
+			out.Diagnostics = append(out.Diagnostics, failed(res)...)
 		} else {
 			if res.Skipped {
-				out.warnings = append(out.warnings, fmt.Sprintf("skipped package %s because it is too large", res.Package))
+				out.Warnings = append(out.Warnings, fmt.Sprintf("skipped package %s because it is too large", res.Package))
 				continue
 			}
 
@@ -196,7 +196,7 @@ func (l *linter) lint(r *runner.Runner, cfg *packages.Config, patterns []string)
 				continue
 			}
 
-			out.checkedFiles = append(out.checkedFiles, res.Package.GoFiles...)
+			out.CheckedFiles = append(out.CheckedFiles, res.Package.GoFiles...)
 			allowedAnalyzers := filterAnalyzerNames(analyzerNames, res.Config.Checks)
 			resd, err := res.Load()
 			if err != nil {
@@ -212,10 +212,10 @@ func (l *linter) lint(r *runner.Runner, cfg *packages.Config, patterns []string)
 				a := l.analyzers[diag.Category]
 				// Some diag.Category don't map to analyzers, such as "staticcheck"
 				if a != nil {
-					filtered[i].mergeIf = a.Doc.MergeIf
+					filtered[i].MergeIf = a.Doc.MergeIf
 				}
 			}
-			out.diagnostics = append(out.diagnostics, filtered...)
+			out.Diagnostics = append(out.Diagnostics, filtered...)
 
 			for _, obj := range resd.Unused.Used {
 				// Note: a side-effect of this code is that fields in instantiated structs are handled correctly. Even
@@ -254,13 +254,13 @@ func (l *linter) lint(r *runner.Runner, cfg *packages.Config, patterns []string)
 		if used[uo.key] {
 			continue
 		}
-		out.diagnostics = append(out.diagnostics, diagnostic{
+		out.Diagnostics = append(out.Diagnostics, diagnostic{
 			Diagnostic: runner.Diagnostic{
 				Position: uo.obj.DisplayPosition,
 				Message:  fmt.Sprintf("%s %s is unused", uo.obj.Kind, uo.obj.Name),
 				Category: "U1000",
 			},
-			mergeIf: lint.MergeIfAll,
+			MergeIf: lint.MergeIfAll,
 		})
 	}
 
@@ -300,7 +300,7 @@ func filterIgnored(diagnostics []diagnostic, res runner.ResultData, allowedAnaly
 		for i := range diagnostics {
 			diag := &diagnostics[i]
 			if ig.match(*diag) {
-				diag.severity = severityIgnored
+				diag.Severity = severityIgnored
 			}
 		}
 
@@ -394,9 +394,11 @@ func (s severity) String() string {
 // diagnostic represents a diagnostic in some source code.
 type diagnostic struct {
 	runner.Diagnostic
-	severity  severity
-	mergeIf   lint.MergeStrategy
-	buildName string
+
+	// These fields are exported so that we can gob encode them.
+	Severity  severity
+	MergeIf   lint.MergeStrategy
+	BuildName string
 }
 
 func (p diagnostic) equal(o diagnostic) bool {
@@ -404,14 +406,14 @@ func (p diagnostic) equal(o diagnostic) bool {
 		p.End == o.End &&
 		p.Message == o.Message &&
 		p.Category == o.Category &&
-		p.severity == o.severity &&
-		p.mergeIf == o.mergeIf &&
-		p.buildName == o.buildName
+		p.Severity == o.Severity &&
+		p.MergeIf == o.MergeIf &&
+		p.BuildName == o.BuildName
 }
 
 func (p *diagnostic) String() string {
-	if p.buildName != "" {
-		return fmt.Sprintf("%s [%s] (%s)", p.Message, p.buildName, p.Category)
+	if p.BuildName != "" {
+		return fmt.Sprintf("%s [%s] (%s)", p.Message, p.BuildName, p.Category)
 	} else {
 		return fmt.Sprintf("%s (%s)", p.Message, p.Category)
 	}
@@ -427,6 +429,11 @@ func failed(res runner.Result) []diagnostic {
 			if len(msg) != 0 && msg[0] == '\n' {
 				// TODO(dh): See https://github.com/golang/go/issues/32363
 				msg = msg[1:]
+			}
+
+			cat := "compile"
+			if e.Kind == packages.ParseError {
+				cat = "config"
 			}
 
 			var posn token.Position
@@ -449,16 +456,16 @@ func failed(res runner.Result) []diagnostic {
 				var err error
 				posn, _, err = parsePos(e.Pos)
 				if err != nil {
-					panic(fmt.Sprintf("internal error: %s", e))
+					panic(fmt.Sprintf("internal error: %s", err))
 				}
 			}
 			diag := diagnostic{
 				Diagnostic: runner.Diagnostic{
 					Position: posn,
 					Message:  msg,
-					Category: "compile",
+					Category: cat,
 				},
-				severity: severityError,
+				Severity: severityError,
 			}
 			diagnostics = append(diagnostics, diag)
 		case error:
@@ -468,7 +475,7 @@ func failed(res runner.Result) []diagnostic {
 					Message:  e.Error(),
 					Category: "compile",
 				},
-				severity: severityError,
+				Severity: severityError,
 			}
 			diagnostics = append(diagnostics, diag)
 		}
@@ -499,12 +506,6 @@ func success(allowedAnalyzers map[string]bool, res runner.ResultData) []diagnost
 		diagnostics = append(diagnostics, diagnostic{Diagnostic: diag})
 	}
 	return diagnostics
-}
-
-func defaultGoVersion() string {
-	tags := build.Default.ReleaseTags
-	v := tags[len(tags)-1][2:]
-	return v
 }
 
 func filterAnalyzerNames(analyzers []string, checks []string) map[string]bool {
@@ -549,7 +550,10 @@ func filterAnalyzerNames(analyzers []string, checks []string) map[string]bool {
 	return allowedChecks
 }
 
-var posRe = regexp.MustCompile(`^(.+?):(\d+)(?::(\d+)?)?`)
+// Note that the file name is optional and can be empty because of //line
+// directives of the form "//line :1" (but not "//line :1:1"). See
+// https://go.dev/issue/24183 and https://staticcheck.dev/issues/1582.
+var posRe = regexp.MustCompile(`^(?:(.+?):)?(\d+)(?::(\d+)?)?`)
 
 func parsePos(pos string) (token.Position, int, error) {
 	if pos == "-" || pos == "" {
@@ -557,7 +561,7 @@ func parsePos(pos string) (token.Position, int, error) {
 	}
 	parts := posRe.FindStringSubmatch(pos)
 	if parts == nil {
-		return token.Position{}, 0, fmt.Errorf("internal error: malformed position %q", pos)
+		return token.Position{}, 0, fmt.Errorf("malformed position %q", pos)
 	}
 	file := parts[1]
 	line, _ := strconv.Atoi(parts[2])
