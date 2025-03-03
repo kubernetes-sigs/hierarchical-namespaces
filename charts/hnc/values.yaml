@@ -34,3 +34,5 @@ ha:
     nodeSelector: {}
     affinity: {}
     tolerations: []
+podAnnotations: {}
+podLabels: {}
