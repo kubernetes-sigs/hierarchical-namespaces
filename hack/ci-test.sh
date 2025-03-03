@@ -30,7 +30,7 @@ export PATH=$(go env GOPATH)/bin:$PATH
 mkdir -p $(go env GOPATH)/bin
 
 echo "Installing kubebuilder tools"
-K8S_VERSION=1.19.2
+K8S_VERSION=1.26.1
 curl -sSLo envtest-bins.tar.gz "https://storage.googleapis.com/kubebuilder-tools/kubebuilder-tools-${K8S_VERSION}-$(go env GOOS)-$(go env GOARCH).tar.gz"
 mkdir /usr/local/kubebuilder
 tar -C /usr/local/kubebuilder --strip-components=1 -zvxf envtest-bins.tar.gz
