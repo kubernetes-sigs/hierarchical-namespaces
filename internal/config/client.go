@@ -2,37 +2,35 @@ package config
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	authzv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
 
 // newCachingClient is an alternative implementation of controller-runtime's
 // default client for manager.Manager.
 // The only difference is that this implementation sets `CacheUnstructured` to `true` to
-// cache unstructured objects.
-func newCachingClient(cache cache.Cache, config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
-	c, err := client.New(config, options)
+// cache unstructured objects, as per commit d2c35505 in that repository.
+func newCachingClient(config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
+	o := &options
+	o.Cache = &client.CacheOptions{
+		DisableFor:   uncachedObjects,
+		Unstructured: true,
+	}
+	c, err := client.New(config, *o)
 	if err != nil {
 		return nil, err
 	}
-
-	return client.NewDelegatingClient(client.NewDelegatingClientInput{
-		CacheReader:       cache,
-		Client:            c,
-		UncachedObjects:   uncachedObjects,
-		CacheUnstructured: true,
-	})
+	return c, nil
 }
 
-func NewClient(readOnly bool) cluster.NewClientFunc {
-	return func(cache cache.Cache, config *rest.Config, options client.Options, uncachedObjects ...client.Object) (client.Client, error) {
-		c, err := newCachingClient(cache, config, options, uncachedObjects...)
+func NewClient(readOnly bool) client.NewClientFunc {
+	return func(config *rest.Config, options client.Options) (client.Client, error) {
+		c, err := newCachingClient(config, options)
 		if readOnly {
 			c = &readOnlyClient{client: c}
 		}
@@ -92,6 +90,14 @@ func (c readOnlyClient) Scheme() *runtime.Scheme {
 
 func (c readOnlyClient) RESTMapper() meta.RESTMapper {
 	return c.client.RESTMapper()
+}
+
+func (c readOnlyClient) GroupVersionKindFor(obj runtime.Object) (schema.GroupVersionKind, error) {
+	return c.client.GroupVersionKindFor(obj)
+}
+
+func (c readOnlyClient) IsObjectNamespaced(obj runtime.Object) (bool, error) {
+	return c.client.IsObjectNamespaced(obj)
 }
 
 type readOnlySubResourceClient struct {

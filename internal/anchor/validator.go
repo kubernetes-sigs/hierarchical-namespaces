@@ -154,8 +154,3 @@ func (v *Validator) decodeRequest(log logr.Logger, in admission.Request) (*ancho
 		op:     in.Operation,
 	}, nil
 }
-
-func (v *Validator) InjectDecoder(d *admission.Decoder) error {
-	v.decoder = d
-	return nil
-}

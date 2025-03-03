@@ -721,6 +721,12 @@ func (fakeNSClient) RESTMapper() meta.RESTMapper {
 func (fakeNSClient) Scheme() *runtime.Scheme {
 	return nil
 }
+func (fakeNSClient) GroupVersionKindFor(_ runtime.Object) (schema.GroupVersionKind, error) {
+	return schema.GroupVersionKind{}, nil
+}
+func (fakeNSClient) IsObjectNamespaced(_ runtime.Object) (bool, error) {
+	return true, nil
+}
 
 func TestCreatingConflictSource(t *testing.T) {
 	tests := []struct {

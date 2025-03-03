@@ -2,6 +2,7 @@ package apimeta
 
 import (
 	"fmt"
+	"net/http"
 
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -30,8 +31,8 @@ func IsNotNamespacedError(err error) bool {
 	}
 }
 
-func NewGroupKindMapper(c *rest.Config) (*GroupKindMapper, error) {
-	restMapper, err := apiutil.NewDynamicRESTMapper(c)
+func NewGroupKindMapper(c *rest.Config, client *http.Client) (*GroupKindMapper, error) {
+	restMapper, err := apiutil.NewDynamicRESTMapper(c, client)
 	if err != nil {
 		return nil, err
 	}

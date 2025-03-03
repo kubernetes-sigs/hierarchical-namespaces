@@ -85,16 +85,6 @@ func (r *ResourceQuotaStatus) handle(inst *v1.ResourceQuota) admission.Response 
 	return allow("the usage update is in compliance with the ancestors' (including itself) HRQs")
 }
 
-func (r *ResourceQuotaStatus) InjectClient(c client.Client) error {
-	r.client = c
-	return nil
-}
-
-func (r *ResourceQuotaStatus) InjectDecoder(d *admission.Decoder) error {
-	r.decoder = d
-	return nil
-}
-
 // allow is a replacement for controller-runtime's admission.Allowed() that allows you to set the
 // message (human-readable) as opposed to the reason (machine-readable).
 func allow(msg string) admission.Response {

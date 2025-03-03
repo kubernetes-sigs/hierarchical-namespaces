@@ -446,16 +446,6 @@ func (v *Validator) decodeRequest(in admission.Request) (*request, error) {
 	}, nil
 }
 
-func (v *Validator) InjectClient(c client.Client) error {
-	v.server = &realClient{client: c}
-	return nil
-}
-
-func (v *Validator) InjectDecoder(d *admission.Decoder) error {
-	v.decoder = d
-	return nil
-}
-
 // realClient implements serverClient, and is not use during unit tests.
 type realClient struct {
 	client client.Client
